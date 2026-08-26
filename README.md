@@ -3,6 +3,8 @@
 > 📄 Source code for our SIGCSE TS 2026 poster: **CodeFlow: LLM-Generated
 > Flowchart Feedback for Programming Students**
 > https://dl.acm.org/doi/10.1145/3770761.3777175
+>
+> 🎥 Introductory video demo: https://www.youtube.com/watch?v=m0TiXVROR7g
 
 CodeFlow is a web-based feedback system for programming students. A student
 uploads a practice problem, writes a solution, and runs it — and instead of
