@@ -1,0 +1,615 @@
+import { useState, useEffect } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { java } from '@codemirror/lang-java';
+import { python } from '@codemirror/lang-python';
+import { javascript } from '@codemirror/lang-javascript';
+import { autocompletion, CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
+import { keymap } from '@codemirror/view';
+import { completionKeymap } from '@codemirror/autocomplete';
+import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import UploadPopup from './UploadPopup';
+import { systemPrompt_GenerateFeedback } from './config/systemPrompt_GenerateFeedback';
+import { systemPrompt_GenerateFlowchart } from './config/systemPrompt_GenerateFlowchart';
+import { API_URL } from './config/apiConfig';
+
+// Type for API request configuration
+type ApiRequestConfig = {
+  url: string;
+  options: RequestInit;
+};
+
+// Type for API response
+type ApiResponseData = Response;
+
+// Function to perform API request with retry logic
+const makeApiRequestWithRetry = async (
+  requestConfig: ApiRequestConfig,
+  maxRetries: number = 3,
+  baseDelay: number = 1000 // 1 second
+): Promise<ApiResponseData> => {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(requestConfig.url, requestConfig.options);
+
+      // If the response is successful, return it
+      if (response.ok) {
+        return response as ApiResponseData;
+      }
+
+      // If the response has an error status, throw an error for the retry logic to catch
+      throw new Error(`API request failed with status ${response.status}`);
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`API request failed (attempt ${attempt + 1}/${maxRetries + 1}):`, error.message);
+
+      // If this is not the last attempt, wait before retrying
+      if (attempt < maxRetries) {
+        // Calculate delay with exponential backoff and jitter
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  // If all retries are exhausted, throw the last error
+  throw lastError || new Error('Max retries exceeded with no response');
+};
+
+interface Example {
+  input: string;
+  output: string;
+}
+
+interface ProblemDetails {
+  title: string;
+  description: string;
+  examples: Example[];
+  constraints: string[];
+}
+
+interface TestResult {
+  input: string;
+  expected: string;
+  yourOutput: string;
+}
+
+interface CodeEvaluationResponse {
+  IsCorrect: boolean;
+  TestResults: TestResult[];
+}
+
+// Flowchart data interfaces
+interface FlowchartNode {
+  id: string;
+  type?: string;
+  data: {
+    label: string;
+  };
+}
+
+interface FlowchartEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+interface FlowchartData {
+  student: {
+    nodes: FlowchartNode[];
+    edges: FlowchartEdge[];
+  };
+  llm: {
+    nodes: FlowchartNode[];
+    edges: FlowchartEdge[];
+  };
+}
+
+interface ApiResponse {
+  statusCode: number;
+  headers: {
+    "Content-Type": string;
+    "Access-Control-Allow-Origin": string;
+  };
+  body: string;
+}
+
+interface MainContentProps {
+  showRightPanel: boolean;
+  onFlowchartDataChange?: (data: FlowchartData | null) => void;
+}
+
+// Java keywords for autocompletion
+const javaKeywords = [
+  'abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const', 'continue',
+  'default', 'do', 'double', 'else', 'enum', 'extends', 'final', 'finally', 'float', 'for', 'goto', 'if',
+  'implements', 'import', 'instanceof', 'int', 'interface', 'long', 'native', 'new', 'package', 'private',
+  'protected', 'public', 'return', 'short', 'static', 'strictfp', 'super', 'switch', 'synchronized', 'this',
+  'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while', 'true', 'false', 'null'
+];
+
+// Python keywords for autocompletion
+const pythonKeywords = [
+  'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'exec',
+  'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'not', 'or', 'pass', 'print',
+  'raise', 'return', 'try', 'while', 'with', 'yield', 'True', 'False', 'None'
+];
+
+// JavaScript keywords for autocompletion
+const jsKeywords = [
+  'abstract', 'arguments', 'await', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const',
+  'continue', 'debugger', 'default', 'delete', 'do', 'double', 'else', 'enum', 'eval', 'export', 'extends',
+  'false', 'final', 'finally', 'float', 'for', 'function', 'goto', 'if', 'implements', 'import', 'in',
+  'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new', 'null', 'package', 'private', 'protected',
+  'public', 'return', 'short', 'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws',
+  'transient', 'true', 'try', 'typeof', 'var', 'void', 'volatile', 'while', 'with', 'yield'
+];
+
+// Autocompletion function for Java
+const javaCompletion = (context: CompletionContext): CompletionResult | null => {
+  const word = context.matchBefore(/\w*/);
+  if (!word || (word.from == word.to && !context.explicit)) return null;
+
+  const options = javaKeywords.map(keyword => ({
+    label: keyword,
+    type: "keyword"
+  }));
+
+  return {
+    from: word.from,
+    options
+  };
+};
+
+// Autocompletion function for Python
+const pythonCompletion = (context: CompletionContext): CompletionResult | null => {
+  const word = context.matchBefore(/\w*/);
+  if (!word || (word.from == word.to && !context.explicit)) return null;
+
+  const options = pythonKeywords.map(keyword => ({
+    label: keyword,
+    type: "keyword"
+  }));
+
+  return {
+    from: word.from,
+    options
+  };
+};
+
+// Autocompletion function for JavaScript
+const jsCompletion = (context: CompletionContext): CompletionResult | null => {
+  const word = context.matchBefore(/\w*/);
+  if (!word || (word.from == word.to && !context.explicit)) return null;
+
+  const options = jsKeywords.map(keyword => ({
+    label: keyword,
+    type: "keyword"
+  }));
+
+  return {
+    from: word.from,
+    options
+  };
+};
+
+export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataChange }: MainContentProps) => {
+  const [code, setCode] = useState(`public int MyFunction(int a, int b) {
+  // Change the input variable and the return type of the function as needed.
+  // Press "Enter" to choose the keyword, not "Tab".
+
+}`);
+  const [language, setLanguage] = useState<'java' | 'python'>('java');
+  const [codeEvaluation, setCodeEvaluation] = useState<CodeEvaluationResponse | null>(null);
+  const [isCodeEvaluating, setIsCodeEvaluating] = useState(false);
+  const [codeEvaluationError, setCodeEvaluationError] = useState<string | null>(null);
+
+  // Flowchart data state
+  const [flowchartData, setFlowchartData] = useState<FlowchartData | null>(null);
+  const [flowchartError, setFlowchartError] = useState<string | null>(null);
+
+  // Update code when language changes
+  useEffect(() => {
+    if (language === 'python') {
+      setCode(`def MyFunction(a, b):
+  # Change the input variable as needed.
+  # Press "Enter" to choose the keyword, not "Tab".
+  `);
+    } else {
+      setCode(`public int MyFunction(int a, int b) {
+  // Change the input variable and the return type of the function as needed.
+  // Press "Enter" to choose the keyword, not "Tab".
+
+}`);
+    }
+  }, [language]);
+  const [isUploadPopupOpen, setIsUploadPopupOpen] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [problemDetails, setProblemDetails] = useState<ProblemDetails | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isApiProcessing, setIsApiProcessing] = useState(false);
+
+  const handleUpload = (content: string, problemDetails: ProblemDetails | null, error: string | null) => {
+    setIsLoading(true);
+    // Simulate a small delay for UI consistency
+    setTimeout(() => {
+      setProblem(content);
+      setProblemDetails(problemDetails);
+      setApiError(error);
+      setIsLoading(false);
+    }, 500);
+  };
+
+  const handleRunCode = async () => {
+    // Prevent running if already evaluating or if there's no problem
+    if (isCodeEvaluating || !problemDetails) return;
+
+    setIsCodeEvaluating(true);
+    setCodeEvaluationError(null);
+    setCodeEvaluation(null);
+    setFlowchartData(null);
+    setFlowchartError(null);
+
+    try {
+      // Prepare the message with practice problem, language, and code
+      const message = {
+        practice: {
+          title: problemDetails.title,
+          description: problemDetails.description,
+          examples: problemDetails.examples,
+          constraints: problemDetails.constraints
+        },
+        language: language,
+        code: code
+      };
+
+      // Prepare API request configurations
+      const feedbackRequestConfig: ApiRequestConfig = {
+        url: API_URL,
+        options: {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            message: JSON.stringify(message),
+            system_message: systemPrompt_GenerateFeedback
+          })
+        }
+      };
+
+      const flowchartRequestConfig: ApiRequestConfig = {
+        url: API_URL,
+        options: {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            message: JSON.stringify(message),
+            system_message: systemPrompt_GenerateFlowchart
+          })
+        }
+      };
+
+      // Send both requests with retry logic
+      const [feedbackResponse, flowchartResponse] = await Promise.all([
+        makeApiRequestWithRetry(feedbackRequestConfig),
+        makeApiRequestWithRetry(flowchartRequestConfig)
+      ]);
+
+      if (!feedbackResponse.ok) {
+        throw new Error(`Feedback API request failed with status ${feedbackResponse.status}`);
+      }
+
+      if (!flowchartResponse.ok) {
+        throw new Error(`Flowchart API request failed with status ${flowchartResponse.status}`);
+      }
+
+      const feedbackData: ApiResponse = await feedbackResponse.json();
+      const flowchartDataResponse: ApiResponse = await flowchartResponse.json();
+
+      // Parse the nested JSON in the feedback body
+      const parsedFeedbackBody = JSON.parse(feedbackData.body);
+      let parsedResponse = parsedFeedbackBody.response;
+
+      // Handle markdown formatting in the feedback response
+      if (typeof parsedResponse === 'string') {
+        // Remove markdown code block formatting if present (handles ```json, ```javascript, json, etc.)
+        parsedResponse = parsedResponse.replace(/```[a-z]*\n?|^[a-z]+\n?/g, '').trim();
+        parsedResponse = JSON.parse(parsedResponse);
+      }
+
+      setCodeEvaluation(parsedResponse);
+
+      // Parse the flowchart data
+      try {
+        const parsedFlowchartBody = JSON.parse(flowchartDataResponse.body);
+        let parsedFlowchartResponse = parsedFlowchartBody.response;
+
+        // Handle markdown formatting in the flowchart response
+        if (typeof parsedFlowchartResponse === 'string') {
+          // Remove markdown code block formatting if present (handles ```json, ```javascript, json, etc.)
+          parsedFlowchartResponse = parsedFlowchartResponse.replace(/```[a-z]*\n?|^[a-z]+\n?/g, '').trim();
+          parsedFlowchartResponse = JSON.parse(parsedFlowchartResponse);
+        }
+
+        setFlowchartData(parsedFlowchartResponse);
+        onFlowchartDataChange?.(parsedFlowchartResponse);
+        console.log(parsedFlowchartResponse)
+      } catch (error) {
+        console.error('Flowchart data parsing error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to parse flowchart data';
+        setFlowchartError(errorMessage);
+        onFlowchartDataChange?.(null);
+      }
+    } catch (error: unknown) {
+      console.error('API Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      setCodeEvaluationError(errorMessage);
+      onFlowchartDataChange?.(null);
+    } finally {
+      setIsCodeEvaluating(false);
+
+    }
+  };
+
+  // Create extensions with autocompletion enabled for all languages
+  const getExtensions = () => {
+    const baseExtensions = [
+      autocompletion({override: [
+        language === 'java' ? javaCompletion :
+        language === 'python' ? pythonCompletion :
+        jsCompletion
+      ]}),
+      keymap.of([
+        // Add completion keymap for Tab key
+        ...completionKeymap
+      ])
+    ];
+
+    if (language === 'java') {
+      return [...baseExtensions, java()];
+    } else if (language === 'python') {
+      return [...baseExtensions, python()];
+    } else {
+      return [...baseExtensions, javascript()];
+    }
+  };
+
+  // Using the state variables to ensure TypeScript recognizes them as used
+  const _flowchartData = flowchartData;
+  const _flowchartError = flowchartError;
+
+  return (
+    <>
+      {/* Dummy usage for TypeScript */}
+      {_flowchartData !== undefined && null}
+      {_flowchartError !== undefined && null}
+      <main className="flex-1 p-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Combined Practice Problem and Analysis Section */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
+          <button
+            onClick={() => setIsUploadPopupOpen(true)}
+            disabled={isApiProcessing}
+            className={`px-4 py-2 rounded-md text-white transition-colors mb-4 ${
+              isApiProcessing
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isApiProcessing ? 'Processing...' : 'Upload'}
+          </button>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          {/* Loading state when popup is closed but API is still processing */}
+          {isApiProcessing && !isUploadPopupOpen && (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <span className="ml-3 text-gray-600">Processing with AI...</span>
+            </div>
+          )}
+
+          {/* Loading state - only show spinner without problem content */}
+          {isLoading && !isApiProcessing && (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <span className="ml-3 text-gray-600">Processing with AI...</span>
+            </div>
+          )}
+
+          {/* Error state */}
+          {apiError && !isLoading && !isApiProcessing && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+              <p className="text-red-700">
+                <span className="font-semibold">Error:</span> {apiError}
+              </p>
+            </div>
+          )}
+
+          {/* Display only problem analysis from API */}
+          {problemDetails && !isLoading && !apiError && !isApiProcessing && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">{problemDetails.title}</h3>
+                <p className="text-gray-700 leading-relaxed">{problemDetails.description}</p>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-3">Examples</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[...problemDetails.examples, ...Array(Math.max(0, 3 - problemDetails.examples.length)).fill(null)].slice(0, 3).map((example, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      {example ? (
+                        <>
+                          <div className="font-medium text-gray-900 mb-2">Example {index + 1}</div>
+                          <div className="text-sm">
+                            <div className="mb-1"><span className="font-medium">Input:</span> {example.input}</div>
+                            <div><span className="font-medium">Output:</span> {example.output}</div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-gray-500 italic">Example {index + 1} (empty)</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* No problem uploaded yet */}
+          {!problem && !isLoading && !isApiProcessing && (
+            <div className="bg-gray-50 border-l-4 border-gray-300 p-4 rounded-r-lg">
+              <p className="text-gray-600 italic">No problem uploaded yet. Please upload a practice problem.</p>
+            </div>
+          )}
+
+          {/* Show loading when popup is open and API is processing */}
+          {isApiProcessing && isUploadPopupOpen && (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              <span className="ml-3 text-gray-600">Processing with AI...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Upload Popup */}
+        <UploadPopup
+          isOpen={isUploadPopupOpen}
+          onClose={() => setIsUploadPopupOpen(false)}
+          onUpload={handleUpload}
+          onApiProcessingChange={setIsApiProcessing} // New prop
+        />
+
+        {/* Code Editor Section */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          {/* Editor Header */}
+          <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="flex space-x-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              </div>
+              <span className="text-gray-300 text-sm ml-4">
+                {language === 'java' ? 'Solution.java' : 'Solution.py'}
+              </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as 'java' | 'python')}
+                className="bg-gray-700 text-white text-sm rounded px-2 py-1"
+              >
+                <option value="java">Java</option>
+                <option value="python">Python</option>
+              </select>
+              <button
+                onClick={handleRunCode}
+                disabled={isCodeEvaluating || !problemDetails}
+                className={`px-4 py-2 text-white text-sm rounded-md transition-colors ${
+                  isCodeEvaluating || !problemDetails
+                    ? 'bg-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isCodeEvaluating ? 'Running...' : 'Run Code'}
+              </button>
+            </div>
+          </div>
+
+          {/* CodeMirror Editor */}
+          <div className="min-h-[400px]">
+            <CodeMirror
+              value={code}
+              height="400px"
+              extensions={getExtensions()}
+              theme={vscodeDark}
+              onChange={(value) => setCode(value)}
+              className="text-sm"
+            />
+          </div>
+
+          {/* Editor Footer */}
+          <div className="bg-gray-800 px-4 py-2 flex items-center justify-between text-sm text-gray-400">
+            <div className="flex items-center space-x-4">
+              <span className="capitalize">{language}</span>
+              <span>UTF-8</span>
+              <span>Ln {code.split('\n').length}, Col 1</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              <span>Ready</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Output Section */}
+        <div className="bg-gray-900 rounded-xl mt-4 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white font-semibold">Output</h3>
+            <button
+              className="text-gray-400 hover:text-white text-sm"
+              onClick={() => {
+                setCodeEvaluation(null);
+                setCodeEvaluationError(null);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="bg-black rounded p-3 text-green-400 font-mono text-sm min-h-[100px]">
+            {isCodeEvaluating ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500 mr-2"></div>
+                <span>Evaluating your code...</span>
+              </div>
+            ) : codeEvaluationError ? (
+              <div className="text-red-400">
+                <div className="font-bold text-red-300">Error:</div>
+                <div>{codeEvaluationError}</div>
+              </div>
+            ) : codeEvaluation ? (
+              <div className="space-y-2">
+                <div className={`font-bold ${codeEvaluation.IsCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                  Code Status: {codeEvaluation.IsCorrect ? 'CORRECT' : 'INCORRECT'}
+                </div>
+                <div>
+                  <div className="font-bold text-gray-300 mb-1">Test Results:</div>
+                  <div className="space-y-1">
+                    {codeEvaluation.TestResults.map((test: TestResult, index: number) => (
+                      <div key={index} className="flex items-start">
+                        <span className="mr-2">
+                          {test.yourOutput.includes('✅') ? '✅' :
+                           test.yourOutput.includes('❌ Compile Error') ? '🔧' : '❌'}
+                        </span>
+                        <span className="flex-1">
+                          <span className="text-gray-300">Input:</span> {test.input} →
+                          <span className="text-gray-300"> Expected:</span> {test.expected} →
+                          <span className="text-gray-300"> Output:</span> {test.yourOutput}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-500">// Click "Run Code" to see output</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </main>
+    </>
+  );
+};
