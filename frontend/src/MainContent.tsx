@@ -7,6 +7,7 @@ import { autocompletion, CompletionContext, type CompletionResult } from '@codem
 import { keymap } from '@codemirror/view';
 import { completionKeymap } from '@codemirror/autocomplete';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
 import { systemPrompt_GenerateFeedback } from './config/systemPrompt_GenerateFeedback';
 import { systemPrompt_GenerateFlowchart } from './config/systemPrompt_GenerateFlowchart';
@@ -441,7 +442,19 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
             <div className="space-y-6">
               <div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">{problemDetails.title}</h3>
-                <p className="text-gray-700 leading-relaxed">{problemDetails.description}</p>
+                <div className="text-gray-700 leading-relaxed">
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                      ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                      code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                    }}
+                  >
+                    {problemDetails.description}
+                  </ReactMarkdown>
+                </div>
               </div>
 
               <div>
