@@ -1,4 +1,5 @@
 flask==3.1.1
 flask-cors==5.0.0
-dashscope==1.20.14
+agentscope>=2.0.3
+pydantic>=2.0.0
 python-dotenv==1.0.1

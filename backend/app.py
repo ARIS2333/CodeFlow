@@ -1,50 +1,67 @@
+import asyncio
 import json
 import os
-from http import HTTPStatus
+from dataclasses import asdict
 
-import dashscope
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from pydantic import SecretStr
+
+from agentscope.credential import DashScopeCredential
+from agentscope.message import SystemMsg, UserMsg
+from agentscope.model import ChatModelBase, DashScopeChatModel
 
 load_dotenv()
 
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-DASHSCOPE_WORKSPACE_ID = os.getenv("DASHSCOPE_WORKSPACE_ID")
-QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen3.7-max")
+MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "dashscope")
 
-dashscope.base_http_api_url = (
-    f"https://{DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/api/v1"
-)
+
+def build_model() -> ChatModelBase:
+    """Construct the agentscope chat model for the configured provider.
+
+    Every provider speaks the same ChatModelBase interface (called with a
+    list of Msg, returns a ChatResponse), so the rest of the app never
+    touches provider-specific SDKs. Switching providers — or adding a new
+    one (OpenAI, Anthropic, ...) — is just another branch here plus that
+    provider's credential env vars.
+    """
+    if MODEL_PROVIDER == "dashscope":
+        return DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=SecretStr(os.environ["DASHSCOPE_API_KEY"]),
+                base_url=(
+                    f"https://{os.environ['DASHSCOPE_WORKSPACE_ID']}"
+                    ".cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+                ),
+            ),
+            model=os.getenv("QWEN_MODEL", "qwen3.7-max"),
+            parameters=DashScopeChatModel.Parameters(thinking_enable=False),
+            stream=False,
+        )
+
+    raise ValueError(f"Unsupported MODEL_PROVIDER: {MODEL_PROVIDER}")
+
+
+model = build_model()
 
 app = Flask(__name__)
 CORS(app)
 
 
-def extract_response_text(response):
-    """Handle both plain-string content and multimodal content lists (e.g. [{'text': '...'}])."""
-    content = response.output.choices[0].message.content
-    if isinstance(content, list):
-        return "".join(
-            part.get("text", "") for part in content if isinstance(part, dict)
-        )
-    return content
-
-
-def call_qwen(system_message: str, user_message: str):
-    # qwen3.7-max is a text model served via the text-generation endpoint on
-    # this workspace gateway, not the multimodal-generation one.
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_message},
-    ]
-    return dashscope.Generation.call(
-        api_key=DASHSCOPE_API_KEY,
-        model=QWEN_MODEL,
-        messages=messages,
-        result_format="message",
-        enable_thinking=False
+def extract_response_text(content_blocks) -> str:
+    """Join the TextBlock content of a ChatResponse into a single string."""
+    return "".join(
+        block.text for block in content_blocks if hasattr(block, "text")
     )
+
+
+async def call_model(system_message: str, user_message: str):
+    messages = [
+        SystemMsg(name="system", content=system_message),
+        UserMsg(name="user", content=user_message),
+    ]
+    return await model(messages=messages)
 
 
 @app.route("/health", methods=["GET"])
@@ -76,24 +93,22 @@ def resource():
 
         system_message = body.get("system_message", "You are a helpful assistant.")
 
-        response = call_qwen(system_message, user_message)
-
-        if response.status_code != HTTPStatus.OK:
+        try:
+            response = asyncio.run(call_model(system_message, user_message))
+        except Exception as e:
             return jsonify({
-                "statusCode": response.status_code,
+                "statusCode": 502,
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Origin": "*",
                 },
                 "body": json.dumps({
-                    "error": "Qwen API request failed",
-                    "code": response.code,
-                    "details": response.message,
+                    "error": f"{MODEL_PROVIDER} model request failed",
+                    "details": str(e),
                 }),
             }), 502
 
-        response_content = extract_response_text(response)
-        usage = getattr(response, "usage", None) or {}
+        response_content = extract_response_text(response.content)
 
         return jsonify({
             "statusCode": 200,
@@ -103,8 +118,8 @@ def resource():
             },
             "body": json.dumps({
                 "response": response_content,
-                "model": QWEN_MODEL,
-                "usage": dict(usage) if usage else {},
+                "model": model.model,
+                "usage": asdict(response.usage) if response.usage else {},
             }, ensure_ascii=False),
         })
 

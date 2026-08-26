@@ -4,10 +4,13 @@ Drop-in replacement for `LambdaFunction/main.py`. Same request/response shape
 (`{ message, system_message }` in, `{ statusCode, headers, body }` out), so
 the frontend only needed its endpoint URL changed (see `src/config/apiConfig.ts`).
 
-Uses `qwen3.7-max` via the DashScope SDK against the workspace-specific MaaS
-gateway (`dashscope.Generation.call` — `qwen3.7-max` is a text/reasoning
-model, not multimodal, so `MultiModalConversation` isn't the right endpoint
-for it on this gateway).
+Calls the LLM through [AgentScope](https://github.com/agentscope-ai/agentscope)'s
+model abstraction rather than a provider SDK directly, so switching providers
+is a matter of swapping the `build_model()` branch in `app.py` (keyed by the
+`MODEL_PROVIDER` env var) rather than rewriting the call site. Currently
+configured for `qwen3.7-max` via `DashScopeChatModel`, talking to the
+workspace-specific MaaS gateway's OpenAI-compatible endpoint
+(`.../compatible-mode/v1`).
 
 ## Setup
 
