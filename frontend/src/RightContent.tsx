@@ -2,10 +2,14 @@ import FlowchartDiagram from './FlowchartDiagram';
 import type { Node, Edge } from '@xyflow/react';
 
 // Flowchart data interfaces
+interface SyntaxErrorMark {
+  symbol: string;
+  occurrence?: number;
+}
+
 interface FlowchartNodeData {
   label: string;
-  hasError?: boolean;
-  errorMessage?: string;
+  syntaxErrors?: SyntaxErrorMark[];
   [key: string]: any;
 }
 
@@ -14,8 +18,7 @@ interface FlowchartNode {
   type?: string;
   data: {
     label: string;
-    hasError?: boolean;
-    errorMessage?: string;
+    syntaxErrors?: SyntaxErrorMark[];
   };
 }
 
@@ -48,8 +51,7 @@ const convertToReactFlowNodes = (nodes: FlowchartNode[]): Node<FlowchartNodeData
     type: node.type,
     data: { 
       label: node.data.label,
-      hasError: node.data.hasError,
-      errorMessage: node.data.errorMessage
+      syntaxErrors: node.data.syntaxErrors
     },
     position: { x: 0, y: 0 } // Position will be set by layout algorithm
   }));

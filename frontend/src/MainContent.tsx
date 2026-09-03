@@ -11,112 +11,15 @@ import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
 import { systemPrompt_GenerateFeedback } from './config/systemPrompt_GenerateFeedback';
 import { systemPrompt_GenerateFlowchart } from './config/systemPrompt_GenerateFlowchart';
-import { API_URL } from './config/apiConfig';
-
-// Type for API request configuration
-type ApiRequestConfig = {
-  url: string;
-  options: RequestInit;
-};
-
-// Type for API response
-type ApiResponseData = Response;
-
-// Function to perform API request with retry logic
-const makeApiRequestWithRetry = async (
-  requestConfig: ApiRequestConfig,
-  maxRetries: number = 3,
-  baseDelay: number = 1000 // 1 second
-): Promise<ApiResponseData> => {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(requestConfig.url, requestConfig.options);
-
-      // If the response is successful, return it
-      if (response.ok) {
-        return response as ApiResponseData;
-      }
-
-      // If the response has an error status, throw an error for the retry logic to catch
-      throw new Error(`API request failed with status ${response.status}`);
-    } catch (error: any) {
-      lastError = error;
-      console.warn(`API request failed (attempt ${attempt + 1}/${maxRetries + 1}):`, error.message);
-
-      // If this is not the last attempt, wait before retrying
-      if (attempt < maxRetries) {
-        // Calculate delay with exponential backoff and jitter
-        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-
-  // If all retries are exhausted, throw the last error
-  throw lastError || new Error('Max retries exceeded with no response');
-};
-
-interface Example {
-  input: string;
-  output: string;
-}
-
-interface ProblemDetails {
-  title: string;
-  description: string;
-  examples: Example[];
-  constraints: string[];
-}
-
-interface TestResult {
-  input: string;
-  expected: string;
-  yourOutput: string;
-}
-
-interface CodeEvaluationResponse {
-  IsCorrect: boolean;
-  TestResults: TestResult[];
-}
-
-// Flowchart data interfaces
-interface FlowchartNode {
-  id: string;
-  type?: string;
-  data: {
-    label: string;
-  };
-}
-
-interface FlowchartEdge {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-}
-
-interface FlowchartData {
-  student: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-  llm: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-}
-
-interface ApiResponse {
-  statusCode: number;
-  headers: {
-    "Content-Type": string;
-    "Access-Control-Allow-Origin": string;
-  };
-  body: string;
-}
+import { requestStructured } from './lib/llmClient';
+import {
+  validateCodeEvaluation,
+  validateFlowchart,
+  type CodeEvaluationResponse,
+  type FlowchartData,
+  type ProblemDetails,
+  type TestResult,
+} from './lib/llmSchemas';
 
 interface MainContentProps {
   showRightPanel: boolean;
@@ -255,110 +158,60 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
     setFlowchartData(null);
     setFlowchartError(null);
 
-    try {
-      // Prepare the message with practice problem, language, and code
-      const message = {
-        practice: {
-          title: problemDetails.title,
-          description: problemDetails.description,
-          examples: problemDetails.examples,
-          constraints: problemDetails.constraints
-        },
-        language: language,
-        code: code
-      };
+    // Prepare the message with practice problem, language, and code
+    const message = JSON.stringify({
+      practice: {
+        title: problemDetails.title,
+        description: problemDetails.description,
+        examples: problemDetails.examples,
+        constraints: problemDetails.constraints
+      },
+      language: language,
+      code: code
+    });
 
-      // Prepare API request configurations
-      const feedbackRequestConfig: ApiRequestConfig = {
-        url: API_URL,
-        options: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            message: JSON.stringify(message),
-            system_message: systemPrompt_GenerateFeedback
-          })
-        }
-      };
+    // Settled rather than all: a rejected flowchart should not throw away a
+    // perfectly good evaluation, and vice versa.
+    const [feedbackOutcome, flowchartOutcome] = await Promise.allSettled([
+      requestStructured({
+        systemPrompt: systemPrompt_GenerateFeedback,
+        message,
+        validate: validateCodeEvaluation,
+        label: 'feedback'
+      }),
+      requestStructured({
+        systemPrompt: systemPrompt_GenerateFlowchart,
+        message,
+        validate: validateFlowchart,
+        label: 'flowchart'
+      })
+    ]);
 
-      const flowchartRequestConfig: ApiRequestConfig = {
-        url: API_URL,
-        options: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            message: JSON.stringify(message),
-            system_message: systemPrompt_GenerateFlowchart
-          })
-        }
-      };
-
-      // Send both requests with retry logic
-      const [feedbackResponse, flowchartResponse] = await Promise.all([
-        makeApiRequestWithRetry(feedbackRequestConfig),
-        makeApiRequestWithRetry(flowchartRequestConfig)
-      ]);
-
-      if (!feedbackResponse.ok) {
-        throw new Error(`Feedback API request failed with status ${feedbackResponse.status}`);
-      }
-
-      if (!flowchartResponse.ok) {
-        throw new Error(`Flowchart API request failed with status ${flowchartResponse.status}`);
-      }
-
-      const feedbackData: ApiResponse = await feedbackResponse.json();
-      const flowchartDataResponse: ApiResponse = await flowchartResponse.json();
-
-      // Parse the nested JSON in the feedback body
-      const parsedFeedbackBody = JSON.parse(feedbackData.body);
-      let parsedResponse = parsedFeedbackBody.response;
-
-      // Handle markdown formatting in the feedback response
-      if (typeof parsedResponse === 'string') {
-        // Remove markdown code block formatting if present (handles ```json, ```javascript, json, etc.)
-        parsedResponse = parsedResponse.replace(/```[a-z]*\n?|^[a-z]+\n?/g, '').trim();
-        parsedResponse = JSON.parse(parsedResponse);
-      }
-
-      setCodeEvaluation(parsedResponse);
-
-      // Parse the flowchart data
-      try {
-        const parsedFlowchartBody = JSON.parse(flowchartDataResponse.body);
-        let parsedFlowchartResponse = parsedFlowchartBody.response;
-
-        // Handle markdown formatting in the flowchart response
-        if (typeof parsedFlowchartResponse === 'string') {
-          // Remove markdown code block formatting if present (handles ```json, ```javascript, json, etc.)
-          parsedFlowchartResponse = parsedFlowchartResponse.replace(/```[a-z]*\n?|^[a-z]+\n?/g, '').trim();
-          parsedFlowchartResponse = JSON.parse(parsedFlowchartResponse);
-        }
-
-        setFlowchartData(parsedFlowchartResponse);
-        onFlowchartDataChange?.(parsedFlowchartResponse);
-        console.log(parsedFlowchartResponse)
-      } catch (error) {
-        console.error('Flowchart data parsing error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to parse flowchart data';
-        setFlowchartError(errorMessage);
-        onFlowchartDataChange?.(null);
-      }
-    } catch (error: unknown) {
-      console.error('API Error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      setCodeEvaluationError(errorMessage);
-      onFlowchartDataChange?.(null);
-    } finally {
-      setIsCodeEvaluating(false);
-
+    if (feedbackOutcome.status === 'fulfilled') {
+      setCodeEvaluation(feedbackOutcome.value);
+    } else {
+      console.error('Feedback request failed:', feedbackOutcome.reason);
+      setCodeEvaluationError(
+        feedbackOutcome.reason instanceof Error
+          ? feedbackOutcome.reason.message
+          : 'An unknown error occurred'
+      );
     }
+
+    if (flowchartOutcome.status === 'fulfilled') {
+      setFlowchartData(flowchartOutcome.value);
+      onFlowchartDataChange?.(flowchartOutcome.value);
+    } else {
+      console.error('Flowchart request failed:', flowchartOutcome.reason);
+      setFlowchartError(
+        flowchartOutcome.reason instanceof Error
+          ? flowchartOutcome.reason.message
+          : 'Failed to build the flowchart'
+      );
+      onFlowchartDataChange?.(null);
+    }
+
+    setIsCodeEvaluating(false);
   };
 
   // Create extensions with autocompletion enabled for all languages

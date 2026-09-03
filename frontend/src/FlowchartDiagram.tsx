@@ -15,12 +15,75 @@ import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
 
 // Define types for our flowchart data
+// A token-level syntax mistake, located by plain text search inside the label.
+// `occurrence` is 1-based and picks which match to mark when the symbol repeats.
+interface SyntaxErrorMark {
+  symbol: string;
+  occurrence?: number;
+}
+
 interface FlowchartNodeData {
   label: string;
-  hasError?: boolean;
-  errorMessage?: string;
+  syntaxErrors?: SyntaxErrorMark[];
   [key: string]: any;
 }
+
+interface LabelSegment {
+  text: string;
+  marked: boolean;
+}
+
+// Split a label into plain and syntax-marked segments. Syntax errors are shown
+// by colouring the offending symbol in place rather than by adding text, so the
+// node stays compact and the written explanations are reserved for logic errors.
+// A symbol that isn't found in the label is skipped: the rest of the label still
+// renders correctly and the node simply carries no mark.
+const markSyntaxErrors = (
+  label: string,
+  syntaxErrors?: SyntaxErrorMark[]
+): LabelSegment[] => {
+  if (!syntaxErrors?.length) return [{ text: label, marked: false }];
+
+  const ranges: { start: number; end: number }[] = [];
+
+  syntaxErrors.forEach(({ symbol, occurrence = 1 }) => {
+    if (!symbol) return;
+
+    // Walk forward to the nth occurrence; give up if the label has fewer.
+    let start = -1;
+    let from = 0;
+    for (let i = 0; i < occurrence; i++) {
+      start = label.indexOf(symbol, from);
+      if (start === -1) return;
+      from = start + symbol.length;
+    }
+
+    const end = start + symbol.length;
+    const overlaps = ranges.some((r) => start < r.end && end > r.start);
+    if (!overlaps) ranges.push({ start, end });
+  });
+
+  if (!ranges.length) return [{ text: label, marked: false }];
+
+  ranges.sort((a, b) => a.start - b.start);
+
+  const segments: LabelSegment[] = [];
+  let cursor = 0;
+
+  ranges.forEach(({ start, end }) => {
+    if (start > cursor) {
+      segments.push({ text: label.slice(cursor, start), marked: false });
+    }
+    segments.push({ text: label.slice(start, end), marked: true });
+    cursor = end;
+  });
+
+  if (cursor < label.length) {
+    segments.push({ text: label.slice(cursor), marked: false });
+  }
+
+  return segments;
+};
 
 // Constants for node sizing
 const nodeWidth = 180;
@@ -32,26 +95,31 @@ interface FlowchartDiagramProps {
 }
 
 // Custom Node Component following the pattern you provided
+// Every node looks the same. A logic mistake is never marked here: the student
+// finds it by comparing their flow against the recommended one, and marking it
+// would take that discovery away. Only token-level syntax slips get a mark, and
+// only on the offending character.
 const CustomNode = memo(({ data }: { data: FlowchartNodeData }) => {
-  const { label, hasError, errorMessage } = data;
-  
+  const { label, syntaxErrors } = data;
+  const segments = markSyntaxErrors(label, syntaxErrors);
+
   return (
-    <div className={`px-4 py-2 shadow-md rounded-md border-2 ${
-      hasError 
-        ? 'bg-red-50 border-red-400' 
-        : 'bg-white border-stone-400'
-    }`}>
+    <div className="px-4 py-2 shadow-md rounded-md border-2 bg-white border-stone-400">
       <div className="flex flex-col">
-        <div className={`text-sm font-medium ${
-          hasError ? 'text-red-800' : 'text-gray-900'
-        }`}>
-          {label}
+        <div className="text-sm font-medium whitespace-pre-wrap text-gray-900">
+          {segments.map((segment, index) =>
+            segment.marked ? (
+              <span
+                key={index}
+                className="rounded-sm bg-amber-100 px-px font-semibold text-amber-900 underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-2"
+              >
+                {segment.text}
+              </span>
+            ) : (
+              <span key={index}>{segment.text}</span>
+            )
+          )}
         </div>
-        {hasError && errorMessage && (
-          <div className="text-xs text-red-600 mt-1 bg-red-100 px-2 py-1 rounded border border-red-200">
-            {errorMessage}
-          </div>
-        )}
       </div>
       <Handle
         type="target"

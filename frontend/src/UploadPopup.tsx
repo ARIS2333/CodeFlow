@@ -1,27 +1,7 @@
 import { useState } from 'react';
 import { systemPrompt_HandlePractice } from './config/systemPrompt_HandlePractice';
-import { API_URL } from './config/apiConfig';
-
-interface Example {
-  input: string;
-  output: string;
-}
-
-interface ProblemDetails {
-  title: string;
-  description: string;
-  examples: Example[];
-  constraints: string[];
-}
-
-interface ApiResponse {
-  statusCode: number;
-  headers: {
-    "Content-Type": string;
-    "Access-Control-Allow-Origin": string;
-  };
-  body: string;
-}
+import { requestStructured } from './lib/llmClient';
+import { validateProblemDetails, type ProblemDetails } from './lib/llmSchemas';
 
 interface UploadPopupProps {
   isOpen: boolean;
@@ -45,39 +25,15 @@ const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, on
     onApiProcessingChange(true);
     
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          message: content,
-          system_message: systemPrompt_HandlePractice
-        })
+      const problemDetails = await requestStructured({
+        systemPrompt: systemPrompt_HandlePractice,
+        message: content,
+        validate: validateProblemDetails,
+        label: 'practice problem'
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const data: ApiResponse = await response.json();
-      
-      // Parse the nested JSON in the body
-      const parsedBody = JSON.parse(data.body);
-      let parsedResponse = parsedBody.response;
-
-      // Handle markdown formatting in the response
-      if (typeof parsedResponse === 'string') {
-        // Remove markdown code block formatting if present (handles ```json, ```javascript, json, etc.)
-        parsedResponse = parsedResponse.replace(/```[a-z]*\n?|^[a-z]+\n?/g, '').trim();
-        parsedResponse = JSON.parse(parsedResponse);
-      }
-
-      
-      
-      // Pass content and parsed response to parent
-      onUpload(content, parsedResponse, null);
+      // Pass content and validated response to parent
+      onUpload(content, problemDetails, null);
     } catch (error: unknown) {
       console.error('API Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
