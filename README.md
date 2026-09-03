@@ -29,9 +29,10 @@ mistakes.
 
 - **Personalized problems** — students paste in their own practice problem;
   the system reformats it and generates illustrative examples.
-- **Code decomposition & visualization** — the student's code (Java or
-  Python) is broken into nodes connected by control-flow logic and rendered
-  as a flowchart.
+- **Code decomposition & visualization** — an error-tolerant Tree-sitter pass
+  first anchors the student's Java or Python structures to exact source
+  locations. The LLM uses those facts to build nodes and control-flow edges,
+  and local semantic validation checks the result before it is rendered.
 - **Error detection** — syntax errors (e.g. `=` vs `==`, missing semicolons,
   missing return values) and logic errors (wrong conditionals, missing or
   misordered steps) are highlighted directly on the student's flowchart.

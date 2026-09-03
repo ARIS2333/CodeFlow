@@ -20,4 +20,13 @@ export default tseslint.config([
       globals: globals.browser,
     },
   },
+  {
+    // shadcn modules intentionally export component helpers and variants from
+    // the same file; that pattern is safe but conflicts with Vite's generic
+    // Fast Refresh heuristic.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

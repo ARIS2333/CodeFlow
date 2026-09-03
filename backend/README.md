@@ -12,7 +12,15 @@ configured for `qwen3.7-max` via `DashScopeChatModel`, talking to the
 workspace-specific MaaS gateway's OpenAI-compatible endpoint
 (`.../compatible-mode/v1`).
 
+The backend also exposes an error-tolerant Tree-sitter analysis endpoint used to
+ground flowchart generation. It extracts source-positioned Java/Python control,
+process, terminal, nesting, and syntax-recovery facts without executing student
+code. This lets the frontend require the model to account for structures found
+in the original source, including partially invalid source.
+
 ## Setup
+
+Python 3.10 or newer is required by the bundled Tree-sitter Python grammar.
 
 ```bash
 cd backend
@@ -29,5 +37,9 @@ shows the required keys if you need to rotate them.
 ./venv/bin/python app.py
 ```
 
-Serves on `http://127.0.0.1:5001`. `GET /health` for a liveness check,
-`POST /api/resource` for the actual chat completion.
+Serves on `http://127.0.0.1:5001`:
+
+- `GET /health` — liveness check
+- `POST /api/resource` — chat completion using the existing Lambda-shaped envelope
+- `POST /api/analyze-code` — deterministic Tree-sitter facts from
+  `{ "language": "java" | "python", "code": "..." }`

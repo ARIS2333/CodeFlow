@@ -1,11 +1,10 @@
 import type { FC } from 'react';
 
 interface HeaderProps {
-  showRightPanel: boolean;
   onTogglePanel: () => void;
 }
 
-export const Header: FC<HeaderProps> = ({ showRightPanel: _showRightPanel, onTogglePanel }) => {
+export const Header: FC<HeaderProps> = ({ onTogglePanel }) => {
   return (
     <header className="bg-white shadow-sm border-b px-6 py-4">
       <div className="flex items-center justify-between">
@@ -14,7 +13,7 @@ export const Header: FC<HeaderProps> = ({ showRightPanel: _showRightPanel, onTog
           onClick={onTogglePanel}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
-          Click me
+          Code Analysis
         </button>
       </div>
     </header>

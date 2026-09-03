@@ -11,15 +11,25 @@
  */
 
 import { isObject, type ValidationResult } from './llmJson';
+import type { CodeAnalysis } from './codeAnalysis';
 
 export interface SyntaxErrorMark {
   symbol: string;
   occurrence?: number;
+  expected?: string;
 }
+
+export type FlowchartNodeKind =
+  | 'start'
+  | 'condition'
+  | 'process'
+  | 'terminal'
+  | 'end';
 
 export interface FlowchartNode {
   id: string;
-  type?: string;
+  kind: FlowchartNodeKind;
+  sourceAnchors?: string[];
   data: {
     label: string;
     syntaxErrors?: SyntaxErrorMark[];
@@ -84,34 +94,20 @@ const canLocateSymbol = (label: string, symbol: string, occurrence: number): boo
   return true;
 };
 
-const hasCycle = (nodes: FlowchartNode[], edges: FlowchartEdge[]): boolean => {
-  const outgoing = new Map<string, string[]>();
-  nodes.forEach((node) => outgoing.set(node.id, []));
-  edges.forEach((edge) => outgoing.get(edge.source)?.push(edge.target));
-
-  const state = new Map<string, 'visiting' | 'done'>();
-
-  const walk = (id: string): boolean => {
-    const seen = state.get(id);
-    if (seen === 'visiting') return true;
-    if (seen === 'done') return false;
-
-    state.set(id, 'visiting');
-    for (const next of outgoing.get(id) ?? []) {
-      if (walk(next)) return true;
-    }
-    state.set(id, 'done');
-    return false;
-  };
-
-  return nodes.some((node) => walk(node.id));
-};
+const FLOWCHART_NODE_KINDS = new Set<FlowchartNodeKind>([
+  'start',
+  'condition',
+  'process',
+  'terminal',
+  'end',
+]);
 
 const validateSide = (
   side: 'student' | 'llm',
   raw: unknown,
   errors: string[],
-  repairs: string[]
+  repairs: string[],
+  codeAnalysis?: CodeAnalysis
 ): FlowchartSide | null => {
   if (!isObject(raw)) {
     errors.push(`"${side}" is missing or is not an object`);
@@ -167,8 +163,44 @@ const validateSide = (
       return;
     }
 
-    const node: FlowchartNode = { id, data: { label } };
-    if (typeof entry.type === 'string') node.type = entry.type;
+    if (
+      typeof entry.kind !== 'string' ||
+      !FLOWCHART_NODE_KINDS.has(entry.kind as FlowchartNodeKind)
+    ) {
+      errors.push(
+        `${where} (id "${id}") needs kind start, condition, process, terminal, or end`
+      );
+      return;
+    }
+
+    const node: FlowchartNode = {
+      id,
+      kind: entry.kind as FlowchartNodeKind,
+      data: { label },
+    };
+
+    if (side === 'student' && entry.sourceAnchors !== undefined) {
+      if (!Array.isArray(entry.sourceAnchors)) {
+        errors.push(`${where}.sourceAnchors is not an array`);
+        return;
+      }
+      const anchors: string[] = [];
+      entry.sourceAnchors.forEach((anchor, anchorIndex) => {
+        if (typeof anchor !== 'string' || !anchor.trim()) {
+          errors.push(`${where}.sourceAnchors[${anchorIndex}] is not a usable string`);
+          return;
+        }
+        const normalized = anchor.trim();
+        if (anchors.includes(normalized)) {
+          errors.push(`${where}.sourceAnchors repeats "${normalized}"`);
+          return;
+        }
+        anchors.push(normalized);
+      });
+      if (anchors.length) node.sourceAnchors = anchors;
+    } else if (side === 'llm' && entry.sourceAnchors !== undefined) {
+      repairs.push(`${where}: dropped sourceAnchors (not allowed on the llm flow)`);
+    }
 
     if (side === 'llm') {
       // The corrected flow carries a label and nothing else.
@@ -237,6 +269,8 @@ const validateSide = (
 
           const entryMark: SyntaxErrorMark = { symbol };
           if (occurrence > 1) entryMark.occurrence = occurrence;
+          const expected = asText(mark.expected)?.trim();
+          if (expected) entryMark.expected = expected;
           marks.push(entryMark);
         });
 
@@ -289,10 +323,187 @@ const validateSide = (
     edges.push(edge);
   });
 
+  if (side === 'student' && codeAnalysis) {
+    const factsByAnchor = new Map(
+      codeAnalysis.facts.map((fact, index) => [fact.anchor, { fact, index }])
+    );
+    const usedBy = new Map<string, string>();
+
+    nodes.forEach((node) => {
+      const anchorIndexes: number[] = [];
+      node.sourceAnchors?.forEach((anchor) => {
+        const anchoredFact = factsByAnchor.get(anchor);
+        if (!anchoredFact) {
+          errors.push(
+            `student node "${node.id}" invents source anchor "${anchor}"`
+          );
+          return;
+        }
+        if (!anchoredFact.fact.flowchartRequired) {
+          errors.push(
+            `student node "${node.id}" uses unreachable source anchor "${anchor}"`
+          );
+        }
+        anchorIndexes.push(anchoredFact.index);
+        if (anchoredFact.fact.kind !== node.kind) {
+          errors.push(
+            `student node "${node.id}" has kind "${node.kind}" but anchor ` +
+              `"${anchor}" is a "${anchoredFact.fact.kind}" fact`
+          );
+        }
+        const previousNode = usedBy.get(anchor);
+        if (previousNode) {
+          errors.push(
+            `source anchor "${anchor}" is reused by student nodes ` +
+              `"${previousNode}" and "${node.id}"`
+          );
+          return;
+        }
+        usedBy.set(anchor, node.id);
+      });
+
+      if (anchorIndexes.length > 1) {
+        if (node.kind !== 'process') {
+          errors.push(
+            `student node "${node.id}" combines anchors, but only process nodes may do that`
+          );
+        }
+        const inSourceOrder = [...anchorIndexes].sort((a, b) => a - b);
+        const consecutive = inSourceOrder.every(
+          (index, position) =>
+            position === 0 || index === inSourceOrder[position - 1] + 1
+        );
+        if (!consecutive) {
+          errors.push(
+            `student node "${node.id}" combines non-consecutive source anchors`
+          );
+        }
+      }
+    });
+
+    const missingAnchors = codeAnalysis.facts
+      .filter((fact) => fact.flowchartRequired)
+      .map((fact) => fact.anchor)
+      .filter((anchor) => !usedBy.has(anchor));
+    if (missingAnchors.length) {
+      errors.push(
+        `student graph does not cover parser facts: ${missingAnchors.join(', ')}`
+      );
+    }
+  }
+
   return { nodes, edges };
 };
 
-export const validateFlowchart = (input: unknown): ValidationResult<FlowchartData> => {
+const validateGraphSemantics = (
+  side: 'student' | 'llm',
+  graph: FlowchartSide,
+  errors: string[]
+): void => {
+  const starts = graph.nodes.filter((node) => node.kind === 'start');
+  if (starts.length !== 1) {
+    errors.push(`${side} graph needs exactly one start node; found ${starts.length}`);
+    return;
+  }
+
+  const start = starts[0];
+  if (start.id !== '1' || start.data.label.trim().toUpperCase() !== 'START') {
+    errors.push(`${side} start node must have id "1" and label "START"`);
+  }
+  if (side === 'student' && start.sourceAnchors?.length) {
+    errors.push('student start node cannot consume source anchors');
+  }
+
+  const outgoing = new Map<string, FlowchartEdge[]>();
+  const incoming = new Map<string, FlowchartEdge[]>();
+  graph.nodes.forEach((node) => {
+    outgoing.set(node.id, []);
+    incoming.set(node.id, []);
+  });
+
+  const semanticEdges = new Set<string>();
+  graph.edges.forEach((edge) => {
+    outgoing.get(edge.source)?.push(edge);
+    incoming.get(edge.target)?.push(edge);
+    const semanticKey = `${edge.source}\u0000${edge.target}\u0000${edge.label ?? ''}`;
+    if (semanticEdges.has(semanticKey)) {
+      errors.push(
+        `${side} graph repeats edge ${edge.source} -> ${edge.target}` +
+          (edge.label ? ` (${edge.label})` : '')
+      );
+    }
+    semanticEdges.add(semanticKey);
+  });
+
+  if ((incoming.get(start.id)?.length ?? 0) > 0) {
+    errors.push(`${side} start node cannot have incoming edges`);
+  }
+
+  graph.nodes.forEach((node) => {
+    const edges = outgoing.get(node.id) ?? [];
+    if (node.kind === 'terminal' || node.kind === 'end') {
+      if (edges.length) {
+        errors.push(
+          `${side} ${node.kind} node "${node.id}" cannot have outgoing edges`
+        );
+      }
+      if (node.kind === 'end' && node.data.label.trim().toUpperCase() !== 'END') {
+        errors.push(`${side} end node "${node.id}" must use the neutral label "END"`);
+      }
+      return;
+    }
+
+    if (node.kind === 'start' && edges.length !== 1) {
+      errors.push(`${side} start node must have exactly one outgoing edge`);
+    } else if (node.kind === 'condition') {
+      if (edges.length < 2) {
+        errors.push(
+          `${side} condition node "${node.id}" needs at least two outgoing edges`
+        );
+      }
+      const labels = new Set<string>();
+      edges.forEach((edge) => {
+        const label = edge.label?.trim().toLowerCase();
+        if (!label) {
+          errors.push(
+            `${side} condition node "${node.id}" has an unlabelled outgoing edge`
+          );
+        } else if (labels.has(label)) {
+          errors.push(
+            `${side} condition node "${node.id}" repeats branch label "${label}"`
+          );
+        } else {
+          labels.add(label);
+        }
+      });
+    } else if (node.kind === 'process' && edges.length !== 1) {
+      errors.push(
+        `${side} process node "${node.id}" must have exactly one outgoing edge`
+      );
+    }
+  });
+
+  const reachable = new Set<string>();
+  const pending = [start.id];
+  while (pending.length) {
+    const id = pending.pop() as string;
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    (outgoing.get(id) ?? []).forEach((edge) => pending.push(edge.target));
+  }
+
+  const unreachable = graph.nodes
+    .map((node) => node.id)
+    .filter((id) => !reachable.has(id));
+  if (unreachable.length) {
+    errors.push(`${side} graph has unreachable nodes: ${unreachable.join(', ')}`);
+  }
+};
+
+const validateFlowchartWithAnalysis = (
+  input: unknown,
+  codeAnalysis?: CodeAnalysis
+): ValidationResult<FlowchartData> => {
   const errors: string[] = [];
   const repairs: string[] = [];
 
@@ -300,24 +511,35 @@ export const validateFlowchart = (input: unknown): ValidationResult<FlowchartDat
     return { ok: false, errors: ['the reply is not a JSON object'] };
   }
 
-  const student = validateSide('student', input.student, errors, repairs);
+  const student = validateSide(
+    'student',
+    input.student,
+    errors,
+    repairs,
+    codeAnalysis
+  );
   const llm = validateSide('llm', input.llm, errors, repairs);
 
   if (errors.length || !student || !llm) {
     return { ok: false, errors: errors.length ? errors : ['the reply is missing a flowchart'] };
   }
 
-  // dagre breaks cycles on its own, so this is worth knowing but not worth
-  // spending another round trip on.
-  (['student', 'llm'] as const).forEach((side) => {
-    const graph = side === 'student' ? student : llm;
-    if (hasCycle(graph.nodes, graph.edges)) {
-      repairs.push(`${side}: graph contains a cycle; dagre will break it to lay out`);
-    }
-  });
+  validateGraphSemantics('student', student, errors);
+  validateGraphSemantics('llm', llm, errors);
+
+  if (errors.length) return { ok: false, errors };
 
   return { ok: true, value: { student, llm }, repairs };
 };
+
+export const validateFlowchart = (
+  input: unknown
+): ValidationResult<FlowchartData> => validateFlowchartWithAnalysis(input);
+
+export const createFlowchartValidator = (
+  codeAnalysis: CodeAnalysis
+): ((input: unknown) => ValidationResult<FlowchartData>) =>
+  (input: unknown) => validateFlowchartWithAnalysis(input, codeAnalysis);
 
 export const validateCodeEvaluation = (
   input: unknown

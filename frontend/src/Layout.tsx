@@ -3,33 +3,7 @@ import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
 import { panelConfig } from './config/panelConfig';
-
-// Flowchart data interfaces
-interface FlowchartNode {
-  id: string;
-  type?: string;
-  data: {
-    label: string;
-  };
-}
-
-interface FlowchartEdge {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-}
-
-interface FlowchartData {
-  student: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-  llm: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-}
+import type { FlowchartState } from './lib/analysisRun';
 
 interface LayoutProps {
   showRightPanel: boolean;
@@ -51,8 +25,8 @@ export const Layout = ({
     panelConfig.defaultWidth()
   );
   
-  // State to manage flowchart data
-  const [flowchartData, setFlowchartData] = useState<FlowchartData | null>(null);
+  // Keep status and data together so closing the panel does not lose progress.
+  const [flowchartState, setFlowchartState] = useState<FlowchartState>({ status: 'idle' });
 
   /**
    * Handler function to update the panel width
@@ -62,14 +36,6 @@ export const Layout = ({
     setPanelWidth(width);
   };
   
-  /**
-   * Handler function to update flowchart data
-   * @param data - New flowchart data
-   */
-  const handleFlowchartDataChange = (data: FlowchartData | null) => {
-    setFlowchartData(data);
-  };
-
   return (
     // Main container with flex layout and full height
     <div className="flex h-screen bg-gray-50">
@@ -82,12 +48,14 @@ export const Layout = ({
         }}
       >
         <Header
-          showRightPanel={showRightPanel}
           onTogglePanel={onTogglePanel}
         />
         <MainContent 
-          showRightPanel={showRightPanel} 
-          onFlowchartDataChange={handleFlowchartDataChange}
+          flowchartState={flowchartState}
+          onFlowchartStateChange={setFlowchartState}
+          onRunStart={() => {
+            if (!showRightPanel) onTogglePanel();
+          }}
         />
       </div>
 
@@ -96,7 +64,7 @@ export const Layout = ({
         isVisible={showRightPanel}
         onClose={onTogglePanel}
         onWidthChange={handleWidthChange}
-        flowchartData={flowchartData}
+        flowchartState={flowchartState}
       />
     </div>
   );

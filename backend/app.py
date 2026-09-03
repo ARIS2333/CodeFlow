@@ -12,6 +12,8 @@ from agentscope.credential import DashScopeCredential
 from agentscope.message import SystemMsg, UserMsg
 from agentscope.model import ChatModelBase, DashScopeChatModel
 
+from code_analysis import CodeAnalysisError, analyze_code
+
 load_dotenv()
 
 MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "dashscope")
@@ -67,6 +69,34 @@ async def call_model(system_message: str, user_message: str):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/analyze-code", methods=["POST"])
+def analyze_code_resource():
+    """Return deterministic, error-tolerant source facts for the flowchart LLM."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            raise CodeAnalysisError("Request body must be a JSON object.")
+
+        language = body.get("language")
+        code = body.get("code")
+        if not isinstance(language, str):
+            raise CodeAnalysisError('Missing required string field: "language".')
+        if not isinstance(code, str):
+            raise CodeAnalysisError('Missing required string field: "code".')
+
+        return jsonify(analyze_code(language, code))
+    except CodeAnalysisError as error:
+        return jsonify({"error": str(error)}), 400
+    except json.JSONDecodeError as error:
+        return jsonify({"error": "Invalid JSON", "details": str(error)}), 400
+    except Exception as error:
+        app.logger.exception("Code analysis failed")
+        return jsonify({
+            "error": "Code analysis failed",
+            "details": str(error),
+        }), 500
 
 
 @app.route("/api/resource", methods=["POST"])

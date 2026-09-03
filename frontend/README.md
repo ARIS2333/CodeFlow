@@ -59,12 +59,33 @@ The main content area ([MainContent.tsx](src/MainContent.tsx)) contains:
 - Run button to execute code and receive feedback
 - Output panel showing evaluation results
 
+Each run starts evaluation and flowchart generation independently. Output shows
+the evaluation loader; Code Analysis opens automatically and shows the flowchart
+loader (including Tree-sitter preprocessing). Each panel displays its own result
+or error as soon as its task finishes, without waiting for the other panel.
+Closing Code Analysis does not stop generation. Run Code stays disabled while
+either task is pending. Clear, changing languages, or replacing the problem
+clears both panels and ignores late responses from the previous run; it does not
+cancel requests already sent to the backend.
+
+Run `npm test` (Node.js 22.6+ with type stripping) for the independent completion,
+failure isolation, and stale-response regression tests; these make no LLM calls.
+
 ### Flowchart Visualization
 The flowchart functionality ([FlowchartDiagram.tsx](src/FlowchartDiagram.tsx)) provides:
 - Visual representation of code logic flow
 - Error highlighting in student's implementation
 - Comparison between student's solution and recommended approach
 - Interactive re-layout capability
+
+Flowchart generation is grounded before rendering:
+
+1. The backend uses error-tolerant Tree-sitter grammars to extract ordered,
+   source-positioned facts from the exact Java/Python submission.
+2. One LLM pass must cover every parser fact through validated source anchors
+   while generating the student and reference graphs.
+3. Runtime validation rejects missing or invented anchors, malformed branch
+   structure, unreachable nodes, invalid terminal edges, and broken references.
 
 ### Right Panel
 The right panel ([RightPanel.tsx](src/RightPanel.tsx), [RightContent.tsx](src/RightContent.tsx)) features:

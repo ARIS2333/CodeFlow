@@ -20,17 +20,19 @@ import '@xyflow/react/dist/style.css';
 interface SyntaxErrorMark {
   symbol: string;
   occurrence?: number;
+  expected?: string;
 }
 
 interface FlowchartNodeData {
   label: string;
   syntaxErrors?: SyntaxErrorMark[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface LabelSegment {
   text: string;
   marked: boolean;
+  expected?: string;
 }
 
 // Split a label into plain and syntax-marked segments. Syntax errors are shown
@@ -44,9 +46,9 @@ const markSyntaxErrors = (
 ): LabelSegment[] => {
   if (!syntaxErrors?.length) return [{ text: label, marked: false }];
 
-  const ranges: { start: number; end: number }[] = [];
+  const ranges: { start: number; end: number; expected?: string }[] = [];
 
-  syntaxErrors.forEach(({ symbol, occurrence = 1 }) => {
+  syntaxErrors.forEach(({ symbol, occurrence = 1, expected }) => {
     if (!symbol) return;
 
     // Walk forward to the nth occurrence; give up if the label has fewer.
@@ -60,7 +62,7 @@ const markSyntaxErrors = (
 
     const end = start + symbol.length;
     const overlaps = ranges.some((r) => start < r.end && end > r.start);
-    if (!overlaps) ranges.push({ start, end });
+    if (!overlaps) ranges.push({ start, end, expected });
   });
 
   if (!ranges.length) return [{ text: label, marked: false }];
@@ -70,11 +72,11 @@ const markSyntaxErrors = (
   const segments: LabelSegment[] = [];
   let cursor = 0;
 
-  ranges.forEach(({ start, end }) => {
+  ranges.forEach(({ start, end, expected }) => {
     if (start > cursor) {
       segments.push({ text: label.slice(cursor, start), marked: false });
     }
-    segments.push({ text: label.slice(start, end), marked: true });
+    segments.push({ text: label.slice(start, end), marked: true, expected });
     cursor = end;
   });
 
@@ -111,6 +113,11 @@ const CustomNode = memo(({ data }: { data: FlowchartNodeData }) => {
             segment.marked ? (
               <span
                 key={index}
+                title={
+                  segment.expected
+                    ? `Expected ${segment.expected} after this token`
+                    : 'Syntax error'
+                }
                 className="rounded-sm bg-amber-100 px-px font-semibold text-amber-900 underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-2"
               >
                 {segment.text}
@@ -162,8 +169,8 @@ const getLayoutedElements = (nodes: Node<FlowchartNodeData>[], edges: Edge[]) =>
       return {
         ...node,
         type: 'custom', // Ensure all nodes use our custom type
-        targetPosition: 'top' as any,
-        sourcePosition: 'bottom' as any,
+        targetPosition: Position.Top,
+        sourcePosition: Position.Bottom,
         position: {
           x: x - nodeWidth / 2,
           y: y - nodeHeight / 2,

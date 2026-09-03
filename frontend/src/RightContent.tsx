@@ -1,54 +1,22 @@
 import FlowchartDiagram from './FlowchartDiagram';
 import type { Node, Edge } from '@xyflow/react';
-
-// Flowchart data interfaces
-interface SyntaxErrorMark {
-  symbol: string;
-  occurrence?: number;
-}
+import type { FlowchartState } from './lib/analysisRun';
+import type { FlowchartNode, FlowchartEdge, SyntaxErrorMark } from './lib/llmSchemas';
 
 interface FlowchartNodeData {
   label: string;
   syntaxErrors?: SyntaxErrorMark[];
-  [key: string]: any;
-}
-
-interface FlowchartNode {
-  id: string;
-  type?: string;
-  data: {
-    label: string;
-    syntaxErrors?: SyntaxErrorMark[];
-  };
-}
-
-interface FlowchartEdge {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-}
-
-interface FlowchartData {
-  student: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-  llm: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
+  [key: string]: unknown;
 }
 
 interface RightContentProps {
-  flowchartData?: FlowchartData | null;
+  flowchartState: FlowchartState;
 }
 
 // Convert API node format to React Flow node format
 const convertToReactFlowNodes = (nodes: FlowchartNode[]): Node<FlowchartNodeData>[] => {
   return nodes.map(node => ({
     id: node.id,
-    type: node.type,
     data: { 
       label: node.data.label,
       syntaxErrors: node.data.syntaxErrors
@@ -70,12 +38,27 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): Edge[] => {
   }));
 };
 
-function RightContent({ flowchartData }: RightContentProps) {
+function RightContent({ flowchartState }: RightContentProps) {
+  const flowchartData = flowchartState.status === 'success' ? flowchartState.data : null;
+
   return (
-    <div className="w-full p-4">
+    <div className="w-full p-4" aria-busy={flowchartState.status === 'loading'}>
       <h2 className="text-xl font-bold mb-4">Code Analysis</h2>
       
-      {flowchartData ? (
+      {flowchartState.status === 'loading' ? (
+        <div role="status" className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700 min-h-[160px]">
+          <div aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+          <div>
+            <p className="font-medium">Generating flowcharts...</p>
+            <p className="mt-1 text-sm">Analyzing your code and building both logic flows.</p>
+          </div>
+        </div>
+      ) : flowchartState.status === 'error' ? (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          <p className="font-semibold">Flowchart unavailable</p>
+          <p className="mt-1 text-sm">{flowchartState.error}</p>
+        </div>
+      ) : flowchartData ? (
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-1">

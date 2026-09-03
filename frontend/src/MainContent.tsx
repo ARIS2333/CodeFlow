@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { java } from '@codemirror/lang-java';
 import { python } from '@codemirror/lang-python';
@@ -10,20 +10,24 @@ import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
 import { systemPrompt_GenerateFeedback } from './config/systemPrompt_GenerateFeedback';
-import { systemPrompt_GenerateFlowchart } from './config/systemPrompt_GenerateFlowchart';
 import { requestStructured } from './lib/llmClient';
+import { requestReliableFlowchart } from './lib/flowchartClient';
+import {
+  startAnalysisRun,
+  type AnalysisRun,
+  type EvaluationState,
+  type FlowchartState,
+} from './lib/analysisRun';
 import {
   validateCodeEvaluation,
-  validateFlowchart,
-  type CodeEvaluationResponse,
-  type FlowchartData,
   type ProblemDetails,
   type TestResult,
 } from './lib/llmSchemas';
 
 interface MainContentProps {
-  showRightPanel: boolean;
-  onFlowchartDataChange?: (data: FlowchartData | null) => void;
+  flowchartState: FlowchartState;
+  onFlowchartStateChange: (state: FlowchartState) => void;
+  onRunStart: () => void;
 }
 
 // Java keywords for autocompletion
@@ -100,20 +104,28 @@ const jsCompletion = (context: CompletionContext): CompletionResult | null => {
   };
 };
 
-export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataChange }: MainContentProps) => {
+export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart }: MainContentProps) => {
   const [code, setCode] = useState(`public int MyFunction(int a, int b) {
   // Change the input variable and the return type of the function as needed.
   // Press "Enter" to choose the keyword, not "Tab".
 
 }`);
   const [language, setLanguage] = useState<'java' | 'python'>('java');
-  const [codeEvaluation, setCodeEvaluation] = useState<CodeEvaluationResponse | null>(null);
-  const [isCodeEvaluating, setIsCodeEvaluating] = useState(false);
-  const [codeEvaluationError, setCodeEvaluationError] = useState<string | null>(null);
+  const [evaluationState, setEvaluationState] = useState<EvaluationState>({ status: 'idle' });
+  const activeRun = useRef<AnalysisRun | null>(null);
+  const isCodeEvaluating = evaluationState.status === 'loading';
+  const isRunning = isCodeEvaluating || flowchartState.status === 'loading';
+  const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
+  const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
 
-  // Flowchart data state
-  const [flowchartData, setFlowchartData] = useState<FlowchartData | null>(null);
-  const [flowchartError, setFlowchartError] = useState<string | null>(null);
+  useEffect(() => () => activeRun.current?.cancel(), []);
+
+  const clearResults = () => {
+    activeRun.current?.cancel();
+    activeRun.current = null;
+    setEvaluationState({ status: 'idle' });
+    onFlowchartStateChange({ status: 'idle' });
+  };
 
   // Update code when language changes
   useEffect(() => {
@@ -136,8 +148,10 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
   const [problemDetails, setProblemDetails] = useState<ProblemDetails | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isApiProcessing, setIsApiProcessing] = useState(false);
+  const isRunDisabled = isRunning || !problemDetails || isApiProcessing || isLoading;
 
   const handleUpload = (content: string, problemDetails: ProblemDetails | null, error: string | null) => {
+    clearResults();
     setIsLoading(true);
     // Simulate a small delay for UI consistency
     setTimeout(() => {
@@ -148,18 +162,17 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
     }, 500);
   };
 
-  const handleRunCode = async () => {
-    // Prevent running if already evaluating or if there's no problem
-    if (isCodeEvaluating || !problemDetails) return;
+  const handleRunCode = () => {
+    // Keep the run button locked until both tasks settle, but display each
+    // task's result as soon as it is ready. The ref also guards double clicks.
+    if (activeRun.current?.isRunning() || isRunDisabled || !problemDetails) return;
 
-    setIsCodeEvaluating(true);
-    setCodeEvaluationError(null);
-    setCodeEvaluation(null);
-    setFlowchartData(null);
-    setFlowchartError(null);
+    activeRun.current?.cancel();
+    onRunStart();
 
-    // Prepare the message with practice problem, language, and code
-    const message = JSON.stringify({
+    // The evaluator uses the plain request. Flowchart generation enriches the
+    // same request with deterministic parser facts before asking the model.
+    const requestPayload = {
       practice: {
         title: problemDetails.title,
         description: problemDetails.description,
@@ -168,50 +181,20 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
       },
       language: language,
       code: code
-    });
+    };
+    const message = JSON.stringify(requestPayload);
 
-    // Settled rather than all: a rejected flowchart should not throw away a
-    // perfectly good evaluation, and vice versa.
-    const [feedbackOutcome, flowchartOutcome] = await Promise.allSettled([
-      requestStructured({
+    activeRun.current = startAnalysisRun({
+      requestFeedback: () => requestStructured({
         systemPrompt: systemPrompt_GenerateFeedback,
         message,
         validate: validateCodeEvaluation,
         label: 'feedback'
       }),
-      requestStructured({
-        systemPrompt: systemPrompt_GenerateFlowchart,
-        message,
-        validate: validateFlowchart,
-        label: 'flowchart'
-      })
-    ]);
-
-    if (feedbackOutcome.status === 'fulfilled') {
-      setCodeEvaluation(feedbackOutcome.value);
-    } else {
-      console.error('Feedback request failed:', feedbackOutcome.reason);
-      setCodeEvaluationError(
-        feedbackOutcome.reason instanceof Error
-          ? feedbackOutcome.reason.message
-          : 'An unknown error occurred'
-      );
-    }
-
-    if (flowchartOutcome.status === 'fulfilled') {
-      setFlowchartData(flowchartOutcome.value);
-      onFlowchartDataChange?.(flowchartOutcome.value);
-    } else {
-      console.error('Flowchart request failed:', flowchartOutcome.reason);
-      setFlowchartError(
-        flowchartOutcome.reason instanceof Error
-          ? flowchartOutcome.reason.message
-          : 'Failed to build the flowchart'
-      );
-      onFlowchartDataChange?.(null);
-    }
-
-    setIsCodeEvaluating(false);
+      requestFlowchart: () => requestReliableFlowchart(requestPayload),
+      onFeedbackChange: setEvaluationState,
+      onFlowchartChange: onFlowchartStateChange,
+    });
   };
 
   // Create extensions with autocompletion enabled for all languages
@@ -237,15 +220,8 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
     }
   };
 
-  // Using the state variables to ensure TypeScript recognizes them as used
-  const _flowchartData = flowchartData;
-  const _flowchartError = flowchartError;
-
   return (
     <>
-      {/* Dummy usage for TypeScript */}
-      {_flowchartData !== undefined && null}
-      {_flowchartError !== undefined && null}
       <main className="flex-1 p-8">
       <div className="max-w-6xl mx-auto">
         {/* Combined Practice Problem and Analysis Section */}
@@ -374,7 +350,10 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
             <div className="flex items-center space-x-2">
               <select
                 value={language}
-                onChange={(e) => setLanguage(e.target.value as 'java' | 'python')}
+                onChange={(e) => {
+                  clearResults();
+                  setLanguage(e.target.value as 'java' | 'python');
+                }}
                 className="bg-gray-700 text-white text-sm rounded px-2 py-1"
               >
                 <option value="java">Java</option>
@@ -382,14 +361,14 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
               </select>
               <button
                 onClick={handleRunCode}
-                disabled={isCodeEvaluating || !problemDetails}
+                disabled={isRunDisabled}
                 className={`px-4 py-2 text-white text-sm rounded-md transition-colors ${
-                  isCodeEvaluating || !problemDetails
+                  isRunDisabled
                     ? 'bg-gray-500 cursor-not-allowed'
                     : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
-                {isCodeEvaluating ? 'Running...' : 'Run Code'}
+                {isRunning ? 'Running...' : 'Run Code'}
               </button>
             </div>
           </div>
@@ -426,22 +405,19 @@ export const MainContent = ({ showRightPanel: _showRightPanel, onFlowchartDataCh
             <h3 className="text-white font-semibold">Output</h3>
             <button
               className="text-gray-400 hover:text-white text-sm"
-              onClick={() => {
-                setCodeEvaluation(null);
-                setCodeEvaluationError(null);
-              }}
+              onClick={clearResults}
             >
               Clear
             </button>
           </div>
-          <div className="bg-black rounded p-3 text-green-400 font-mono text-sm min-h-[100px]">
+          <div aria-busy={isCodeEvaluating} className="bg-black rounded p-3 text-green-400 font-mono text-sm min-h-[100px]">
             {isCodeEvaluating ? (
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500 mr-2"></div>
+              <div role="status" className="flex items-center">
+                <div aria-hidden="true" className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500 mr-2"></div>
                 <span>Evaluating your code...</span>
               </div>
-            ) : codeEvaluationError ? (
-              <div className="text-red-400">
+            ) : evaluationState.status === 'error' ? (
+              <div role="alert" className="text-red-400">
                 <div className="font-bold text-red-300">Error:</div>
                 <div>{codeEvaluationError}</div>
               </div>

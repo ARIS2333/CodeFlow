@@ -2,46 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import RightContent from './RightContent';
 import { panelConfig } from './config/panelConfig';
-
-// Flowchart data interfaces
-interface FlowchartNode {
-  id: string;
-  type?: string;
-  data: {
-    label: string;
-  };
-}
-
-interface FlowchartEdge {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-}
-
-interface FlowchartData {
-  student: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-  llm: {
-    nodes: FlowchartNode[];
-    edges: FlowchartEdge[];
-  };
-}
+import type { FlowchartState } from './lib/analysisRun';
 
 interface RightPanelProps {
   isVisible: boolean;
   onClose: () => void;
   onWidthChange?: (width: number) => void;
-  flowchartData?: FlowchartData | null;
+  flowchartState: FlowchartState;
 }
 
 export const RightPanel = ({
   isVisible,
   onClose,
   onWidthChange,
-  flowchartData
+  flowchartState
 }: RightPanelProps) => {
   // Function to get the default width of the panel from config
   const getDefaultWidth = () => panelConfig.defaultWidth();
@@ -163,7 +137,7 @@ export const RightPanel = ({
         {/* Panel Content Area */}
         <div className="p-4 h-full overflow-auto">
           {/* Render the RightContent component inside the panel */}
-          <RightContent flowchartData={flowchartData} />
+          <RightContent flowchartState={flowchartState} />
         </div>
       </div>
     </div>
