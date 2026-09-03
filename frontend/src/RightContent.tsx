@@ -1,23 +1,19 @@
 import FlowchartDiagram from './FlowchartDiagram';
-import type { Node, Edge } from '@xyflow/react';
+import { useMemo } from 'react';
 import type { FlowchartState } from './lib/analysisRun';
-import type { FlowchartNode, FlowchartEdge, SyntaxErrorMark } from './lib/llmSchemas';
-
-interface FlowchartNodeData {
-  label: string;
-  syntaxErrors?: SyntaxErrorMark[];
-  [key: string]: unknown;
-}
+import type { FlowchartNode, FlowchartEdge } from './lib/llmSchemas';
+import type { DiagramNode, DiagramEdge } from './lib/flowchartLayout';
 
 interface RightContentProps {
   flowchartState: FlowchartState;
 }
 
 // Convert API node format to React Flow node format
-const convertToReactFlowNodes = (nodes: FlowchartNode[]): Node<FlowchartNodeData>[] => {
+const convertToReactFlowNodes = (nodes: FlowchartNode[]): DiagramNode[] => {
   return nodes.map(node => ({
     id: node.id,
     data: { 
+      kind: node.kind,
       label: node.data.label,
       syntaxErrors: node.data.syntaxErrors
     },
@@ -26,7 +22,7 @@ const convertToReactFlowNodes = (nodes: FlowchartNode[]): Node<FlowchartNodeData
 };
 
 // Convert API edge format to React Flow edge format
-const convertToReactFlowEdges = (edges: FlowchartEdge[]): Edge[] => {
+const convertToReactFlowEdges = (edges: FlowchartEdge[]): DiagramEdge[] => {
   return edges.map(edge => ({
     id: edge.id,
     source: edge.source,
@@ -40,6 +36,16 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): Edge[] => {
 
 function RightContent({ flowchartState }: RightContentProps) {
   const flowchartData = flowchartState.status === 'success' ? flowchartState.data : null;
+  const diagrams = useMemo(() => flowchartData ? {
+    student: {
+      nodes: convertToReactFlowNodes(flowchartData.student.nodes),
+      edges: convertToReactFlowEdges(flowchartData.student.edges),
+    },
+    llm: {
+      nodes: convertToReactFlowNodes(flowchartData.llm.nodes),
+      edges: convertToReactFlowEdges(flowchartData.llm.edges),
+    },
+  } : null, [flowchartData]);
 
   return (
     <div className="w-full p-4" aria-busy={flowchartState.status === 'loading'}>
@@ -58,15 +64,15 @@ function RightContent({ flowchartState }: RightContentProps) {
           <p className="font-semibold">Flowchart unavailable</p>
           <p className="mt-1 text-sm">{flowchartState.error}</p>
         </div>
-      ) : flowchartData ? (
+      ) : diagrams ? (
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-1">
               <h3 className="text-lg font-semibold mb-2">Student's Logic Flow</h3>
               <div className="border rounded-lg overflow-hidden h-full">
                 <FlowchartDiagram 
-                  nodes={convertToReactFlowNodes(flowchartData.student.nodes)} 
-                  edges={convertToReactFlowEdges(flowchartData.student.edges)} 
+                  nodes={diagrams.student.nodes}
+                  edges={diagrams.student.edges}
                 />
               </div>
             </div>
@@ -75,8 +81,8 @@ function RightContent({ flowchartState }: RightContentProps) {
               <h3 className="text-lg font-semibold mb-2">Recommended Logic Flow</h3>
               <div className="border rounded-lg overflow-hidden h-full">
                 <FlowchartDiagram 
-                  nodes={convertToReactFlowNodes(flowchartData.llm.nodes)} 
-                  edges={convertToReactFlowEdges(flowchartData.llm.edges)} 
+                  nodes={diagrams.llm.nodes}
+                  edges={diagrams.llm.edges}
                 />
               </div>
             </div>

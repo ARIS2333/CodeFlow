@@ -87,6 +87,26 @@ Flowchart generation is grounded before rendering:
 3. Runtime validation rejects missing or invented anchors, malformed branch
    structure, unreachable nodes, invalid terminal edges, and broken references.
 
+Rendering then uses **ELK Layered** for node placement and orthogonal edge routing:
+
+- React Flow measures the existing node boxes and handles before layout; this
+  does not change node content, sizing styles, or the viewport's fit policy.
+- Control-flow analysis identifies back edges and prioritizes the main path.
+  ELK receives fixed connection ports and computes both positions and bend points.
+  The renderer uses those bend points directly, including branch-label positions.
+- Layout runs in a lazily loaded worker. Each diagram shows its own arranging
+  indicator; stale results cannot replace a newer graph. Failure or a 15-second
+  timeout falls back to the previous Dagre layout with a visible retry notice.
+- Nodes remain draggable. Connected edges follow manual moves; **Re-Layout**
+  recalculates the full diagram. Incidental parent renders preserve manual moves.
+
+This stage does not call an LLM, change graph connections, or add missing `for`
+initialization/update nodes. Those are separate generation concerns.
+
+`npm test` includes layout regression cases for the palindrome example, nested
+loops, branch joins, break/continue paths, post-tested loops, real handle bounds,
+multiline nodes, stable re-layout, input preservation, and worker failures.
+
 ### Right Panel
 The right panel ([RightPanel.tsx](src/RightPanel.tsx), [RightContent.tsx](src/RightContent.tsx)) features:
 - Toggleable design for optimal screen usage

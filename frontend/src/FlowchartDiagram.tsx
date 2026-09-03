@@ -1,4 +1,4 @@
-import { useCallback, useEffect, memo } from 'react';
+import { useCallback, useEffect, useRef, memo, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -6,29 +6,25 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useNodesInitialized,
   Handle,
   Position,
-  type Node,
-  type Edge
 } from '@xyflow/react';
-import dagre from 'dagre';
+import { LoopBackEdge, LoopExitEdge } from './FlowchartLoopEdge';
+import { FlowchartRoutedEdge } from './FlowchartRoutedEdge';
+import { layoutWithElk } from './lib/elkFlowchartLayout';
+import {
+  layoutFlowchart,
+  type FlowchartNodeData,
+  type DiagramNode,
+  type DiagramEdge,
+} from './lib/flowchartLayout';
+import type { SyntaxErrorMark } from './lib/llmSchemas';
 import '@xyflow/react/dist/style.css';
 
 // Define types for our flowchart data
 // A token-level syntax mistake, located by plain text search inside the label.
 // `occurrence` is 1-based and picks which match to mark when the symbol repeats.
-interface SyntaxErrorMark {
-  symbol: string;
-  occurrence?: number;
-  expected?: string;
-}
-
-interface FlowchartNodeData {
-  label: string;
-  syntaxErrors?: SyntaxErrorMark[];
-  [key: string]: unknown;
-}
-
 interface LabelSegment {
   text: string;
   marked: boolean;
@@ -87,13 +83,9 @@ const markSyntaxErrors = (
   return segments;
 };
 
-// Constants for node sizing
-const nodeWidth = 180;
-const nodeHeight = 40;
-
 interface FlowchartDiagramProps {
-  nodes: Node<FlowchartNodeData>[];
-  edges: Edge[];
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
 }
 
 // Custom Node Component following the pattern you provided
@@ -129,15 +121,20 @@ const CustomNode = memo(({ data }: { data: FlowchartNodeData }) => {
         </div>
       </div>
       <Handle
+        id="in-top"
         type="target"
         position={Position.Top}
         className="w-16 !bg-teal-500"
       />
       <Handle
+        id="out-bottom"
         type="source"
         position={Position.Bottom}
         className="w-16 !bg-teal-500"
       />
+      <Handle id="in-left" type="target" position={Position.Left} className="!bg-teal-500" />
+      <Handle id="out-left" type="source" position={Position.Left} className="!bg-teal-500" />
+      <Handle id="out-right" type="source" position={Position.Right} className="!bg-teal-500" />
     </div>
   );
 });
@@ -147,83 +144,112 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-// Function to calculate layout using dagre
-const getLayoutedElements = (nodes: Node<FlowchartNodeData>[], edges: Edge[]) => {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB' });
-
-  nodes.forEach((node) => {
-    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
-  });
-
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
-
-  dagre.layout(g);
-
-  return {
-    nodes: nodes.map((node) => {
-      const { x, y } = g.node(node.id);
-      return {
-        ...node,
-        type: 'custom', // Ensure all nodes use our custom type
-        targetPosition: Position.Top,
-        sourcePosition: Position.Bottom,
-        position: {
-          x: x - nodeWidth / 2,
-          y: y - nodeHeight / 2,
-        }
-      };
-    }),
-    edges
-  };
+const edgeTypes = {
+  elk: FlowchartRoutedEdge,
+  'loop-back': LoopBackEdge,
+  'loop-exit': LoopExitEdge,
 };
 
 // Inner component that uses React Flow hooks
 const FlowchartDiagramInner = ({ nodes, edges }: FlowchartDiagramProps) => {
-  const { fitView } = useReactFlow();
-  const [flowNodes, setNodes, onNodesChange] = useNodesState<Node<FlowchartNodeData>>([]);
-  const [flowEdges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { fitView, getNodes, getInternalNode } = useReactFlow<DiagramNode, DiagramEdge>();
+  const [flowNodes, setNodes, onNodesChange] = useNodesState<DiagramNode>([]);
+  const [flowEdges, setEdges, onEdgesChange] = useEdgesState<DiagramEdge>([]);
+  const nodesInitialized = useNodesInitialized();
+  const [phase, setPhase] = useState<'measuring' | 'layout' | 'ready'>('measuring');
+  const [hasLayout, setHasLayout] = useState(false);
+  const [layoutWarning, setLayoutWarning] = useState<string | null>(null);
+  const requestVersion = useRef({ value: 0 });
+  const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto layout on component mount or when nodes/edges change
+  // Mount unchanged node contents first so ELK can read their existing sizes.
+  // This does not resize nodes or alter the viewport's fit policy.
   useEffect(() => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
-    setNodes(layoutedNodes);
-    setEdges(layoutedEdges);
-    
-    // Fit view after a short delay to ensure layout is complete
-    setTimeout(() => fitView(), 100);
-  }, [nodes, edges, fitView, setNodes, setEdges]);
+    const version = requestVersion.current;
+    version.value++;
+    if (fitTimer.current) clearTimeout(fitTimer.current);
+    setNodes(nodes.map((node) => ({ ...node, type: 'custom', origin: [0.5, 0] })));
+    setEdges([]);
+    setHasLayout(nodes.length === 0);
+    setLayoutWarning(null);
+    setPhase(nodes.length ? 'measuring' : 'ready');
+    return () => {
+      version.value++;
+      if (fitTimer.current) clearTimeout(fitTimer.current);
+    };
+  }, [nodes, edges, setNodes, setEdges]);
 
-  const onLayout = useCallback(() => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(flowNodes, flowEdges);
-    setNodes([...layoutedNodes]);
-    setEdges([...layoutedEdges]);
-    setTimeout(() => fitView(), 0);
-  }, [flowNodes, flowEdges, fitView, setNodes, setEdges]);
+  const onLayout = useCallback(async () => {
+    const ticket = ++requestVersion.current.value;
+    const currentNodes = getNodes().map((node) => {
+      const handles = getInternalNode(node.id)?.internals.handleBounds;
+      return handles ? { ...node, handles: [
+        ...(handles.source ?? []).map((handle) => ({ ...handle, type: 'source' as const })),
+        ...(handles.target ?? []).map((handle) => ({ ...handle, type: 'target' as const })),
+      ] } : node;
+    });
+    setPhase('layout');
+    setLayoutWarning(null);
+    let result;
+    try {
+      result = await layoutWithElk(currentNodes, edges);
+    } catch (error: unknown) {
+      if (ticket !== requestVersion.current.value) return;
+      console.warn('ELK layout unavailable; using the basic layout:', error);
+      result = layoutFlowchart(currentNodes, edges);
+      setLayoutWarning('Using basic layout. Re-Layout to retry automatic routing.');
+    }
+    // A slow layout must not overwrite a newly generated graph or a closed panel.
+    if (ticket !== requestVersion.current.value) return;
+    setNodes(result.nodes);
+    setEdges(result.edges);
+    setHasLayout(true);
+    setPhase('ready');
+    if (fitTimer.current) clearTimeout(fitTimer.current);
+    fitTimer.current = setTimeout(() => {
+      if (ticket === requestVersion.current.value) void fitView();
+    }, 100);
+  }, [edges, getNodes, getInternalNode, fitView, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!nodesInitialized || phase !== 'measuring') return;
+    const frame = requestAnimationFrame(() => { void onLayout(); });
+    return () => cancelAnimationFrame(frame);
+  }, [nodesInitialized, phase, onLayout]);
 
   return (
+    <div className="relative h-full">
     <ReactFlow
       nodes={flowNodes}
       edges={flowEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      nodesDraggable={phase === 'ready'}
+      style={{ opacity: hasLayout ? 1 : 0 }}
       fitView
       proOptions={{ hideAttribution: true }}
       className="bg-teal-50"
     >
       <Panel position="top-right">
         <button 
-          onClick={onLayout} 
-          className="px-3 py-1 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 transition-colors"
+          onClick={() => { void onLayout(); }}
+          disabled={phase !== 'ready'}
+          className="px-3 py-1 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 transition-colors disabled:opacity-50"
         >
-          Re-Layout
+          {phase === 'ready' ? 'Re-Layout' : 'Arranging...'}
         </button>
       </Panel>
+      {layoutWarning && <Panel position="bottom-left">
+        <p role="status" className="rounded bg-amber-50 p-2 text-xs text-amber-800">{layoutWarning}</p>
+      </Panel>}
     </ReactFlow>
+    {!hasLayout && <div role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-gray-600">
+      <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-gray-600" />
+      Arranging flowchart...
+    </div>}
+    </div>
   );
 };
 
