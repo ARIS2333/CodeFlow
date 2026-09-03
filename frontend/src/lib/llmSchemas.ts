@@ -10,7 +10,7 @@
  * edge pointing at a node that does not exist, is not worth rendering.
  */
 
-import { isObject, type ValidationResult } from './llmJson';
+import { isObject, type ValidationResult } from './llmJson.ts';
 import type { CodeAnalysis } from './codeAnalysis';
 
 export interface SyntaxErrorMark {
@@ -179,7 +179,11 @@ const validateSide = (
       data: { label },
     };
 
-    if (side === 'student' && entry.sourceAnchors !== undefined) {
+    if (side === 'student' && !codeAnalysis && entry.sourceAnchors !== undefined) {
+      // Inferred graphs have no parser facts to anchor to. Discard incidental
+      // anchors instead of letting them reintroduce grounding constraints.
+      repairs.push(`${where}: dropped sourceAnchors (no parser grounding)`);
+    } else if (side === 'student' && entry.sourceAnchors !== undefined) {
       if (!Array.isArray(entry.sourceAnchors)) {
         errors.push(`${where}.sourceAnchors is not an array`);
         return;

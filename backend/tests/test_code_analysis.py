@@ -130,6 +130,67 @@ class CodeAnalysisTests(unittest.TestCase):
         self.assertTrue(returned["flowchartRequired"])
         self.assertFalse(unreachable["flowchartRequired"])
 
+    def test_missing_java_brace_before_else_if_triggers_inferred_generation(self):
+        result = analyze_code(
+            "java",
+            """public boolean in1To10(int n, boolean outsideMode) {
+if (OutsideMode = true) {
+if (n <= 1) {
+return true;
+} else {
+return false;
+} else if (n >= 1 && n <= 10) {
+    return true;
+} else {
+    return false;
+}
+}""",
+        )
+
+        # The frontend must choose inference for this response, not force the
+        # model to honor recovery-dependent classifications such as "else if"
+        # being treated as a local declaration by the current Java grammar.
+        self.assertEqual(result["parseStatus"], "recovered")
+        self.assertTrue(result["syntaxIssues"])
+
+    def test_missing_java_inner_brace_reports_diagnostics_outside_graph_facts(self):
+        result = analyze_code(
+            "java",
+            """class Solution {
+    public boolean isPalindrome(String s) {
+        // 预处理
+        String cleanedStr = s.toLowerCase().replaceAll("[^a-z0-9]", "");
+        int len = cleanedStr.length();
+        for (int i = 0; i < len / 2; i++) {
+            char leftChar = cleanedStr.charAt(i);
+            char rightChar = cleanedStr.charAt(len - 1 - i);
+            if (leftChar != rightChar) {
+                return false;
+        }
+        return true;
+    }
+}""",
+        )
+
+        self.assertEqual(result["parseStatus"], "recovered")
+        missing = [issue for issue in result["syntaxIssues"]
+                   if issue["kind"] == "missing-token" and issue.get("expected") == "}"]
+        self.assertTrue(missing)
+        # Graph-level diagnostics must survive even if no node can be marked.
+        self.assertTrue(any(
+            not any(fact["startByte"] <= issue["startByte"] <= fact["endByte"]
+                    for fact in result["facts"])
+            for issue in missing
+        ))
+
+    def test_python_assignment_in_condition_triggers_inferred_generation(self):
+        result = analyze_code(
+            "python",
+            "def f(n):\n    if n = 1:\n        return True\n    return False\n",
+        )
+        self.assertEqual(result["parseStatus"], "recovered")
+        self.assertTrue(result["syntaxIssues"])
+
     def test_rejects_unsupported_language(self):
         with self.assertRaises(CodeAnalysisError):
             analyze_code("javascript", "function f() {}")

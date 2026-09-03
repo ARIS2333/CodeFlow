@@ -1,4 +1,5 @@
 import type { CodeEvaluationResponse, FlowchartData } from './llmSchemas';
+import type { FlowchartGenerationContext } from './flowchartGeneration';
 
 export type TaskState<T> =
   | { status: 'idle' }
@@ -7,11 +8,17 @@ export type TaskState<T> =
   | { status: 'error'; error: string };
 
 export type EvaluationState = TaskState<CodeEvaluationResponse>;
-export type FlowchartState = TaskState<FlowchartData>;
+export type FlowchartState =
+  | { status: 'idle' }
+  | (Exclude<TaskState<FlowchartData>, { status: 'idle' }> & {
+    generation?: FlowchartGenerationContext;
+  });
 
 interface AnalysisRunOptions {
   requestFeedback: () => Promise<CodeEvaluationResponse>;
-  requestFlowchart: () => Promise<FlowchartData>;
+  requestFlowchart: (
+    onGenerationReady: (context: FlowchartGenerationContext) => void
+  ) => Promise<FlowchartData>;
   onFeedbackChange: (state: EvaluationState) => void;
   onFlowchartChange: (state: FlowchartState) => void;
 }
@@ -31,6 +38,8 @@ export const startAnalysisRun = ({
 }: AnalysisRunOptions): AnalysisRun => {
   let active = true;
   let pending = 2;
+  let flowchartGeneration: FlowchartGenerationContext | undefined;
+  let flowchartSettled = false;
 
   const runTask = async <T>(
     request: () => Promise<T>,
@@ -56,7 +65,21 @@ export const startAnalysisRun = ({
   onFeedbackChange({ status: 'loading' });
   onFlowchartChange({ status: 'loading' });
   void runTask(requestFeedback, onFeedbackChange, 'Failed to evaluate your code');
-  void runTask(requestFlowchart, onFlowchartChange, 'Failed to build the flowchart');
+  void runTask(
+    () => requestFlowchart((context) => {
+      if (!active || flowchartSettled) return;
+      flowchartGeneration = context;
+      onFlowchartChange({ status: 'loading', generation: context });
+    }),
+    (state) => {
+      flowchartSettled = true;
+      onFlowchartChange({
+        ...state,
+        ...(flowchartGeneration ? { generation: flowchartGeneration } : {}),
+      });
+    },
+    'Failed to build the flowchart',
+  );
 
   return {
     isRunning: () => active && pending > 0,

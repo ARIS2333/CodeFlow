@@ -6,11 +6,17 @@ import {
   type FlowchartState,
 } from '../src/lib/analysisRun.ts';
 import type { CodeEvaluationResponse, FlowchartData } from '../src/lib/llmSchemas.ts';
+import type { FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
+import { missingTokenIssue } from './flowchartFixtures.ts';
 
 const evaluation: CodeEvaluationResponse = { IsCorrect: true, TestResults: [] };
 const flowchart: FlowchartData = {
   student: { nodes: [], edges: [] },
   llm: { nodes: [], edges: [] },
+};
+
+const inferred: FlowchartGenerationContext = {
+  mode: 'inferred', syntaxIssues: [{ ...missingTokenIssue }],
 };
 
 const deferred = <T>() => {
@@ -29,6 +35,7 @@ const setup = () => {
   const feedbackStates: EvaluationState[] = [];
   const flowchartStates: FlowchartState[] = [];
   const started: string[] = [];
+  let reportGeneration!: (context: FlowchartGenerationContext) => void;
   const run = startAnalysisRun({
     requestFeedback: () => {
       // Both panels must show loaders before either request starts.
@@ -37,15 +44,103 @@ const setup = () => {
       started.push('feedback');
       return feedback.promise;
     },
-    requestFlowchart: () => {
+    requestFlowchart: (onGenerationReady) => {
+      reportGeneration = onGenerationReady;
       started.push('flowchart');
       return charts.promise;
     },
     onFeedbackChange: (state) => feedbackStates.push(state),
     onFlowchartChange: (state) => flowchartStates.push(state),
   });
-  return { run, feedback, charts, feedbackStates, flowchartStates, started };
+  return { run, feedback, charts, feedbackStates, flowchartStates, started,
+    reportGeneration: (context: FlowchartGenerationContext) => reportGeneration(context) };
 };
+
+test('parser diagnostics show during loading and survive flowchart success', async () => {
+  const { run, charts, flowchartStates, feedbackStates, reportGeneration } = setup();
+  reportGeneration(inferred);
+  assert.deepEqual(flowchartStates.at(-1), { status: 'loading', generation: inferred });
+  assert.deepEqual(feedbackStates, [{ status: 'loading' }]);
+  charts.resolve(flowchart);
+  await Promise.resolve();
+  assert.deepEqual(flowchartStates.at(-1), { status: 'success', data: flowchart, generation: inferred });
+  assert.equal(run.isRunning(), true, 'evaluation is still independent');
+  run.cancel();
+});
+
+test('parser diagnostics survive model failure without overwriting evaluation', async () => {
+  const { run, charts, feedback, flowchartStates, feedbackStates, reportGeneration } = setup();
+  feedback.resolve(evaluation);
+  await Promise.resolve();
+  reportGeneration(inferred);
+  charts.reject(new Error('Invalid model graph'));
+  await Promise.resolve();
+  assert.deepEqual(flowchartStates.at(-1), { status: 'error', error: 'Invalid model graph', generation: inferred });
+  assert.deepEqual(feedbackStates.at(-1), { status: 'success', data: evaluation });
+  assert.equal(run.isRunning(), false);
+});
+
+test('a late parser result after Clear cannot restore diagnostics', async () => {
+  const { run, charts, flowchartStates, reportGeneration } = setup();
+  run.cancel();
+  flowchartStates.push({ status: 'idle' });
+  reportGeneration(inferred);
+  charts.resolve(flowchart);
+  await Promise.resolve();
+  assert.deepEqual(flowchartStates, [{ status: 'loading' }, { status: 'idle' }]);
+});
+
+test('a new run clears old diagnostics and ignores old parser updates and failures', async () => {
+  const old = setup();
+  old.reportGeneration(inferred);
+  old.run.cancel();
+  const nextCharts = deferred<FlowchartData>();
+  const nextRun = startAnalysisRun({
+    requestFeedback: async () => evaluation,
+    requestFlowchart: (report) => {
+      report({ mode: 'grounded', syntaxIssues: [] });
+      return nextCharts.promise;
+    },
+    onFeedbackChange: (state) => old.feedbackStates.push(state),
+    onFlowchartChange: (state) => old.flowchartStates.push(state),
+  });
+  const newStates = old.flowchartStates.slice(2);
+  assert.deepEqual(newStates, [
+    { status: 'loading' },
+    { status: 'loading', generation: { mode: 'grounded', syntaxIssues: [] } },
+  ]);
+  old.reportGeneration(inferred);
+  old.charts.reject(new Error('Old request failed'));
+  await Promise.resolve();
+  assert.deepEqual(old.flowchartStates.slice(2), newStates);
+  nextCharts.resolve(flowchart);
+  await Promise.resolve();
+  assert.deepEqual(old.flowchartStates.at(-1), {
+    status: 'success', data: flowchart, generation: { mode: 'grounded', syntaxIssues: [] },
+  });
+  assert.equal(nextRun.isRunning(), false);
+});
+
+test('diagnostics arriving after a task settles cannot restore its loader', async () => {
+  const { run, charts, flowchartStates, reportGeneration } = setup();
+  charts.resolve(flowchart);
+  await Promise.resolve();
+  reportGeneration(inferred);
+  assert.deepEqual(flowchartStates.at(-1), { status: 'success', data: flowchart });
+  run.cancel();
+});
+
+test('cancelled runs cannot publish late model missing-symbol suggestions', async () => {
+  const { run, charts, flowchartStates, reportGeneration } = setup();
+  reportGeneration(inferred);
+  run.cancel();
+  flowchartStates.push({ status: 'idle' });
+  reportGeneration({ ...inferred, missingSymbols: [{ symbol: '}', explanation: 'A brace may be missing.' }] });
+  charts.resolve(flowchart);
+  await Promise.resolve();
+  assert.deepEqual(flowchartStates.at(-1), { status: 'idle' });
+  assert.equal(flowchartStates.length, 3);
+});
 
 test('starts both requests and displays both loading states immediately', () => {
   const { run, feedbackStates, flowchartStates, started } = setup();

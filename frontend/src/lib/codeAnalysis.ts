@@ -1,6 +1,6 @@
-import { CODE_ANALYSIS_URL } from '../config/apiConfig';
-import { isObject } from './llmJson';
-import { makeApiRequestWithRetry } from './llmClient';
+import { CODE_ANALYSIS_URL } from '../config/apiConfig.ts';
+import { isObject } from './llmJson.ts';
+import { makeApiRequestWithRetry } from './llmClient.ts';
 
 export type SupportedLanguage = 'java' | 'python';
 

@@ -8,8 +8,8 @@
  *                             again rather than rendering a broken flowchart
  */
 
-import { API_URL } from '../config/apiConfig';
-import { parseLlmJson, isObject, type ValidationResult } from './llmJson';
+import { API_URL } from '../config/apiConfig.ts';
+import { parseLlmJson, isObject, type ValidationResult } from './llmJson.ts';
 
 export type ApiRequestConfig = {
   url: string;

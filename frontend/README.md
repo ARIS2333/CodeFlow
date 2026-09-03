@@ -78,14 +78,45 @@ The flowchart functionality ([FlowchartDiagram.tsx](src/FlowchartDiagram.tsx)) p
 - Comparison between student's solution and recommended approach
 - Interactive re-layout capability
 
-Flowchart generation is grounded before rendering:
+Flowchart generation selects its mode before the first model request:
 
 1. The backend uses error-tolerant Tree-sitter grammars to extract ordered,
    source-positioned facts from the exact Java/Python submission.
-2. One LLM pass must cover every parser fact through validated source anchors
-   while generating the student and reference graphs.
-3. Runtime validation rejects missing or invented anchors, malformed branch
-   structure, unreachable nodes, invalid terminal edges, and broken references.
+2. For a clean parse, the LLM must cover each required parser fact through
+   validated source anchors while generating the student and reference graphs.
+3. If parsing reports recovery or syntax issues, the first LLM request instead
+   uses the original code and advisory diagnostics, without parser facts or
+   anchor constraints. The student graph is a tentative interpretation, not a
+   silent correction of the student's logic. No second LLM reviewer is added.
+4. Both modes validate graph structure, reachability, terminals, and edge
+   references. Only grounded mode validates source anchors. Invalid output can
+   still trigger the existing maximum of three generation attempts.
+
+In inferred mode, parser diagnostics remain available to the generation pipeline
+but are not displayed in the panel. Anchor-dependent automatic token marking is disabled in this mode;
+locatable model-provided syntax marks remain supported. Clear/new runs ignore
+late diagnostic updates as well as late graphs.
+
+The same inferred-mode model response also requests `missingSymbols`: suspected
+missing punctuation, a 1-based source line, an exact nearby text anchor, whether
+the symbol belongs before/after that anchor, and a short explanation. Suggestions
+appear above the diagrams under "Possible missing symbols detected", with one
+compact line per symbol and its source reference. Explanation paragraphs, code
+blocks, and parser details are not displayed; the panel stays hidden until there
+is a model suggestion to show. Their line/anchor must match the original
+submission uniquely; unmatched or ambiguous references are shown as unlocated
+instead of inventing a location. This is a source-reference check, not proof that
+the proposed repair is correct. No code is changed automatically.
+
+These optional suggestions do not add an LLM call and cannot reject an otherwise
+valid graph. Once received, they also survive graph-validation failures; an
+explicit empty report on a later attempt replaces the earlier suggestions.
+Malformed later feedback does not erase a usable earlier report. This feedback
+only covers missing syntax punctuation, not operator or logic corrections.
+
+This switch does not detect errors the parser itself misses: `clean` is not a
+guarantee that the source compiles or is correct. Parser API failures still
+surface as request errors rather than being mistaken for student syntax errors.
 
 Rendering then uses **ELK Layered** for node placement and orthogonal edge routing:
 
@@ -103,7 +134,12 @@ Rendering then uses **ELK Layered** for node placement and orthogonal edge routi
 This stage does not call an LLM, change graph connections, or add missing `for`
 initialization/update nodes. Those are separate generation concerns.
 
-`npm test` includes layout regression cases for the palindrome example, nested
+`npm test` includes mocked generation/validation tests for clean and recovered
+code, diagnostics across request states, and stale-response isolation. These do
+not call a live LLM. Backend tests exercise actual Tree-sitter recovery for the
+missing-brace examples and invalid Python conditions.
+
+It also includes layout regression cases for the palindrome example, nested
 loops, branch joins, break/continue paths, post-tested loops, real handle bounds,
 multiline nodes, stable re-layout, input preservation, and worker failures.
 

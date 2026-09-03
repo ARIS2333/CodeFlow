@@ -1,4 +1,5 @@
 import FlowchartDiagram from './FlowchartDiagram';
+import FlowchartDiagnostics from './FlowchartDiagnostics';
 import { useMemo } from 'react';
 import type { FlowchartState } from './lib/analysisRun';
 import type { FlowchartNode, FlowchartEdge } from './lib/llmSchemas';
@@ -35,6 +36,7 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): DiagramEdge[] => {
 };
 
 function RightContent({ flowchartState }: RightContentProps) {
+  const generation = flowchartState.status === 'idle' ? undefined : flowchartState.generation;
   const flowchartData = flowchartState.status === 'success' ? flowchartState.data : null;
   const diagrams = useMemo(() => flowchartData ? {
     student: {
@@ -50,13 +52,18 @@ function RightContent({ flowchartState }: RightContentProps) {
   return (
     <div className="w-full p-4" aria-busy={flowchartState.status === 'loading'}>
       <h2 className="text-xl font-bold mb-4">Code Analysis</h2>
+      <FlowchartDiagnostics generation={generation} />
       
       {flowchartState.status === 'loading' ? (
         <div role="status" className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700 min-h-[160px]">
           <div aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
           <div>
             <p className="font-medium">Generating flowcharts...</p>
-            <p className="mt-1 text-sm">Analyzing your code and building both logic flows.</p>
+            <p className="mt-1 text-sm">
+              {generation?.mode === 'inferred'
+                ? 'Building both logic flows.'
+                : 'Analyzing your code and building both logic flows.'}
+            </p>
           </div>
         </div>
       ) : flowchartState.status === 'error' ? (

@@ -170,8 +170,8 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart
     activeRun.current?.cancel();
     onRunStart();
 
-    // The evaluator uses the plain request. Flowchart generation enriches the
-    // same request with deterministic parser facts before asking the model.
+    // Evaluation remains independent. Flowcharts use parser grounding for clean
+    // source, or source-only inference when parsing reports syntax recovery.
     const requestPayload = {
       practice: {
         title: problemDetails.title,
@@ -191,7 +191,8 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart
         validate: validateCodeEvaluation,
         label: 'feedback'
       }),
-      requestFlowchart: () => requestReliableFlowchart(requestPayload),
+      requestFlowchart: (onGenerationReady) =>
+        requestReliableFlowchart(requestPayload, onGenerationReady),
       onFeedbackChange: setEvaluationState,
       onFlowchartChange: onFlowchartStateChange,
     });

@@ -1,12 +1,21 @@
-import { systemPrompt_GenerateFlowchart } from '../config/systemPrompt_GenerateFlowchart';
-import { requestCodeAnalysis, type SupportedLanguage } from './codeAnalysis';
+import {
+  systemPrompt_GenerateFlowchart,
+  systemPrompt_InferFlowchart,
+} from '../config/systemPrompt_GenerateFlowchart.ts';
+import { requestCodeAnalysis, type SupportedLanguage } from './codeAnalysis.ts';
 import type { CodeAnalysis } from './codeAnalysis';
-import { requestStructured } from './llmClient';
+import { requestStructured } from './llmClient.ts';
+import { readMissingSymbolSuggestions } from './missingSymbolSuggestions.ts';
+import {
+  getFlowchartGenerationContext,
+  type FlowchartGenerationContext,
+} from './flowchartGeneration.ts';
 import {
   createFlowchartValidator,
+  validateFlowchart,
   type FlowchartData,
   type ProblemDetails,
-} from './llmSchemas';
+} from './llmSchemas.ts';
 
 export interface FlowchartRequest {
   practice: ProblemDetails;
@@ -126,27 +135,43 @@ const applyMissingTokenMarks = (
 
 /**
  * Build a flowchart in three deliberately separate stages:
- *   1. Tree-sitter records source-backed facts, even for incomplete code.
- *   2. The model produces a graph that must cover every recorded anchor.
- *   3. Local validation and parser-derived syntax marking finalize the graph.
+ *   1. Tree-sitter analyzes the source and reports any syntax recovery.
+ *   2. Clean parses ground the model in facts; recovered parses ask the model
+ *      to infer structure from raw source without those facts or anchor rules.
+ *   3. Local graph validation always runs; anchor-dependent markings run only
+ *      in grounded mode. Parser metadata is published before the LLM call;
+ *      model missing-symbol suggestions are published from that same reply,
+ *      even if its graph fails validation.
  *
  * There is intentionally no second model reviewer: the normal path makes one
  * flowchart LLM request. requestStructured only asks again when the first reply
  * is malformed or violates the machine-checkable contract.
  */
 export const requestReliableFlowchart = async (
-  request: FlowchartRequest
+  request: FlowchartRequest,
+  onGenerationReady?: (context: FlowchartGenerationContext) => void
 ): Promise<FlowchartData> => {
   const codeAnalysis = await requestCodeAnalysis(request.language, request.code);
-  const validate = createFlowchartValidator(codeAnalysis);
+  const context = getFlowchartGenerationContext(codeAnalysis);
+  onGenerationReady?.(context);
+  const inferred = context.mode === 'inferred';
+  const validate = inferred ? (input: unknown) => {
+    const missingSymbols = readMissingSymbolSuggestions(input, request.code);
+    if (missingSymbols !== undefined) {
+      onGenerationReady?.({ ...context, missingSymbols });
+    }
+    return validateFlowchart(input);
+  } : createFlowchartValidator(codeAnalysis);
 
   const flowchart = await requestStructured({
-    systemPrompt: systemPrompt_GenerateFlowchart,
-    message: JSON.stringify({ ...request, codeAnalysis }),
+    systemPrompt: inferred ? systemPrompt_InferFlowchart : systemPrompt_GenerateFlowchart,
+    message: JSON.stringify(inferred
+      ? { ...request, parserDiagnostics: context.syntaxIssues }
+      : { ...request, codeAnalysis }),
     validate,
-    label: 'grounded flowchart',
+    label: inferred ? 'model-inferred flowchart' : 'grounded flowchart',
     maxAttempts: 3,
   });
 
-  return applyMissingTokenMarks(flowchart, codeAnalysis, request.code);
+  return inferred ? flowchart : applyMissingTokenMarks(flowchart, codeAnalysis, request.code);
 };
