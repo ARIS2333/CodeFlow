@@ -24,6 +24,7 @@ export const makeApiRequestWithRetry = async (
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    requestConfig.options.signal?.throwIfAborted();
     try {
       const response = await fetch(requestConfig.url, requestConfig.options);
 
@@ -33,6 +34,7 @@ export const makeApiRequestWithRetry = async (
 
       throw new Error(`API request failed with status ${response.status}`);
     } catch (error: unknown) {
+      requestConfig.options.signal?.throwIfAborted();
       lastError = error instanceof Error ? error : new Error(String(error));
       console.warn(`API request failed (attempt ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
 

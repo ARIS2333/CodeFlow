@@ -6,7 +6,7 @@ import {
   type FlowchartState,
 } from '../src/lib/analysisRun.ts';
 import type { CodeEvaluationResponse, FlowchartData } from '../src/lib/llmSchemas.ts';
-import type { FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
+import type { FlowchartGenerationContext, FlowchartProgress } from '../src/lib/flowchartGeneration.ts';
 import { missingTokenIssue } from './flowchartFixtures.ts';
 
 const evaluation: CodeEvaluationResponse = { IsCorrect: true, TestResults: [] };
@@ -36,6 +36,8 @@ const setup = () => {
   const flowchartStates: FlowchartState[] = [];
   const started: string[] = [];
   let reportGeneration!: (context: FlowchartGenerationContext) => void;
+  let reportProgress!: (progress: FlowchartProgress) => void;
+  let signal!: AbortSignal;
   const run = startAnalysisRun({
     requestFeedback: () => {
       // Both panels must show loaders before either request starts.
@@ -44,17 +46,66 @@ const setup = () => {
       started.push('feedback');
       return feedback.promise;
     },
-    requestFlowchart: (onGenerationReady) => {
+    requestFlowchart: (onGenerationReady, onProgress, abortSignal) => {
       reportGeneration = onGenerationReady;
+      reportProgress = onProgress;
+      signal = abortSignal;
       started.push('flowchart');
       return charts.promise;
     },
     onFeedbackChange: (state) => feedbackStates.push(state),
     onFlowchartChange: (state) => flowchartStates.push(state),
   });
-  return { run, feedback, charts, feedbackStates, flowchartStates, started,
+  return { run, feedback, charts, feedbackStates, flowchartStates, started, signal,
+    reportProgress: (progress: FlowchartProgress) => reportProgress(progress),
     reportGeneration: (context: FlowchartGenerationContext) => reportGeneration(context) };
 };
+
+test('streamed graphs and diagnostics preserve each other while both tasks are pending', async () => {
+  const current = setup();
+  const progress = { attempt: 1, student: flowchart.student };
+  current.reportProgress(progress);
+  current.reportGeneration(inferred);
+  assert.deepEqual(current.flowchartStates.at(-1), { status: 'loading', generation: inferred, progress });
+  assert.deepEqual(current.feedbackStates, [{ status: 'loading' }]);
+  assert.equal(current.run.isRunning(), true);
+  current.charts.resolve(flowchart);
+  await Promise.resolve();
+  assert.deepEqual(current.flowchartStates.at(-1), { status: 'success', data: flowchart, generation: inferred, progress });
+  current.run.cancel();
+});
+
+test('cancel aborts the flowchart signal and ignores later streamed sections', async () => {
+  const current = setup();
+  assert.equal(current.signal.aborted, false);
+  current.run.cancel();
+  assert.equal(current.signal.aborted, true);
+  current.reportProgress({ attempt: 1, student: flowchart.student });
+  current.charts.reject(new Error('aborted'));
+  await Promise.resolve();
+  assert.deepEqual(current.flowchartStates, [{ status: 'loading' }]);
+  assert.equal(current.run.isRunning(), false);
+});
+
+test('a new format attempt replaces old graph progress without erasing diagnostics', () => {
+  const current = setup();
+  current.reportGeneration(inferred);
+  current.reportProgress({ attempt: 1, student: flowchart.student });
+  current.reportProgress({ attempt: 2 });
+  assert.deepEqual(current.flowchartStates.at(-1), { status: 'loading', generation: inferred, progress: { attempt: 2 } });
+  current.run.cancel();
+});
+
+test('stream failures retain valid current sections and ignore post-settlement updates', async () => {
+  const current = setup();
+  const progress = { attempt: 1, student: flowchart.student };
+  current.reportProgress(progress);
+  current.charts.reject(new Error('Connection closed'));
+  await Promise.resolve();
+  current.reportProgress({ attempt: 1, student: flowchart.student, llm: flowchart.llm });
+  assert.deepEqual(current.flowchartStates.at(-1), { status: 'error', error: 'Connection closed', progress });
+  current.run.cancel();
+});
 
 test('parser diagnostics show during loading and survive flowchart success', async () => {
   const { run, charts, flowchartStates, feedbackStates, reportGeneration } = setup();

@@ -191,8 +191,8 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart
         validate: validateCodeEvaluation,
         label: 'feedback'
       }),
-      requestFlowchart: (onGenerationReady) =>
-        requestReliableFlowchart(requestPayload, onGenerationReady),
+      requestFlowchart: (onGenerationReady, onProgress, signal) =>
+        requestReliableFlowchart(requestPayload, onGenerationReady, { onProgress, signal }),
       onFeedbackChange: setEvaluationState,
       onFlowchartChange: onFlowchartStateChange,
     });

@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test, type TestContext } from 'node:test';
-import { API_URL, CODE_ANALYSIS_URL } from '../src/config/apiConfig.ts';
+import { STREAM_API_URL, CODE_ANALYSIS_URL } from '../src/config/apiConfig.ts';
+import { streamResponse } from './streamFixtures.ts';
 import { requestReliableFlowchart, type FlowchartRequest } from '../src/lib/flowchartClient.ts';
 import { getFlowchartGenerationContext, type FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
 import { createFlowchartValidator, validateFlowchart } from '../src/lib/llmSchemas.ts';
@@ -21,9 +22,9 @@ const mockRequests = (t: TestContext, analysis: CodeAnalysis, replies: unknown[]
     const body = JSON.parse(String(init.body));
     calls.push({ url: String(input), body });
     if (String(input) === CODE_ANALYSIS_URL) return Response.json(analysis);
-    assert.equal(String(input), API_URL);
+    assert.equal(String(input), STREAM_API_URL);
     const reply = replies[Math.min(replyIndex++, replies.length - 1)];
-    return Response.json({ body: JSON.stringify({ response: JSON.stringify(reply) }) });
+    return streamResponse([{ type: 'delta', text: JSON.stringify(reply) }, { type: 'done' }]);
   });
   // Intentional bad replies below should not flood the test output.
   t.mock.method(console, 'warn', () => {});

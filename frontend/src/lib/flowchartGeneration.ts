@@ -1,5 +1,12 @@
 import type { CodeAnalysis, SyntaxIssue } from './codeAnalysis';
 import type { MissingSymbolSuggestion } from './missingSymbolSuggestions';
+import type { FlowchartSide } from './llmSchemas';
+
+export interface FlowchartProgress {
+  attempt: number;
+  student?: FlowchartSide;
+  llm?: FlowchartSide;
+}
 
 export type FlowchartGenerationMode = 'grounded' | 'inferred';
 

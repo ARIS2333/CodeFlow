@@ -4,15 +4,17 @@ import {
 } from '../config/systemPrompt_GenerateFlowchart.ts';
 import { requestCodeAnalysis, type SupportedLanguage } from './codeAnalysis.ts';
 import type { CodeAnalysis } from './codeAnalysis';
-import { requestStructured } from './llmClient.ts';
+import { requestJsonStream } from './llmStreamClient.ts';
 import { readMissingSymbolSuggestions } from './missingSymbolSuggestions.ts';
 import {
   getFlowchartGenerationContext,
   type FlowchartGenerationContext,
+  type FlowchartProgress,
 } from './flowchartGeneration.ts';
 import {
   createFlowchartValidator,
   validateFlowchart,
+  validateFlowchartSide,
   type FlowchartData,
   type ProblemDetails,
 } from './llmSchemas.ts';
@@ -62,6 +64,7 @@ const applyMissingTokenMarks = (
   analysis: CodeAnalysis,
   code: string
 ): FlowchartData => {
+  if (!analysis.syntaxIssues.length) return flowchart;
   const studentNodes = flowchart.student.nodes.map((node) => ({
     ...node,
     sourceAnchors: node.sourceAnchors ? [...node.sourceAnchors] : undefined,
@@ -144,31 +147,68 @@ const applyMissingTokenMarks = (
  *      even if its graph fails validation.
  *
  * There is intentionally no second model reviewer: the normal path makes one
- * flowchart LLM request. requestStructured only asks again when the first reply
+ * flowchart LLM request. requestJsonStream only asks again when the first reply
  * is malformed or violates the machine-checkable contract.
  */
 export const requestReliableFlowchart = async (
   request: FlowchartRequest,
-  onGenerationReady?: (context: FlowchartGenerationContext) => void
+  onGenerationReady?: (context: FlowchartGenerationContext) => void,
+  options: { onProgress?: (progress: FlowchartProgress) => void; signal?: AbortSignal } = {},
 ): Promise<FlowchartData> => {
-  const codeAnalysis = await requestCodeAnalysis(request.language, request.code);
+  const codeAnalysis = await requestCodeAnalysis(request.language, request.code, options.signal);
+  options.signal?.throwIfAborted();
   const context = getFlowchartGenerationContext(codeAnalysis);
   onGenerationReady?.(context);
   const inferred = context.mode === 'inferred';
-  const validate = inferred ? (input: unknown) => {
+  let progress: FlowchartProgress = { attempt: 1 };
+  let suggestionItems: unknown[] = [];
+  let lastReport: string | undefined;
+  const reportSuggestions = (input: unknown) => {
+    if (!inferred) return;
     const missingSymbols = readMissingSymbolSuggestions(input, request.code);
-    if (missingSymbols !== undefined) {
+    if (missingSymbols !== undefined && JSON.stringify(missingSymbols) !== lastReport) {
+      lastReport = JSON.stringify(missingSymbols);
       onGenerationReady?.({ ...context, missingSymbols });
     }
-    return validateFlowchart(input);
-  } : createFlowchartValidator(codeAnalysis);
+  };
+  const validateGraph = inferred ? validateFlowchart : createFlowchartValidator(codeAnalysis);
 
-  const flowchart = await requestStructured({
+  const flowchart = await requestJsonStream({
     systemPrompt: inferred ? systemPrompt_InferFlowchart : systemPrompt_GenerateFlowchart,
     message: JSON.stringify(inferred
       ? { ...request, parserDiagnostics: context.syntaxIssues }
       : { ...request, codeAnalysis }),
-    validate,
+    validate: (input) => {
+      reportSuggestions(input);
+      const result = validateGraph(input);
+      if (!result.ok) return result;
+      // Reuse already-rendered side objects so finishing the other side/stream
+      // does not reset the user's manual node positions.
+      return { ...result, value: {
+        student: progress.student ?? result.value.student,
+        llm: progress.llm ?? result.value.llm,
+      } };
+    },
+    onAttempt: (attempt) => {
+      progress = { attempt };
+      suggestionItems = [];
+      options.onProgress?.(progress);
+    },
+    onValue: (event) => {
+      if (event.type === 'item') {
+        suggestionItems.push(event.value);
+        reportSuggestions({ missingSymbols: suggestionItems });
+      } else if (event.key === 'missingSymbols') {
+        reportSuggestions({ missingSymbols: event.value });
+      } else if (event.key === 'student' || event.key === 'llm') {
+        const side = validateFlowchartSide(event.key, event.value, inferred ? undefined : codeAnalysis);
+        if (side.ok) {
+          progress = { ...progress, [event.key]: side.value };
+          options.onProgress?.(progress);
+        }
+      }
+    },
+    signal: options.signal,
     label: inferred ? 'model-inferred flowchart' : 'grounded flowchart',
     maxAttempts: 3,
   });

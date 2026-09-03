@@ -504,6 +504,19 @@ const validateGraphSemantics = (
   }
 };
 
+export const validateFlowchartSide = (
+  side: 'student' | 'llm',
+  input: unknown,
+  codeAnalysis?: CodeAnalysis,
+): ValidationResult<FlowchartSide> => {
+  const errors: string[] = [];
+  const repairs: string[] = [];
+  const graph = validateSide(side, input, errors, repairs, codeAnalysis);
+  if (graph && !errors.length) validateGraphSemantics(side, graph, errors);
+  if (!graph || errors.length) return { ok: false, errors };
+  return { ok: true, value: graph, repairs };
+};
+
 const validateFlowchartWithAnalysis = (
   input: unknown,
   codeAnalysis?: CodeAnalysis

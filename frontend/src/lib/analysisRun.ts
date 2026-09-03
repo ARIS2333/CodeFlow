@@ -1,5 +1,5 @@
 import type { CodeEvaluationResponse, FlowchartData } from './llmSchemas';
-import type { FlowchartGenerationContext } from './flowchartGeneration';
+import type { FlowchartGenerationContext, FlowchartProgress } from './flowchartGeneration';
 
 export type TaskState<T> =
   | { status: 'idle' }
@@ -12,12 +12,15 @@ export type FlowchartState =
   | { status: 'idle' }
   | (Exclude<TaskState<FlowchartData>, { status: 'idle' }> & {
     generation?: FlowchartGenerationContext;
+    progress?: FlowchartProgress;
   });
 
 interface AnalysisRunOptions {
   requestFeedback: () => Promise<CodeEvaluationResponse>;
   requestFlowchart: (
-    onGenerationReady: (context: FlowchartGenerationContext) => void
+    onGenerationReady: (context: FlowchartGenerationContext) => void,
+    onProgress: (progress: FlowchartProgress) => void,
+    signal: AbortSignal,
   ) => Promise<FlowchartData>;
   onFeedbackChange: (state: EvaluationState) => void;
   onFlowchartChange: (state: FlowchartState) => void;
@@ -25,7 +28,7 @@ interface AnalysisRunOptions {
 
 export interface AnalysisRun {
   isRunning: () => boolean;
-  /** Ignore later responses; this does not cancel requests already in flight. */
+  /** Abort flowchart preprocessing/streaming; ignore late evaluation responses. */
   cancel: () => void;
 }
 
@@ -40,6 +43,12 @@ export const startAnalysisRun = ({
   let pending = 2;
   let flowchartGeneration: FlowchartGenerationContext | undefined;
   let flowchartSettled = false;
+  let flowchartProgress: FlowchartProgress | undefined;
+  const controller = new AbortController();
+  const metadata = () => ({
+    ...(flowchartGeneration ? { generation: flowchartGeneration } : {}),
+    ...(flowchartProgress ? { progress: flowchartProgress } : {}),
+  });
 
   const runTask = async <T>(
     request: () => Promise<T>,
@@ -66,16 +75,24 @@ export const startAnalysisRun = ({
   onFlowchartChange({ status: 'loading' });
   void runTask(requestFeedback, onFeedbackChange, 'Failed to evaluate your code');
   void runTask(
-    () => requestFlowchart((context) => {
-      if (!active || flowchartSettled) return;
-      flowchartGeneration = context;
-      onFlowchartChange({ status: 'loading', generation: context });
-    }),
+    () => requestFlowchart(
+      (context) => {
+        if (!active || flowchartSettled) return;
+        flowchartGeneration = context;
+        onFlowchartChange({ status: 'loading', ...metadata() });
+      },
+      (progress) => {
+        if (!active || flowchartSettled) return;
+        flowchartProgress = progress;
+        onFlowchartChange({ status: 'loading', ...metadata() });
+      },
+      controller.signal,
+    ),
     (state) => {
       flowchartSettled = true;
       onFlowchartChange({
         ...state,
-        ...(flowchartGeneration ? { generation: flowchartGeneration } : {}),
+        ...metadata(),
       });
     },
     'Failed to build the flowchart',
@@ -83,6 +100,6 @@ export const startAnalysisRun = ({
 
   return {
     isRunning: () => active && pending > 0,
-    cancel: () => { active = false; },
+    cancel: () => { active = false; controller.abort(); },
   };
 };

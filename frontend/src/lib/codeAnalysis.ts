@@ -197,11 +197,13 @@ const validateAnalysis = (
 
 export const requestCodeAnalysis = async (
   language: SupportedLanguage,
-  code: string
+  code: string,
+  signal?: AbortSignal,
 ): Promise<CodeAnalysis> => {
   const response = await makeApiRequestWithRetry({
     url: CODE_ANALYSIS_URL,
     options: {
+      signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

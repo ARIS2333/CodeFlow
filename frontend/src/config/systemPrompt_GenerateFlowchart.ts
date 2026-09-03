@@ -3,7 +3,16 @@ import { MISSING_SYMBOLS } from '../lib/missingSymbolSuggestions.ts';
 const buildFlowchartOutputContract = (inferred: boolean): string => `
 Return one raw JSON object with exactly this shape:
 {
-  "student": {
+${inferred ? `  "missingSymbols": [
+    {
+      "symbol": "}",
+      "line": 10,
+      "anchor": "return false;",
+      "placement": "after",
+      "explanation": "The inner if block may need a closing brace before the loop continues."
+    }
+  ],
+` : ''}  "student": {
     "nodes": [
       {
         "id": "1",
@@ -32,19 +41,14 @@ Return one raw JSON object with exactly this shape:
     "edges": [
       { "id": "e1-2", "source": "1", "target": "2", "label"?: "true" }
     ]
-  }${inferred ? `,
-  "missingSymbols": [
-    {
-      "symbol": "}",
-      "line": 10,
-      "anchor": "return false;",
-      "placement": "after",
-      "explanation": "The inner if block may need a closing brace before the loop continues."
-    }
-  ]` : ''}
+  }
 }
 
 Contract rules:
+- Write top-level fields in this order: ${inferred ? 'missingSymbols, student, llm' : 'student, llm'}.
+  Finish each field before starting the next. Emit each field exactly once.
+  Each graph is displayed as soon as its entire object is available; never emit
+  a placeholder graph or revise a previous field later in the response.
 - Both graphs have exactly one start node. It is id "1", kind "start", label "START".
 - kind "condition" means an if/else-if, loop condition, or multi-way decision.
 - kind "process" means an assignment, update, call, break, or continue.

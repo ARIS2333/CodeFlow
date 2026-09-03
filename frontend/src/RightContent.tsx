@@ -2,7 +2,7 @@ import FlowchartDiagram from './FlowchartDiagram';
 import FlowchartDiagnostics from './FlowchartDiagnostics';
 import { useMemo } from 'react';
 import type { FlowchartState } from './lib/analysisRun';
-import type { FlowchartNode, FlowchartEdge } from './lib/llmSchemas';
+import type { FlowchartNode, FlowchartEdge, FlowchartSide } from './lib/llmSchemas';
 import type { DiagramNode, DiagramEdge } from './lib/flowchartLayout';
 
 interface RightContentProps {
@@ -35,65 +35,55 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): DiagramEdge[] => {
   }));
 };
 
-function RightContent({ flowchartState }: RightContentProps) {
-  const generation = flowchartState.status === 'idle' ? undefined : flowchartState.generation;
-  const flowchartData = flowchartState.status === 'success' ? flowchartState.data : null;
-  const diagrams = useMemo(() => flowchartData ? {
-    student: {
-      nodes: convertToReactFlowNodes(flowchartData.student.nodes),
-      edges: convertToReactFlowEdges(flowchartData.student.edges),
-    },
-    llm: {
-      nodes: convertToReactFlowNodes(flowchartData.llm.nodes),
-      edges: convertToReactFlowEdges(flowchartData.llm.edges),
-    },
-  } : null, [flowchartData]);
+function FlowchartPane({ title, graph, loading }: {
+  title: string;
+  graph?: FlowchartSide;
+  loading: boolean;
+}) {
+  // Memoize each side separately: the next side or diagnostic must not move
+  // nodes that the student is already reading/dragging.
+  const diagram = useMemo(() => graph ? {
+    nodes: convertToReactFlowNodes(graph.nodes),
+    edges: convertToReactFlowEdges(graph.edges),
+  } : undefined, [graph]);
 
   return (
-    <div className="w-full p-4" aria-busy={flowchartState.status === 'loading'}>
+    <section className="min-w-0 flex-1" aria-label={title} aria-busy={!graph && loading}>
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      {diagram ? (
+        <div className="border rounded-lg overflow-hidden">
+          <FlowchartDiagram nodes={diagram.nodes} edges={diagram.edges} />
+        </div>
+      ) : loading ? (
+        <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
+          <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+          Generating flowchart...
+        </div>
+      ) : <p className="rounded-lg border p-4 text-sm text-gray-600">Flowchart unavailable</p>}
+    </section>
+  );
+}
+
+function RightContent({ flowchartState }: RightContentProps) {
+  const generation = flowchartState.status === 'idle' ? undefined : flowchartState.generation;
+  const graphs = flowchartState.status === 'success' ? flowchartState.data
+    : flowchartState.status === 'idle' ? undefined : flowchartState.progress;
+
+  return (
+    <div className="w-full p-4">
       <h2 className="text-xl font-bold mb-4">Code Analysis</h2>
       <FlowchartDiagnostics generation={generation} />
       
-      {flowchartState.status === 'loading' ? (
-        <div role="status" className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700 min-h-[160px]">
-          <div aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-          <div>
-            <p className="font-medium">Generating flowcharts...</p>
-            <p className="mt-1 text-sm">
-              {generation?.mode === 'inferred'
-                ? 'Building both logic flows.'
-                : 'Analyzing your code and building both logic flows.'}
-            </p>
-          </div>
-        </div>
-      ) : flowchartState.status === 'error' ? (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-          <p className="font-semibold">Flowchart unavailable</p>
+      {flowchartState.status === 'error' && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          <p className="font-semibold">{graphs?.student || graphs?.llm ? 'Generation incomplete' : 'Flowchart unavailable'}</p>
           <p className="mt-1 text-sm">{flowchartState.error}</p>
         </div>
-      ) : diagrams ? (
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold mb-2">Student's Logic Flow</h3>
-              <div className="border rounded-lg overflow-hidden h-full">
-                <FlowchartDiagram 
-                  nodes={diagrams.student.nodes}
-                  edges={diagrams.student.edges}
-                />
-              </div>
-            </div>
-            
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold mb-2">Recommended Logic Flow</h3>
-              <div className="border rounded-lg overflow-hidden h-full">
-                <FlowchartDiagram 
-                  nodes={diagrams.llm.nodes}
-                  edges={diagrams.llm.edges}
-                />
-              </div>
-            </div>
-          </div>
+      )}
+      {flowchartState.status !== 'idle' ? (
+        <div className="flex flex-col md:flex-row gap-6">
+          <FlowchartPane title="Student's Logic Flow" graph={graphs?.student} loading={flowchartState.status === 'loading'} />
+          <FlowchartPane title="Recommended Logic Flow" graph={graphs?.llm} loading={flowchartState.status === 'loading'} />
         </div>
       ) : (
         <div className="bg-gray-50 p-4 rounded-lg">

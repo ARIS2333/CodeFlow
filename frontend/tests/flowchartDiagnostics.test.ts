@@ -46,7 +46,7 @@ for (const state of [
   test(`panel does not show a diagnostic card without model suggestions on ${state.status}`, () => {
     const html = render(state);
     assert.doesNotMatch(html, /Possible missing symbols|Parser diagnostics|Tree-sitter|model-inferred/);
-    if (state.status === 'loading') assert.match(html, /Generating flowcharts/);
+    if (state.status === 'loading') assert.match(html, /Generating flowchart/);
     if (state.status === 'success') {
       assert.match(html, /Student&#x27;s Logic Flow/);
       assert.match(html, /Recommended Logic Flow/);
@@ -135,4 +135,19 @@ test('multiple missing symbols share one title and use one compact item each', (
   assert.equal(html.match(/<li\b/g)?.length, 2);
   assert.match(html, /Line 4, before <code>{<\/code>/);
   assert.doesNotMatch(html, /closing parenthesis|closing brace|Parser diagnostics/);
+});
+
+test('student graph replaces only its own loader while the reference is pending', () => {
+  const html = render({ status: 'loading', progress: { attempt: 1, student: sampleGraph().student } });
+  assert.equal(html.match(/Generating flowchart/g)?.length, 1);
+  assert.match(html, /aria-label="Student&#x27;s Logic Flow" aria-busy="false"/);
+  assert.match(html, /aria-label="Recommended Logic Flow" aria-busy="true"/);
+});
+
+test('a stream failure retains its completed graph and stops the other loader', () => {
+  const html = render({ status: 'error', error: 'Connection closed', progress: { attempt: 1, student: sampleGraph().student } });
+  assert.match(html, /Generation incomplete/);
+  assert.match(html, /Connection closed/);
+  assert.doesNotMatch(html, /Generating flowchart/);
+  assert.equal(html.match(/Flowchart unavailable/g)?.length, 1);
 });

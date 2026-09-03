@@ -13,17 +13,18 @@ from agentscope.message import SystemMsg, UserMsg
 from agentscope.model import ChatModelBase, DashScopeChatModel
 
 from code_analysis import CodeAnalysisError, analyze_code
+from model_stream import create_stream_blueprint
 
 load_dotenv()
 
 MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "dashscope")
 
 
-def build_model() -> ChatModelBase:
+def build_model(*, stream: bool = False) -> ChatModelBase:
     """Construct the agentscope chat model for the configured provider.
 
     Every provider speaks the same ChatModelBase interface (called with a
-    list of Msg, returns a ChatResponse), so the rest of the app never
+    list of Msg, returns a ChatResponse or async response stream), so the rest of the app never
     touches provider-specific SDKs. Switching providers — or adding a new
     one (OpenAI, Anthropic, ...) — is just another branch here plus that
     provider's credential env vars.
@@ -39,7 +40,10 @@ def build_model() -> ChatModelBase:
             ),
             model=os.getenv("QWEN_MODEL", "qwen3.7-max"),
             parameters=DashScopeChatModel.Parameters(thinking_enable=False),
-            stream=False,
+            stream=stream,
+            # Do not silently restart a streaming generation on transport
+            # failure. Format retries remain explicit in the frontend.
+            **({"max_retries": 0, "client_kwargs": {"max_retries": 0}} if stream else {}),
         )
 
     raise ValueError(f"Unsupported MODEL_PROVIDER: {MODEL_PROVIDER}")
@@ -49,6 +53,9 @@ model = build_model()
 
 app = Flask(__name__)
 CORS(app)
+# Each stream owns its client/loop; never mutate the non-streaming model used
+# concurrently by evaluation and exercise uploads.
+app.register_blueprint(create_stream_blueprint(lambda: build_model(stream=True)))
 
 
 def extract_response_text(content_blocks) -> str:

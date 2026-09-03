@@ -65,8 +65,9 @@ loader (including Tree-sitter preprocessing). Each panel displays its own result
 or error as soon as its task finishes, without waiting for the other panel.
 Closing Code Analysis does not stop generation. Run Code stays disabled while
 either task is pending. Clear, changing languages, or replacing the problem
-clears both panels and ignores late responses from the previous run; it does not
-cancel requests already sent to the backend.
+clears both panels and aborts the flowchart preprocessing/streaming request.
+Late evaluation responses are ignored; evaluation requests already sent to the
+backend are not cancelled. Unmounting also aborts the active flowchart request.
 
 Run `npm test` (Node.js 22.6+ with type stripping) for the independent completion,
 failure isolation, and stale-response regression tests; these make no LLM calls.
@@ -91,6 +92,25 @@ Flowchart generation selects its mode before the first model request:
 4. Both modes validate graph structure, reachability, terminals, and edge
    references. Only grounded mode validates source anchors. Invalid output can
    still trigger the existing maximum of three generation attempts.
+
+Flowcharts use `POST /api/resource/stream`; evaluation and exercise uploads keep
+using the non-streaming `/api/resource` endpoint. The model streams one JSON
+object, with `missingSymbols` first (in inferred mode), then `student`, then
+`llm`. The frontend incrementally decodes NDJSON transport frames and scans JSON
+delimiters while respecting strings and escapes. It does not parse incomplete
+JSON or add guessed closing brackets.
+
+- Each complete missing-symbol suggestion is source-checked and displayed early.
+- Each complete graph is locally validated and laid out independently. The
+  other graph keeps its own loader; no per-token layout is performed.
+- Receiving the other graph or final response preserves existing node positions.
+- Output-format retries clear both graph previews before the next attempt;
+  graphs from different attempts are never combined. Already validated graphs
+  survive a connection failure, alongside a "Generation incomplete" notice.
+- Transport failures do not automatically trigger another generation. A final
+  `done` frame and complete, validated JSON are both required for overall success.
+  The client aborts an attempt after 200 seconds; the backend has a 180-second
+  generation deadline and emits heartbeats while waiting for the provider.
 
 In inferred mode, parser diagnostics remain available to the generation pipeline
 but are not displayed in the panel. Anchor-dependent automatic token marking is disabled in this mode;
@@ -135,7 +155,8 @@ This stage does not call an LLM, change graph connections, or add missing `for`
 initialization/update nodes. Those are separate generation concerns.
 
 `npm test` includes mocked generation/validation tests for clean and recovered
-code, diagnostics across request states, and stale-response isolation. These do
+code, UTF-8/frame splitting, incremental JSON, partial graph rendering, stream
+interruption/cancellation, diagnostics across request states, and stale-response isolation. These do
 not call a live LLM. Backend tests exercise actual Tree-sitter recovery for the
 missing-brace examples and invalid Python conditions.
 
