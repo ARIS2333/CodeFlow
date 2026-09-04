@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, memo, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, memo, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -19,6 +19,7 @@ import {
   type DiagramNode,
   type DiagramEdge,
 } from './lib/flowchartLayout';
+import { TraceHighlightContext, type TraceHighlight } from './lib/traceHighlight';
 import type { SyntaxErrorMark } from './lib/llmSchemas';
 import '@xyflow/react/dist/style.css';
 
@@ -83,9 +84,22 @@ const markSyntaxErrors = (
   return segments;
 };
 
+const traceNodeClasses = (
+  { activeNodeId, visitedNodeIds }: TraceHighlight,
+  id: string
+): string => {
+  if (!activeNodeId) return 'bg-white border-stone-400';
+  if (activeNodeId === id) return 'bg-blue-50 border-blue-600 ring-2 ring-blue-300';
+  if (visitedNodeIds?.has(id)) return 'bg-blue-50/70 border-blue-400';
+  // Not reached on this input. Dimmed, not hidden: an unvisited branch is
+  // itself something worth noticing.
+  return 'bg-white border-stone-300 opacity-40';
+};
+
 interface FlowchartDiagramProps {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  highlight?: TraceHighlight;
 }
 
 // Custom Node Component following the pattern you provided
@@ -93,12 +107,15 @@ interface FlowchartDiagramProps {
 // finds it by comparing their flow against the recommended one, and marking it
 // would take that discovery away. Only token-level syntax slips get a mark, and
 // only on the offending character.
-const CustomNode = memo(({ data }: { data: FlowchartNodeData }) => {
+const CustomNode = memo(({ id, data }: { id: string; data: FlowchartNodeData }) => {
   const { label, syntaxErrors } = data;
   const segments = markSyntaxErrors(label, syntaxErrors);
+  const highlight = useContext(TraceHighlightContext);
 
   return (
-    <div className="px-4 py-2 shadow-md rounded-md border-2 bg-white border-stone-400">
+    <div
+      className={`px-4 py-2 shadow-md rounded-md border-2 transition-colors ${traceNodeClasses(highlight, id)}`}
+    >
       <div className="flex flex-col">
         <div className="text-sm font-medium whitespace-pre-wrap text-gray-900">
           {segments.map((segment, index) =>
@@ -151,7 +168,7 @@ const edgeTypes = {
 };
 
 // Inner component that uses React Flow hooks
-const FlowchartDiagramInner = ({ nodes, edges }: FlowchartDiagramProps) => {
+const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'highlight'>) => {
   const { fitView, getNodes, getInternalNode } = useReactFlow<DiagramNode, DiagramEdge>();
   const [flowNodes, setNodes, onNodesChange] = useNodesState<DiagramNode>([]);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState<DiagramEdge>([]);
@@ -253,13 +270,17 @@ const FlowchartDiagramInner = ({ nodes, edges }: FlowchartDiagramProps) => {
   );
 };
 
+const EMPTY_HIGHLIGHT: TraceHighlight = {};
+
 // Main component that provides the React Flow context
-const FlowchartDiagram = ({ nodes, edges }: FlowchartDiagramProps) => {
+const FlowchartDiagram = ({ nodes, edges, highlight }: FlowchartDiagramProps) => {
   return (
     <div className="w-full h-[500px]">
-      <ReactFlowProvider>
-        <FlowchartDiagramInner nodes={nodes} edges={edges} />
-      </ReactFlowProvider>
+      <TraceHighlightContext.Provider value={highlight ?? EMPTY_HIGHLIGHT}>
+        <ReactFlowProvider>
+          <FlowchartDiagramInner nodes={nodes} edges={edges} />
+        </ReactFlowProvider>
+      </TraceHighlightContext.Provider>
     </div>
   );
 };

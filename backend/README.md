@@ -3,7 +3,9 @@
 The non-streaming endpoint replaces `LambdaFunction/main.py`. Same request/response shape
 (`{ message, system_message }` in, `{ statusCode, headers, body }` out), so
 the frontend uses it for evaluation and exercise uploads. Flowchart generation
-uses the separate streaming endpoint below (see `src/config/apiConfig.ts`).
+and execution traces use the separate streaming endpoint below, so each
+top-level JSON field can be rendered as it arrives (see
+`src/config/apiConfig.ts`).
 
 Calls the LLM through [AgentScope](https://github.com/agentscope-ai/agentscope)'s
 model abstraction rather than a provider SDK directly, so switching providers

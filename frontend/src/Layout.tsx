@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
 import { panelConfig } from './config/panelConfig';
 import type { FlowchartState } from './lib/analysisRun';
+import { runTrace, type TraceRequest, type TraceState } from './lib/traceRun';
 
 interface LayoutProps {
   showRightPanel: boolean;
@@ -27,6 +28,19 @@ export const Layout = ({
   
   // Keep status and data together so closing the panel does not lose progress.
   const [flowchartState, setFlowchartState] = useState<FlowchartState>({ status: 'idle' });
+
+  // The trace lives here rather than in the panel so that a re-trace survives
+  // the panel being closed, and so a new run can cancel one the student left
+  // running against flowcharts that no longer exist.
+  const [traceState, setTraceState] = useState<TraceState>({ status: 'idle' });
+  const retraceAbort = useRef<AbortController | null>(null);
+
+  const startRetrace = useCallback((request: TraceRequest) => {
+    retraceAbort.current?.abort();
+    const controller = new AbortController();
+    retraceAbort.current = controller;
+    void runTrace(request, setTraceState, controller.signal);
+  }, []);
 
   /**
    * Handler function to update the panel width
@@ -53,7 +67,10 @@ export const Layout = ({
         <MainContent 
           flowchartState={flowchartState}
           onFlowchartStateChange={setFlowchartState}
+          onTraceStateChange={setTraceState}
           onRunStart={() => {
+            retraceAbort.current?.abort();
+            setTraceState({ status: 'idle' });
             if (!showRightPanel) onTogglePanel();
           }}
         />
@@ -65,6 +82,8 @@ export const Layout = ({
         onClose={onTogglePanel}
         onWidthChange={handleWidthChange}
         flowchartState={flowchartState}
+        traceState={traceState}
+        onRetrace={startRetrace}
       />
     </div>
   );

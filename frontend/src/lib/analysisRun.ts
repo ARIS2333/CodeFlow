@@ -24,6 +24,16 @@ interface AnalysisRunOptions {
   ) => Promise<FlowchartData>;
   onFeedbackChange: (state: EvaluationState) => void;
   onFlowchartChange: (state: FlowchartState) => void;
+  /**
+   * Optional third stage. It needs a failing input from the evaluation and node
+   * ids from the flowchart, so it can only start once both have succeeded, and
+   * it is skipped entirely when either did not. It publishes its own states.
+   */
+  requestTrace?: (
+    evaluation: CodeEvaluationResponse,
+    flowchart: FlowchartData,
+    signal: AbortSignal,
+  ) => Promise<void>;
 }
 
 export interface AnalysisRun {
@@ -38,6 +48,7 @@ export const startAnalysisRun = ({
   requestFlowchart,
   onFeedbackChange,
   onFlowchartChange,
+  requestTrace,
 }: AnalysisRunOptions): AnalysisRun => {
   let active = true;
   let pending = 2;
@@ -54,10 +65,11 @@ export const startAnalysisRun = ({
     request: () => Promise<T>,
     publish: (state: TaskState<T>) => void,
     fallbackError: string,
-  ) => {
+  ): Promise<T | undefined> => {
     try {
       const data = await request();
       if (active) publish({ status: 'success', data });
+      return data;
     } catch (error: unknown) {
       if (active) {
         publish({
@@ -65,7 +77,10 @@ export const startAnalysisRun = ({
           error: error instanceof Error ? error.message : fallbackError,
         });
       }
+      return undefined;
     } finally {
+      // The trace is a continuation, not a third pending task: the student must
+      // be free to edit and re-run while it is still being generated.
       pending--;
     }
   };
@@ -73,8 +88,8 @@ export const startAnalysisRun = ({
   // Clear both previous results and show both loaders before dispatching.
   onFeedbackChange({ status: 'loading' });
   onFlowchartChange({ status: 'loading' });
-  void runTask(requestFeedback, onFeedbackChange, 'Failed to evaluate your code');
-  void runTask(
+  const feedback = runTask(requestFeedback, onFeedbackChange, 'Failed to evaluate your code');
+  const charts = runTask(
     () => requestFlowchart(
       (context) => {
         if (!active || flowchartSettled) return;
@@ -97,6 +112,13 @@ export const startAnalysisRun = ({
     },
     'Failed to build the flowchart',
   );
+
+  if (requestTrace) {
+    void Promise.all([feedback, charts]).then(([evaluation, flowchart]) => {
+      if (!active || !evaluation || !flowchart) return undefined;
+      return requestTrace(evaluation, flowchart, controller.signal);
+    });
+  }
 
   return {
     isRunning: () => active && pending > 0,

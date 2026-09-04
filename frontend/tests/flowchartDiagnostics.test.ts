@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import type { FlowchartState } from '../src/lib/analysisRun.ts';
 import type { FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
+import type { TraceState } from '../src/lib/traceRun.ts';
 import { missingTokenIssue, sampleGraph } from './flowchartFixtures.ts';
 
 // Node's type stripper does not handle TSX. Transpile these small views in
@@ -27,16 +28,24 @@ const diagnosticsUrl = viewModule('FlowchartDiagnostics.tsx');
 const panelUrl = viewModule('RightContent.tsx', {
   './FlowchartDiagnostics': diagnosticsUrl,
   './FlowchartDiagram': 'data:text/javascript,export default function Diagram(){return null}',
+  './TracePanel': viewModule('TracePanel.tsx'),
+  './lib/executionTrace': import.meta.resolve('../src/lib/executionTrace.ts'),
 });
 const { default: RightContent } = await import(panelUrl) as {
-  default: ComponentType<{ flowchartState: FlowchartState }>;
+  default: ComponentType<{
+    flowchartState: FlowchartState;
+    traceState: TraceState;
+    onRetrace: () => void;
+  }>;
 };
 
 const generation: FlowchartGenerationContext = {
   mode: 'inferred', syntaxIssues: [{ ...missingTokenIssue }],
 };
-const render = (flowchartState: FlowchartState) =>
-  renderToStaticMarkup(createElement(RightContent, { flowchartState }));
+const render = (flowchartState: FlowchartState, traceState: TraceState = { status: 'idle' }) =>
+  renderToStaticMarkup(createElement(RightContent, {
+    flowchartState, traceState, onRetrace: () => {},
+  }));
 
 for (const state of [
   { status: 'loading', generation },

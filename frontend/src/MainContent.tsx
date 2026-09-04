@@ -19,6 +19,12 @@ import {
   type FlowchartState,
 } from './lib/analysisRun';
 import {
+  noTraceableCaseReason,
+  runTrace,
+  selectTraceCase,
+  type TraceState,
+} from './lib/traceRun';
+import {
   validateCodeEvaluation,
   type ProblemDetails,
   type TestResult,
@@ -27,6 +33,7 @@ import {
 interface MainContentProps {
   flowchartState: FlowchartState;
   onFlowchartStateChange: (state: FlowchartState) => void;
+  onTraceStateChange: (state: TraceState) => void;
   onRunStart: () => void;
 }
 
@@ -104,7 +111,7 @@ const jsCompletion = (context: CompletionContext): CompletionResult | null => {
   };
 };
 
-export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart }: MainContentProps) => {
+export const MainContent = ({ flowchartState, onFlowchartStateChange, onTraceStateChange, onRunStart }: MainContentProps) => {
   const [code, setCode] = useState(`public int MyFunction(int a, int b) {
   // Change the input variable and the return type of the function as needed.
   // Press "Enter" to choose the keyword, not "Tab".
@@ -125,6 +132,7 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart
     activeRun.current = null;
     setEvaluationState({ status: 'idle' });
     onFlowchartStateChange({ status: 'idle' });
+    onTraceStateChange({ status: 'idle' });
   };
 
   // Update code when language changes
@@ -193,6 +201,17 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onRunStart
       }),
       requestFlowchart: (onGenerationReady, onProgress, signal) =>
         requestReliableFlowchart(requestPayload, onGenerationReady, { onProgress, signal }),
+      // The trace needs an input from the evaluation and node ids from the
+      // flowchart, so startAnalysisRun only calls this once both have landed.
+      requestTrace: (evaluation, graphs, signal) => {
+        const testCase = selectTraceCase(evaluation.TestResults);
+        if (signal.aborted) return Promise.resolve();
+        if (!testCase) {
+          onTraceStateChange({ status: 'skipped', reason: noTraceableCaseReason });
+          return Promise.resolve();
+        }
+        return runTrace({ ...requestPayload, graphs, testCase }, onTraceStateChange, signal);
+      },
       onFeedbackChange: setEvaluationState,
       onFlowchartChange: onFlowchartStateChange,
     });

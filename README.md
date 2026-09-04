@@ -40,6 +40,12 @@ mistakes.
   alongside the student's, adapted to whatever algorithmic approach the
   student took, so the comparison stays fair rather than prescribing one
   "right" solution.
+- **Step-by-step trace** — below the comparison, the same two flowcharts are
+  drawn a second time and a failing test input is run through both of them at
+  once, one block at a time, with the variable values at every step. The
+  student steps forward and watches the two runs travel together until they
+  don't; the step where the paths part is the mistake, found by looking rather
+  than by being told.
 
 ## How a session works
 
@@ -51,6 +57,11 @@ mistakes.
 4. **View flowcharts** — a panel opens showing the student's flowchart
    (errors highlighted in red) next to the reference flowchart, laid out
    automatically (Dagre) and adjustable by hand.
+5. **Trace an input** — once both flowcharts are up, a failing input is traced
+   automatically and replayed in a separate area below, on a second copy of the
+   same two charts, so the comparison above stays untouched. The student can
+   step through the run, jump to the first difference between the two paths, or
+   type a different input and trace that instead.
 
 ## Paper
 

@@ -3,19 +3,24 @@ import { X } from 'lucide-react';
 import RightContent from './RightContent';
 import { panelConfig } from './config/panelConfig';
 import type { FlowchartState } from './lib/analysisRun';
+import type { TraceRequest, TraceState } from './lib/traceRun';
 
 interface RightPanelProps {
   isVisible: boolean;
   onClose: () => void;
   onWidthChange?: (width: number) => void;
   flowchartState: FlowchartState;
+  traceState: TraceState;
+  onRetrace: (request: TraceRequest) => void;
 }
 
 export const RightPanel = ({
   isVisible,
   onClose,
   onWidthChange,
-  flowchartState
+  flowchartState,
+  traceState,
+  onRetrace
 }: RightPanelProps) => {
   // Function to get the default width of the panel from config
   const getDefaultWidth = () => panelConfig.defaultWidth();
@@ -137,7 +142,7 @@ export const RightPanel = ({
         {/* Panel Content Area */}
         <div className="p-4 h-full overflow-auto">
           {/* Render the RightContent component inside the panel */}
-          <RightContent flowchartState={flowchartState} />
+          <RightContent flowchartState={flowchartState} traceState={traceState} onRetrace={onRetrace} />
         </div>
       </div>
     </div>

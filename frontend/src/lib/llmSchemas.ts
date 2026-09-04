@@ -77,7 +77,7 @@ export interface CodeEvaluationResponse {
 }
 
 /** Accept the scalar the model actually sent; only objects and null are refused. */
-const asText = (value: unknown): string | undefined => {
+export const asText = (value: unknown): string | undefined => {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return undefined;
