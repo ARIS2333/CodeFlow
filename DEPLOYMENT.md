@@ -5,17 +5,19 @@ CodeFlow stays as two small services:
 - `codeflow-frontend`: a Render Static Site built from `frontend/dist`.
 - `codeflow-backend`: the Flask application served by Gunicorn.
 
-The repository-root `render.yaml` creates both services from the `production`
+The repository-root `render.yaml` creates both services from the `main`
 branch. Flask's development server and Vite's development/preview server are
 not exposed publicly.
 
 ## First deployment
 
-1. Push the `production` branch to the Git provider connected to Render.
+1. Push the `main` branch to the Git provider connected to Render.
 2. In Render, choose **New > Blueprint**, select this repository, and use the
    root-level `render.yaml`.
-3. Enter `DASHSCOPE_API_KEY`, `DASHSCOPE_WORKSPACE_ID`, and `RESEARCH_PASSWORD`
-   when Render asks for the backend secrets. Set the password in the dashboard
+3. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
+   when Render asks for the backend configuration. `BASE_URL` is the provider's
+   complete API endpoint; the server does not construct it from a workspace ID.
+   Set the password in the dashboard
    only — this repository is public, so a value committed to `render.yaml` or
    the source would be permanently searchable and could not be rotated without
    a commit. Leaving it unset is a supported configuration: research mode

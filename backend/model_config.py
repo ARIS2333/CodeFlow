@@ -147,19 +147,24 @@ def _validate_base_url(url: str) -> str:
 
 def _research_spec() -> ModelSpec:
     """The server's own credential, used once the password has been accepted."""
-    api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
-    workspace = os.getenv("DASHSCOPE_WORKSPACE_ID", "").strip()
-    if not api_key or not workspace:
+    api_key = os.getenv("API_KEY", "").strip()
+    base_url = os.getenv("BASE_URL", "").strip()
+    model = os.getenv("MODEL", "").strip()
+    provider = os.getenv("PROVIDER", "").strip().lower()
+    if not api_key or not base_url or not model or not provider:
         raise AuthenticationError(
             "The shared research model is not configured on this server."
         )
+    if provider not in PROVIDERS:
+        raise AuthenticationError(
+            f'Unsupported research PROVIDER: "{provider}". '
+            f'Choose one of: {", ".join(sorted(PROVIDERS))}.'
+        )
     return ModelSpec(
-        provider="dashscope",
-        model=os.getenv("QWEN_MODEL", "qwen3.7-max"),
+        provider=provider,
+        model=model,
         api_key=api_key,
-        base_url=(
-            f"https://{workspace}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-        ),
+        base_url=base_url,
         research_mode=True,
     )
 

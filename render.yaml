@@ -2,7 +2,7 @@ services:
   - type: web
     name: codeflow-backend
     runtime: python
-    branch: production
+    branch: main
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -c gunicorn.conf.py app:app
@@ -13,12 +13,14 @@ services:
       # research mode, making the deployment bring-your-own-key only.
       - key: RESEARCH_PASSWORD
         sync: false
-      - key: DASHSCOPE_API_KEY
+      - key: API_KEY
         sync: false
-      - key: DASHSCOPE_WORKSPACE_ID
+      - key: BASE_URL
         sync: false
-      - key: QWEN_MODEL
-        value: qwen3.7-max
+      - key: MODEL
+        sync: false
+      - key: PROVIDER
+        sync: false
       - key: WEB_CONCURRENCY
         value: "2"
       - key: GUNICORN_THREADS
@@ -27,7 +29,7 @@ services:
   - type: web
     name: codeflow-frontend
     runtime: static
-    branch: production
+    branch: main
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist

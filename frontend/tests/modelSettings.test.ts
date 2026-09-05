@@ -107,6 +107,17 @@ test('verification reports the backend’s reason for refusing', async () => {
   assert.deepEqual(result, { ok: false, error: 'Incorrect research password.' });
 });
 
+test('verification surfaces the valid providers from a research config error', async () => {
+  const error = 'Unsupported research PROVIDER: "gemini". Choose one of: anthropic, dashscope, deepseek, openai.';
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error }),
+    { status: 401, headers: { 'Content-Type': 'application/json' } },
+  );
+
+  const result = await verifySettings({ mode: 'research', password: 'study-password' });
+  assert.deepEqual(result, { ok: false, error });
+});
+
 test('verification sends the config under modelConfig and accepts a pass', async () => {
   let sent: unknown;
   globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {

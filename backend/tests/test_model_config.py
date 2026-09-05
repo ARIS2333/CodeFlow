@@ -8,8 +8,10 @@ import model_config
 
 RESEARCH_ENV = {
     "RESEARCH_PASSWORD": "test-research-password",
-    "DASHSCOPE_API_KEY": "sk-server-side",
-    "DASHSCOPE_WORKSPACE_ID": "workspace-1",
+    "API_KEY": "sk-server-side",
+    "BASE_URL": "https://workspace-1.example.com/v1",
+    "MODEL": "qwen3.7-max",
+    "PROVIDER": "dashscope",
 }
 
 
@@ -22,8 +24,46 @@ class ResearchModeTests(unittest.TestCase):
 
         self.assertTrue(spec.research_mode)
         self.assertEqual(spec.provider, "dashscope")
+        self.assertEqual(spec.model, "qwen3.7-max")
         self.assertEqual(spec.api_key, "sk-server-side")
-        self.assertIn("workspace-1", spec.base_url)
+        self.assertEqual(spec.base_url, "https://workspace-1.example.com/v1")
+
+    def test_research_mode_supports_any_configured_provider(self):
+        env = {
+            **RESEARCH_ENV,
+            "PROVIDER": "openai",
+            "MODEL": "gpt-4o",
+            "BASE_URL": "https://api.openai.com/v1",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            spec = model_config.resolve_model_spec({"password": "test-research-password"})
+
+        self.assertEqual(spec.provider, "openai")
+        self.assertEqual(spec.model, "gpt-4o")
+        self.assertEqual(spec.base_url, "https://api.openai.com/v1")
+
+    def test_incomplete_research_configuration_is_rejected(self):
+        for missing in ("API_KEY", "BASE_URL", "MODEL", "PROVIDER"):
+            with self.subTest(missing=missing):
+                with patch.dict(os.environ, {**RESEARCH_ENV, missing: ""}, clear=False):
+                    with self.assertRaises(model_config.AuthenticationError):
+                        model_config.resolve_model_spec(
+                            {"password": "test-research-password"}
+                        )
+
+    def test_unsupported_research_provider_lists_valid_choices(self):
+        with patch.dict(
+            os.environ, {**RESEARCH_ENV, "PROVIDER": "unsupported"}, clear=False
+        ):
+            with self.assertRaises(model_config.AuthenticationError) as caught:
+                model_config.resolve_model_spec(
+                    {"password": "test-research-password"}
+                )
+
+        message = str(caught.exception)
+        self.assertIn("Unsupported research PROVIDER", message)
+        for provider in ("openai", "dashscope", "anthropic", "deepseek"):
+            self.assertIn(provider, message)
 
     def test_a_wrong_password_is_rejected_rather_than_falling_back_to_byok(self):
         with patch.dict(os.environ, RESEARCH_ENV, clear=False):
@@ -182,6 +222,21 @@ class EndpointTests(unittest.TestCase):
 
         self.assertEqual(wrong_password.status_code, 401)
         self.assertEqual(bad_shape.status_code, 400)
+
+    def test_verify_config_reports_valid_research_providers(self):
+        with patch.dict(
+            os.environ, {**RESEARCH_ENV, "PROVIDER": "unsupported"}, clear=False
+        ):
+            response = self.client.post(
+                "/api/verify-config",
+                json={"modelConfig": {"password": "test-research-password"}},
+            )
+
+        self.assertEqual(response.status_code, 401)
+        message = response.get_json()["error"]
+        self.assertIn("Unsupported research PROVIDER", message)
+        for provider in ("openai", "dashscope", "anthropic", "deepseek"):
+            self.assertIn(provider, message)
 
     def test_the_stream_endpoint_is_gated_too(self):
         """The streaming path must not be an unauthenticated way in."""
