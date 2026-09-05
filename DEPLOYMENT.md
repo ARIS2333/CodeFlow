@@ -14,8 +14,13 @@ not exposed publicly.
 1. Push the `production` branch to the Git provider connected to Render.
 2. In Render, choose **New > Blueprint**, select this repository, and use the
    root-level `render.yaml`.
-3. Enter `DASHSCOPE_API_KEY` and `DASHSCOPE_WORKSPACE_ID` when Render asks for
-   the backend secrets.
+3. Enter `DASHSCOPE_API_KEY`, `DASHSCOPE_WORKSPACE_ID`, and `RESEARCH_PASSWORD`
+   when Render asks for the backend secrets. Set the password in the dashboard
+   only — this repository is public, so a value committed to `render.yaml` or
+   the source would be permanently searchable and could not be rotated without
+   a commit. Leaving it unset is a supported configuration: research mode
+   disappears from the settings panel and the deployment becomes
+   bring-your-own-key only.
 4. Let Render create the backend and copy its public HTTPS URL.
 5. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
    slash (for example, `https://codeflow-backend.onrender.com`). Redeploy the
@@ -40,9 +45,25 @@ small Render instance can complete 100 student runs at exactly the same moment.
 Run a rehearsal with realistic model latency and raise the Render instance size
 or the two Gunicorn settings if requests queue or memory usage becomes high.
 
+## Who may spend the study's quota
+
+The intended behaviour is now in place: students who enter the study password
+use the server-funded model, and everyone else supplies their own provider
+credentials. The password is checked on the server, so the public API cannot be
+called directly to bypass the panel in the browser.
+
+The password is a shared secret. Once handed to a cohort it can be forwarded,
+and nothing here prevents that — no rate limiting or per-participant quota was
+requested, so a study-wide spending cap still has to be set at the provider,
+not in this application. Rotating the password means changing
+`RESEARCH_PASSWORD` in the Render dashboard; students then re-enter it once.
+
+A student's own API key passes through the backend to their provider. It is
+never logged or stored server-side, and the browser holds it only in memory
+until the tab is reloaded.
+
 ## Future work deliberately not enabled
 
-Authentication is postponed until explicitly requested. The intended behavior
-is: students who log in with the study password may use the server-funded API;
-other visitors must provide their own API credential. Per-participant quotas or
-a study-wide spending cap can be added at the same time if desired.
+Per-participant quotas, rate limiting, and a study-wide spending cap remain
+unimplemented. Named accounts (as opposed to one shared password) are also out
+of scope.

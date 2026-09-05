@@ -29,6 +29,7 @@ import {
   type ProblemDetails,
   type TestResult,
 } from './lib/llmSchemas';
+import { toModelConfig, type ModelSettings } from './lib/modelSettings';
 
 interface MainContentProps {
   flowchartState: FlowchartState;
@@ -36,6 +37,10 @@ interface MainContentProps {
   onTraceStateChange: (state: TraceState) => void;
   onRunStart: () => void;
   onCancelRetrace: () => void;
+  /** Null until a model is chosen; nothing that calls an LLM may run before then. */
+  settings: ModelSettings | null;
+  /** Opens the settings panel, with a reason to show the student. */
+  onRequireSettings: (notice?: string) => void;
 }
 
 // Java keywords for autocompletion
@@ -118,6 +123,8 @@ export const MainContent = ({
   onTraceStateChange,
   onRunStart,
   onCancelRetrace,
+  settings,
+  onRequireSettings,
 }: MainContentProps) => {
   const [code, setCode] = useState(`public int MyFunction(int a, int b) {
   // Change the input variable and the return type of the function as needed.
@@ -182,6 +189,11 @@ export const MainContent = ({
     // Keep the run button locked until both tasks settle, but display each
     // task's result as soon as it is ready. The ref also guards double clicks.
     if (activeRun.current?.isRunning() || isRunDisabled || !problemDetails) return;
+    if (!settings) {
+      onRequireSettings('Choose a model before running your code.');
+      return;
+    }
+    const modelConfig = toModelConfig(settings);
 
     activeRun.current?.cancel();
     onRunStart();
@@ -207,9 +219,12 @@ export const MainContent = ({
         validate: validateCodeEvaluation,
         label: 'feedback',
         signal,
+        modelConfig,
       }),
       requestFlowchart: (onGenerationReady, onProgress, signal) =>
-        requestReliableFlowchart(requestPayload, onGenerationReady, { onProgress, signal }),
+        requestReliableFlowchart(requestPayload, {
+          modelConfig, onGenerationReady, onProgress, signal,
+        }),
       // The trace needs an input from the evaluation and node ids from the
       // flowchart, so startAnalysisRun only calls this once both have landed.
       requestTrace: (evaluation, graphs, signal) => {
@@ -219,7 +234,12 @@ export const MainContent = ({
           onTraceStateChange({ status: 'skipped', reason: noTraceableCaseReason });
           return Promise.resolve();
         }
-        return runTrace({ ...requestPayload, graphs, testCase }, onTraceStateChange, signal);
+        return runTrace(
+          { ...requestPayload, graphs, testCase },
+          onTraceStateChange,
+          modelConfig,
+          signal,
+        );
       },
       onFeedbackChange: setEvaluationState,
       onFlowchartChange: onFlowchartStateChange,
@@ -257,7 +277,13 @@ export const MainContent = ({
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
           <button
-            onClick={() => setIsUploadPopupOpen(true)}
+            onClick={() => {
+              if (!settings) {
+                onRequireSettings('Choose a model before uploading a problem.');
+                return;
+              }
+              setIsUploadPopupOpen(true);
+            }}
             disabled={isApiProcessing}
             className={`px-4 py-2 rounded-md text-white transition-colors mb-4 ${
               isApiProcessing
@@ -355,12 +381,16 @@ export const MainContent = ({
         </div>
 
         {/* Upload Popup */}
-        <UploadPopup
-          isOpen={isUploadPopupOpen}
-          onClose={() => setIsUploadPopupOpen(false)}
-          onUpload={handleUpload}
-          onApiProcessingChange={setIsApiProcessing} // New prop
-        />
+        {/* Only mounted once a model is chosen, so modelConfig is always defined. */}
+        {settings && (
+          <UploadPopup
+            isOpen={isUploadPopupOpen}
+            onClose={() => setIsUploadPopupOpen(false)}
+            onUpload={handleUpload}
+            onApiProcessingChange={setIsApiProcessing}
+            modelConfig={toModelConfig(settings)}
+          />
+        )}
 
         {/* Code Editor Section */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">

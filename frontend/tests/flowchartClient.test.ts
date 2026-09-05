@@ -9,6 +9,11 @@ import type { CodeAnalysis } from '../src/lib/codeAnalysis.ts';
 import { startAnalysisRun, type FlowchartState } from '../src/lib/analysisRun.ts';
 import { analysisStub, missingElseBrace, missingPalindromeBrace, missingPythonColon, sampleGraph } from './flowchartFixtures.ts';
 
+/** These tests never reach a provider; the backend contract just requires a
+ * model to be named on every LLM request. */
+const TEST_MODEL_CONFIG = { provider: 'openai', model: 'gpt-4o', apiKey: 'sk-test' } as const;
+
+
 const request: FlowchartRequest = {
   practice: { title: 'Sign', description: 'Return 1 if positive, otherwise 0.', examples: [], constraints: [] },
   language: 'java',
@@ -38,14 +43,23 @@ for (const language of ['java', 'python'] as const) {
     const calls = mockRequests(t, analysis, [sampleGraph(true)]);
     const contexts: FlowchartGenerationContext[] = [];
     const code = language === 'java' ? request.code : 'def f(n):\n    if n > 0: return 1\n    return 0\n';
-    const result = await requestReliableFlowchart({ ...request, language, code }, (context) => {
-      assert.equal(calls.length, 1, 'publish diagnostics before requesting the model');
-      contexts.push(context);
+    const result = await requestReliableFlowchart({ ...request, language, code }, {
+      modelConfig: TEST_MODEL_CONFIG,
+      onGenerationReady: (context) => {
+        assert.equal(calls.length, 1, 'publish diagnostics before requesting the model');
+        contexts.push(context);
+      },
     });
     assert.deepEqual(contexts, [{ mode: 'grounded', syntaxIssues: [] }]);
     assert.equal(calls.length, 2);
     assert.deepEqual(JSON.parse(calls[1].body.message), { ...request, language, code, codeAnalysis: analysis });
     assert.match(calls[1].body.system_message, /SOURCE GROUNDING — this is mandatory/);
+    // The chosen model travels beside the prompt. It must never be folded into
+    // the message, where it would become part of what the model reads.
+    assert.deepEqual(calls[1].body.modelConfig, TEST_MODEL_CONFIG);
+    assert.ok(!calls[1].body.message.includes('sk-test'));
+    // The parser endpoint calls no model, so it must not be handed credentials.
+    assert.equal(calls[0].body.modelConfig, undefined);
     // Existing missing-token normalization may leave optional keys undefined.
     assert.deepEqual(JSON.parse(JSON.stringify(result)), sampleGraph(true));
   });
@@ -62,9 +76,12 @@ for (const [name, language, code] of [
     analysis.facts[0] = { ...analysis.facts[0], anchor: 'p1', kind: 'process', construct: 'local-variable-declaration', text: 'else if' };
     const calls = mockRequests(t, analysis, [sampleGraph()]);
     const contexts: FlowchartGenerationContext[] = [];
-    await requestReliableFlowchart({ ...request, language, code }, (context) => {
-      assert.equal(calls.length, 1);
-      contexts.push(context);
+    await requestReliableFlowchart({ ...request, language, code }, {
+      modelConfig: TEST_MODEL_CONFIG,
+      onGenerationReady: (context) => {
+        assert.equal(calls.length, 1);
+        contexts.push(context);
+      },
     });
     assert.equal(contexts[0].mode, 'inferred');
     assert.deepEqual(contexts[0].syntaxIssues, analysis.syntaxIssues);
@@ -103,7 +120,7 @@ test('inferred mode never auto-marks a token from a recovered anchor', async (t)
   graph.student.nodes[1].data.label = 'n > 0';
   graph.student.nodes[2].data.syntaxErrors = [{ symbol: 'return', expected: ')' }];
   mockRequests(t, analysis, [graph]);
-  const result = await requestReliableFlowchart({ ...request, code: 'n > 0' });
+  const result = await requestReliableFlowchart({ ...request, code: 'n > 0' }, { modelConfig: TEST_MODEL_CONFIG });
   assert.equal(result.student.nodes[1].data.syntaxErrors, undefined);
   assert.deepEqual(result.student.nodes[2].data.syntaxErrors, [{ symbol: 'return', expected: ')' }]);
   assert.ok(result.student.nodes.every((node) => !node.sourceAnchors));
@@ -111,7 +128,7 @@ test('inferred mode never auto-marks a token from a recovered anchor', async (t)
 
 test('clean mode still rejects missing anchors and retries in grounded mode', async (t) => {
   const calls = mockRequests(t, analysisStub(), [sampleGraph(), sampleGraph(true)]);
-  await requestReliableFlowchart(request);
+  await requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG });
   assert.equal(calls.length, 3);
   assert.match(calls[2].body.message, /does not cover parser facts/);
   assert.match(calls[2].body.system_message, /SOURCE GROUNDING/);
@@ -148,7 +165,7 @@ test('inferred mode keeps its prompt and diagnostics on output retries', async (
   broken.student.nodes[1].kind = 'process';
   const calls = mockRequests(t, analysisStub('java', true), [broken, sampleGraph()]);
   const contexts: FlowchartGenerationContext[] = [];
-  await requestReliableFlowchart(request, (context) => contexts.push(context));
+  await requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => contexts.push(context) });
   assert.equal(contexts.length, 1);
   assert.equal(calls.length, 3);
   assert.equal(calls[1].body.system_message, calls[2].body.system_message);
@@ -160,7 +177,7 @@ test('inferred mode reports a graph failure after the existing three attempts', 
   const broken = sampleGraph();
   broken.student.nodes[1].kind = 'process';
   const calls = mockRequests(t, analysisStub('java', true), [broken]);
-  await assert.rejects(requestReliableFlowchart(request), /model-inferred flowchart:.*3 times.*exactly one outgoing edge/);
+  await assert.rejects(requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG }), /model-inferred flowchart:.*3 times.*exactly one outgoing edge/);
   assert.equal(calls.length, 4);
 });
 
@@ -170,7 +187,7 @@ test('an invalid parser API response is not mistaken for recovered student synta
     calls.push(String(input));
     return Response.json({ error: 'Unsupported language' });
   });
-  await assert.rejects(requestReliableFlowchart(request), /code analysis: Unsupported language/);
+  await assert.rejects(requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG }), /code analysis: Unsupported language/);
   assert.deepEqual(calls, [CODE_ANALYSIS_URL]);
 });
 
@@ -182,7 +199,7 @@ const missingBraceReport = {
 test('the same inferred response publishes located model suggestions without an extra LLM call', async (t) => {
   const calls = mockRequests(t, analysisStub('java', true), [{ ...sampleGraph(), missingSymbols: [missingBraceReport] }]);
   const contexts: FlowchartGenerationContext[] = [];
-  const result = await requestReliableFlowchart({ ...request, code: missingPalindromeBrace }, (context) => contexts.push(context));
+  const result = await requestReliableFlowchart({ ...request, code: missingPalindromeBrace }, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => contexts.push(context) });
   assert.equal(calls.length, 2);
   assert.match(calls[1].body.system_message, /MISSING-SYMBOL FEEDBACK/);
   assert.match(calls[1].body.system_message, /"missingSymbols":/);
@@ -197,7 +214,7 @@ test('the same inferred response publishes located model suggestions without an 
 test('malformed missing-symbol feedback cannot reject a valid inferred graph or cost a retry', async (t) => {
   const calls = mockRequests(t, analysisStub('java', true), [{ ...sampleGraph(), missingSymbols: 'missing brace' }]);
   const contexts: FlowchartGenerationContext[] = [];
-  assert.deepEqual(await requestReliableFlowchart(request, (context) => contexts.push(context)), sampleGraph());
+  assert.deepEqual(await requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => contexts.push(context) }), sampleGraph());
   assert.equal(calls.length, 2);
   assert.equal(contexts.length, 1);
 });
@@ -205,7 +222,7 @@ test('malformed missing-symbol feedback cannot reject a valid inferred graph or 
 test('grounded mode does not request or display incidental model missing-symbol feedback', async (t) => {
   const calls = mockRequests(t, analysisStub(), [{ ...sampleGraph(true), missingSymbols: [missingBraceReport] }]);
   const contexts: FlowchartGenerationContext[] = [];
-  await requestReliableFlowchart(request, (context) => contexts.push(context));
+  await requestReliableFlowchart(request, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => contexts.push(context) });
   assert.doesNotMatch(calls[1].body.system_message, /missingSymbols|MISSING-SYMBOL FEEDBACK/);
   assert.deepEqual(contexts, [{ mode: 'grounded', syntaxIssues: [] }]);
 });
@@ -218,7 +235,7 @@ test('a later explicit empty model report replaces earlier suggestions', async (
     { ...sampleGraph(), missingSymbols: [] },
   ]);
   const contexts: FlowchartGenerationContext[] = [];
-  await requestReliableFlowchart({ ...request, code: missingPalindromeBrace }, (context) => contexts.push(context));
+  await requestReliableFlowchart({ ...request, code: missingPalindromeBrace }, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => contexts.push(context) });
   assert.equal(contexts[1].missingSymbols?.length, 1);
   assert.deepEqual(contexts.at(-1)?.missingSymbols, []);
 });
@@ -235,7 +252,10 @@ test('model suggestions survive all graph failures, even if later feedback is ma
   const settled = new Promise<void>((resolve) => { finish = resolve; });
   startAnalysisRun({
     requestFeedback: async () => ({ IsCorrect: false, TestResults: [] }),
-    requestFlowchart: (report) => requestReliableFlowchart({ ...request, code: missingPalindromeBrace }, report),
+    requestFlowchart: (report) => requestReliableFlowchart(
+      { ...request, code: missingPalindromeBrace },
+      { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: report },
+    ),
     onFeedbackChange: () => {},
     onFlowchartChange: (state) => {
       states.push(state);

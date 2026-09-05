@@ -10,6 +10,7 @@
 
 import { API_URL } from '../config/apiConfig.ts';
 import { parseLlmJson, isObject, type ValidationResult } from './llmJson.ts';
+import type { ModelConfigPayload } from './modelSettings.ts';
 
 export type ApiRequestConfig = {
   url: string;
@@ -193,6 +194,12 @@ export interface StructuredRequestOptions<T> {
   signal?: AbortSignal;
   /** Overall deadline across all output-format attempts. */
   timeoutMs?: number;
+  /**
+   * Which model to call and with whose credentials. Required: the backend
+   * rejects an LLM request that carries no credentials, so that the study's
+   * quota is never spent by default.
+   */
+  modelConfig: ModelConfigPayload;
 }
 
 /**
@@ -209,6 +216,7 @@ export const requestStructured = async <T>({
   maxAttempts = 3,
   signal,
   timeoutMs = 150_000,
+  modelConfig,
 }: StructuredRequestOptions<T>): Promise<T> => {
   let problems: string[] = [];
   const operationController = new AbortController();
@@ -238,6 +246,7 @@ export const requestStructured = async <T>({
           body: JSON.stringify({
             message: userMessage,
             system_message: systemPrompt,
+            modelConfig,
           }),
         },
       });

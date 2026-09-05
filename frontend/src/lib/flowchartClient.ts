@@ -5,6 +5,7 @@ import {
 import { requestCodeAnalysis, type SupportedLanguage } from './codeAnalysis.ts';
 import type { CodeAnalysis } from './codeAnalysis';
 import { requestJsonStream } from './llmStreamClient.ts';
+import type { ModelConfigPayload } from './modelSettings.ts';
 import { readMissingSymbolSuggestions } from './missingSymbolSuggestions.ts';
 import {
   getFlowchartGenerationContext,
@@ -152,13 +153,19 @@ const applyMissingTokenMarks = (
  */
 export const requestReliableFlowchart = async (
   request: FlowchartRequest,
-  onGenerationReady?: (context: FlowchartGenerationContext) => void,
-  options: { onProgress?: (progress: FlowchartProgress) => void; signal?: AbortSignal } = {},
+  options: {
+    /** Which model to call; travels beside the prompt, never inside it. */
+    modelConfig: ModelConfigPayload;
+    /** Fires once the grounded/inferred decision is made, before the model call. */
+    onGenerationReady?: (context: FlowchartGenerationContext) => void;
+    onProgress?: (progress: FlowchartProgress) => void;
+    signal?: AbortSignal;
+  },
 ): Promise<FlowchartData> => {
   const codeAnalysis = await requestCodeAnalysis(request.language, request.code, options.signal);
   options.signal?.throwIfAborted();
   const context = getFlowchartGenerationContext(codeAnalysis);
-  onGenerationReady?.(context);
+  options.onGenerationReady?.(context);
   const inferred = context.mode === 'inferred';
   let progress: FlowchartProgress = { attempt: 1 };
   let suggestionItems: unknown[] = [];
@@ -168,12 +175,13 @@ export const requestReliableFlowchart = async (
     const missingSymbols = readMissingSymbolSuggestions(input, request.code);
     if (missingSymbols !== undefined && JSON.stringify(missingSymbols) !== lastReport) {
       lastReport = JSON.stringify(missingSymbols);
-      onGenerationReady?.({ ...context, missingSymbols });
+      options.onGenerationReady?.({ ...context, missingSymbols });
     }
   };
   const validateGraph = inferred ? validateFlowchart : createFlowchartValidator(codeAnalysis);
 
   const flowchart = await requestJsonStream({
+    modelConfig: options.modelConfig,
     systemPrompt: inferred ? systemPrompt_InferFlowchart : systemPrompt_GenerateFlowchart,
     message: JSON.stringify(inferred
       ? { ...request, parserDiagnostics: context.syntaxIssues }

@@ -2,9 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
+import { SettingsPanel } from './SettingsPanel';
 import { panelConfig } from './config/panelConfig';
 import type { FlowchartState } from './lib/analysisRun';
 import { runTrace, type TraceRequest, type TraceState } from './lib/traceRun';
+import {
+  describeSettings,
+  loadRememberedPassword,
+  toModelConfig,
+  type ModelSettings,
+} from './lib/modelSettings';
 
 interface LayoutProps {
   showRightPanel: boolean;
@@ -35,6 +42,25 @@ export const Layout = ({
   const [traceState, setTraceState] = useState<TraceState>({ status: 'idle' });
   const retraceAbort = useRef<AbortController | null>(null);
 
+  /*
+   * The model settings live here because every LLM request in the app needs
+   * them: the run in MainContent, the problem upload, and the re-trace below.
+   *
+   * A remembered research password is restored, but a student's own API key
+   * never is — it is held in this state only until the tab is closed.
+   */
+  const [settings, setSettings] = useState<ModelSettings | null>(() => {
+    const remembered = loadRememberedPassword();
+    return remembered ? { mode: 'research', password: remembered } : null;
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState<string | undefined>();
+
+  const openSettings = useCallback((notice?: string) => {
+    setSettingsNotice(notice);
+    setIsSettingsOpen(true);
+  }, []);
+
   const cancelRetrace = useCallback(() => {
     retraceAbort.current?.abort();
     retraceAbort.current = null;
@@ -43,13 +69,18 @@ export const Layout = ({
   useEffect(() => cancelRetrace, [cancelRetrace]);
 
   const startRetrace = useCallback((request: TraceRequest) => {
+    if (!settings) {
+      openSettings('Choose a model before tracing an input.');
+      return;
+    }
     cancelRetrace();
     const controller = new AbortController();
     retraceAbort.current = controller;
-    void runTrace(request, setTraceState, controller.signal).finally(() => {
-      if (retraceAbort.current === controller) retraceAbort.current = null;
-    });
-  }, [cancelRetrace]);
+    void runTrace(request, setTraceState, toModelConfig(settings), controller.signal)
+      .finally(() => {
+        if (retraceAbort.current === controller) retraceAbort.current = null;
+      });
+  }, [cancelRetrace, settings, openSettings]);
 
   /**
    * Handler function to update the panel width
@@ -72,8 +103,13 @@ export const Layout = ({
       >
         <Header
           onTogglePanel={onTogglePanel}
+          onOpenSettings={() => openSettings()}
+          modelLabel={describeSettings(settings)}
+          isConfigured={settings !== null}
         />
         <MainContent 
+          settings={settings}
+          onRequireSettings={openSettings}
           flowchartState={flowchartState}
           onFlowchartStateChange={setFlowchartState}
           onTraceStateChange={setTraceState}
@@ -94,6 +130,14 @@ export const Layout = ({
         flowchartState={flowchartState}
         traceState={traceState}
         onRetrace={startRetrace}
+      />
+
+      <SettingsPanel
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSave={setSettings}
+        notice={settingsNotice}
       />
     </div>
   );

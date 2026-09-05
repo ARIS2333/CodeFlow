@@ -1,6 +1,7 @@
 import { requestExecutionTrace, type TraceCase, type TraceProgress, type TraceRequest } from './traceClient.ts';
 import type { ExecutionTrace } from './executionTrace';
 import type { TestResult } from './llmSchemas';
+import type { ModelConfigPayload } from './modelSettings.ts';
 
 export type { TraceCase, TraceProgress, TraceRequest };
 
@@ -77,6 +78,7 @@ const checkAgainstEvaluation = (
 export const runTrace = async (
   request: TraceRequest,
   onChange: (state: TraceState) => void,
+  modelConfig: ModelConfigPayload,
   signal?: AbortSignal
 ): Promise<void> => {
   // A cancelled run must not overwrite whatever replaced it on screen.
@@ -88,6 +90,7 @@ export const runTrace = async (
   try {
     const data = await requestExecutionTrace(request, {
       signal,
+      modelConfig,
       onProgress: (progress) => publish({ status: 'loading', request, progress }),
     });
     const warning = checkAgainstEvaluation(data, request.testCase);

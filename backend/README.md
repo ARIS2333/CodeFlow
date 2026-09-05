@@ -8,12 +8,14 @@ top-level JSON field can be rendered as it arrives (see
 `src/config/apiConfig.ts`).
 
 Calls the LLM through [AgentScope](https://github.com/agentscope-ai/agentscope)'s
-model abstraction rather than a provider SDK directly, so switching providers
-is a matter of swapping the `build_model()` branch in `app.py` (keyed by the
-`MODEL_PROVIDER` env var) rather than rewriting the call site. Currently
-configured for `qwen3.7-max` via `DashScopeChatModel`, talking to the
-workspace-specific MaaS gateway's OpenAI-compatible endpoint
-(`.../compatible-mode/v1`).
+model abstraction rather than a provider SDK directly. Each request names the
+provider it wants, and `model_config.py` turns that into a configured model:
+AgentScope gives every provider the same constructor and lets a credential name
+its own model class, so the provider list is data (`PROVIDERS`) rather than a
+branch per provider. OpenAI, DashScope, Anthropic, and DeepSeek are offered; all
+four take the same `api_key` plus optional `base_url`. Adding a provider whose
+credential is shaped differently (Ollama uses `host`, xAI `api_host`, Gemini has
+no base URL) would need a field mapping as well.
 
 The backend also exposes an error-tolerant Tree-sitter analysis endpoint used to
 ground flowchart generation. It extracts source-positioned Java/Python control,
@@ -50,8 +52,57 @@ Serves on `http://127.0.0.1:5001`:
 - `POST /api/resource` — chat completion using the existing Lambda-shaped envelope
 - `POST /api/resource/stream` — streaming completion with the same input fields,
   returning newline-delimited JSON rather than a Lambda envelope
+- `GET /api/providers` — the provider catalogue the settings panel renders, and
+  whether this server has a research password configured
+- `POST /api/verify-config` — check a `modelConfig` without spending a model call
 - `POST /api/analyze-code` — deterministic Tree-sitter facts from
   `{ "language": "java" | "python", "code": "..." }`
+
+## Request size
+
+`MAX_CONTENT_LENGTH` caps a request body at 2 MB, and each LLM endpoint also
+rejects a message plus system prompt longer than a million characters. A
+generous real request — a long problem statement, parser facts, and both
+rendered graphs — measures under 30 KB, so the cap cannot reach ordinary use.
+
+The cap has to be set for the 413 handlers to run at all: without
+`MAX_CONTENT_LENGTH`, Werkzeug never raises `RequestEntityTooLarge`, the
+handlers are unreachable, and an arbitrarily large body is read into a worker's
+memory. `RequestEntityTooLarge` is not a `BadRequest` subclass, so the stream
+endpoint catches it separately rather than falling through to Flask's HTML
+error page.
+
+## Who may call the model
+
+Every request to `/api/resource` and `/api/resource/stream` must carry a
+`modelConfig` object, or it is refused with 401. There is no default: the
+study's quota is never spent by an unidentified caller. `/api/analyze-code`
+calls no model and stays open.
+
+`modelConfig` is one of:
+
+- `{ "password": "..." }` — research mode. Compared against `RESEARCH_PASSWORD`
+  with `hmac.compare_digest`, and only on a match are the server's own DashScope
+  credentials used. An unset `RESEARCH_PASSWORD` disables research mode rather
+  than admitting everyone, so a missing environment variable cannot silently
+  open the server's key to the public.
+- `{ "provider", "model", "apiKey", "baseUrl"? }` — the caller's own
+  credentials, used for that one request.
+
+Checking the password in the browser would not be a control at all: the API is
+public, so anyone could call it directly and spend the study's quota. The
+browser check only provides fast feedback.
+
+A caller-supplied `baseUrl` makes this server issue a request to an address the
+caller chose, so `model_config.py` requires an http(s) URL and refuses hosts
+resolving to loopback, private, link-local, reserved, or multicast addresses —
+otherwise the public API doubles as a proxy for probing the deployment's own
+network and cloud metadata endpoints. DNS is resolved at validation time, which
+is a real barrier rather than an airtight one.
+
+A caller's API key passes through this server on its way to their provider. It
+is never logged and never stored, and `ModelSpec.__repr__` masks it so an
+accidental log line or traceback cannot leak it.
 
 ## Streaming protocol
 

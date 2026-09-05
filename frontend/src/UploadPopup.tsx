@@ -2,15 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { systemPrompt_HandlePractice } from './config/systemPrompt_HandlePractice';
 import { requestStructured } from './lib/llmClient';
 import { validateProblemDetails, type ProblemDetails } from './lib/llmSchemas';
+import type { ModelConfigPayload } from './lib/modelSettings';
 
 interface UploadPopupProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (content: string, problemDetails: ProblemDetails | null, error: string | null) => void;
   onApiProcessingChange: (isProcessing: boolean) => void;
+  /** Reformatting the problem is an LLM call, so it needs a model too. */
+  modelConfig: ModelConfigPayload;
 }
 
-const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, onApiProcessingChange }) => {
+const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, onApiProcessingChange, modelConfig }) => {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false); // Local state to track submission
   const activeRequest = useRef<AbortController | null>(null);
@@ -42,6 +45,7 @@ const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, on
         validate: validateProblemDetails,
         label: 'practice problem',
         signal: controller.signal,
+        modelConfig,
       });
 
       // Pass content and validated response to parent

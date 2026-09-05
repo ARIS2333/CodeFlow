@@ -1,5 +1,6 @@
 import { systemPrompt_TraceExecution } from '../config/systemPrompt_TraceExecution.ts';
 import { requestJsonStream } from './llmStreamClient.ts';
+import type { ModelConfigPayload } from './modelSettings.ts';
 import {
   createTraceValidator,
   validateTraceSideOnly,
@@ -48,12 +49,18 @@ const compactSide = (side: FlowchartSide) => ({
 
 export const requestExecutionTrace = async (
   request: TraceRequest,
-  options: { onProgress?: (progress: TraceProgress) => void; signal?: AbortSignal } = {}
+  options: {
+    onProgress?: (progress: TraceProgress) => void;
+    signal?: AbortSignal;
+    /** Which model to call; travels beside the prompt, never inside it. */
+    modelConfig: ModelConfigPayload;
+  }
 ): Promise<ExecutionTrace> => {
   let progress: TraceProgress = { attempt: 1 };
   const validate = createTraceValidator(request.graphs);
 
   return requestJsonStream({
+    modelConfig: options.modelConfig,
     systemPrompt: systemPrompt_TraceExecution,
     message: JSON.stringify({
       practice: request.practice,

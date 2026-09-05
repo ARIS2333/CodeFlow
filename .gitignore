@@ -30,3 +30,7 @@ backend/.env
 .env.*.local
 frontend/.vite/
 .vite/
+
+# Local reference checkout of agentscope source (the package itself is
+# installed via requirements.txt; this clone is for reading only).
+/agentscope/

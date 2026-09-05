@@ -6,8 +6,15 @@ import time
 from dataclasses import asdict
 
 from flask import Blueprint, Response, jsonify, request
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from agentscope.message import SystemMsg, UserMsg
+
+from model_config import (
+    AuthenticationError,
+    ModelConfigError,
+    build_model,
+    resolve_model_spec,
+)
 
 
 def frame(event):
@@ -111,13 +118,24 @@ def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180)
                     loop.close()
 
 
-def create_stream_blueprint(model_factory):
+def create_stream_blueprint(model_factory=None):
+    """Stream endpoint blueprint.
+
+    `model_factory` exists for tests, which inject a stub model. In the app it
+    is None and each request builds its own model from the credentials that
+    request carried, so two students using different providers never share one.
+    """
     blueprint = Blueprint("model_stream", __name__)
 
     @blueprint.post("/api/resource/stream")
     def resource_stream():
         try:
             body = request.get_json(force=True, silent=False)
+        except RequestEntityTooLarge:
+            # MAX_CONTENT_LENGTH tripped. Caught separately because it is not a
+            # BadRequest subclass, and would otherwise fall through to Flask's
+            # default HTML error page instead of this endpoint's JSON shape.
+            return jsonify({"error": "Request is too large"}), 413
         except BadRequest:
             return jsonify({"error": "Invalid JSON in request body"}), 400
         if not isinstance(body, dict) or not isinstance(body.get("message"), str) or not body["message"].strip():
@@ -127,9 +145,22 @@ def create_stream_blueprint(model_factory):
             return jsonify({"error": "system_message must be a string"}), 400
         if len(body["message"]) + len(system) > 1_000_000:
             return jsonify({"error": "Request is too large"}), 413
+
+        if model_factory is None:
+            try:
+                spec = resolve_model_spec(body.get("modelConfig"))
+            except AuthenticationError as error:
+                return jsonify({"error": str(error)}), 401
+            except ModelConfigError as error:
+                return jsonify({"error": str(error)}), 400
+            # Built inside the generator's own event loop, not here.
+            request_factory = lambda: build_model(spec, stream=True)
+        else:
+            request_factory = model_factory
+
         messages = [SystemMsg(name="system", content=system), UserMsg(name="user", content=body["message"])]
         return Response(
-            stream_model_response(model_factory, messages),
+            stream_model_response(request_factory, messages),
             content_type="application/x-ndjson; charset=utf-8",
             headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
         )

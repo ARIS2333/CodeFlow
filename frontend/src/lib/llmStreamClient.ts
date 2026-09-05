@@ -1,6 +1,7 @@
 import { STREAM_API_URL } from '../config/apiConfig.ts';
 import { isObject, type ValidationResult } from './llmJson.ts';
 import { JsonObjectStream, type JsonStreamValue } from './jsonObjectStream.ts';
+import type { ModelConfigPayload } from './modelSettings.ts';
 
 class StreamTransportError extends Error {}
 
@@ -61,10 +62,12 @@ interface JsonStreamRequest<T> {
   signal?: AbortSignal;
   label: string;
   maxAttempts?: number;
+  /** Which model to call and with whose credentials; see llmClient.ts. */
+  modelConfig: ModelConfigPayload;
 }
 
 export const requestJsonStream = async <T>({
-  systemPrompt, message, validate, onValue, onAttempt, signal, label, maxAttempts = 3,
+  systemPrompt, message, validate, onValue, onAttempt, signal, label, maxAttempts = 3, modelConfig,
 }: JsonStreamRequest<T>): Promise<T> => {
   let problems: string[] = [];
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -86,6 +89,7 @@ export const requestJsonStream = async <T>({
           body: JSON.stringify({
             system_message: systemPrompt,
             message: attempt === 1 ? message : `${message}\n\nThe previous output was rejected:\n${problems.join('\n')}\nReturn a complete corrected JSON object, with each top-level field exactly once.`,
+            modelConfig,
           }),
           signal: controller.signal,
         });

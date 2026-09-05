@@ -8,8 +8,11 @@ services:
     startCommand: gunicorn -c gunicorn.conf.py app:app
     healthCheckPath: /health
     envVars:
-      - key: MODEL_PROVIDER
-        value: dashscope
+      # Unlocks the shared research model. Set it in the Render dashboard, never
+      # in this file: the repository is public. Leaving it unset disables
+      # research mode, making the deployment bring-your-own-key only.
+      - key: RESEARCH_PASSWORD
+        sync: false
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: DASHSCOPE_WORKSPACE_ID

@@ -167,6 +167,35 @@ It also includes layout regression cases for the palindrome example, nested
 loops, branch joins, break/continue paths, post-tested loops, real handle bounds,
 multiline nodes, stable re-layout, input preservation, and worker failures.
 
+### Model settings
+
+A gear button in the header opens [SettingsPanel.tsx](src/SettingsPanel.tsx),
+which chooses what every LLM request in the app runs against. Two modes:
+
+- **Research password** — the study's shared password. It unlocks the server's
+  own model. The password is verified by the backend, not here; the check in
+  this panel only gives fast feedback. It is remembered in `localStorage`,
+  because re-entering it on every reload is friction during a study session.
+- **Use my own model** — provider, model, API key, and an optional base URL.
+  The provider list is fetched from `GET /api/providers` rather than hardcoded,
+  so the backend stays the single source of truth for what is supported.
+
+**A student's API key is never persisted.** It lives in React state, in
+[Layout.tsx](src/Layout.tsx), for the lifetime of the tab and is gone on reload,
+so a shared or lab machine does not keep it. Saving BYOK settings also clears
+any remembered research password. The key is sent to this app's backend, which
+forwards each request to the chosen provider; the panel says so plainly rather
+than leaving students to assume the request goes direct.
+
+Until a model is chosen, **Run Code** and **Upload** open the settings panel
+instead of running, with a line explaining why. The settings live in `Layout`
+rather than `MainContent` because the re-trace control in the right panel needs
+them too.
+
+`modelConfig` travels beside the prompt in the request body, never inside the
+message — a test asserts both, since folding it into the message would feed the
+credentials to the model as text.
+
 ### Right Panel
 The right panel ([RightPanel.tsx](src/RightPanel.tsx), [RightContent.tsx](src/RightContent.tsx)) features:
 - Toggleable design for optimal screen usage

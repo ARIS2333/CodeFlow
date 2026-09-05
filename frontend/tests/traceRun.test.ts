@@ -5,6 +5,11 @@ import type { TestResult } from '../src/lib/llmSchemas.ts';
 import { traceGraphs, traceReply } from './traceFixtures.ts';
 import { controlledStream, streamResponse } from './streamFixtures.ts';
 
+/** These tests never reach a provider; the backend contract just requires a
+ * model to be named on every LLM request. */
+const TEST_MODEL_CONFIG = { provider: 'openai', model: 'gpt-4o', apiKey: 'sk-test' } as const;
+
+
 const result = (input: string, yourOutput: string, expected = '3'): TestResult =>
   ({ input, expected, yourOutput });
 
@@ -59,7 +64,7 @@ test('each side is published as soon as it arrives, without waiting for the othe
 
   const states: TraceState[] = [];
   const reply = traceReply();
-  const finished = runTrace(request(), (state) => states.push(state));
+  const finished = runTrace(request(), (state) => states.push(state), TEST_MODEL_CONFIG);
   await requested;
   assert.equal(states[0]?.status, 'loading');
 
@@ -87,7 +92,7 @@ test('a trace that ends somewhere else than the test run is flagged, not hidden'
     streamResponse([{ type: 'delta', text: JSON.stringify(reply) }, { type: 'done' }]));
 
   const states: TraceState[] = [];
-  await runTrace(request('❌ 5'), (state) => states.push(state));
+  await runTrace(request('❌ 5'), (state) => states.push(state), TEST_MODEL_CONFIG);
   const last = states.at(-1);
   assert.equal(last?.status, 'success');
   assert.match(last?.status === 'success' ? last.warning ?? '' : '', /ends with 3, but running the code reported 5/);
@@ -98,7 +103,7 @@ test('a trace that agrees with the test run carries no caveat', async (t) => {
     streamResponse([{ type: 'delta', text: JSON.stringify(traceReply()) }, { type: 'done' }]));
 
   const states: TraceState[] = [];
-  await runTrace(request('❌ 3'), (state) => states.push(state));
+  await runTrace(request('❌ 3'), (state) => states.push(state), TEST_MODEL_CONFIG);
   const last = states.at(-1);
   assert.equal(last?.status === 'success' && last.warning, undefined);
 });
@@ -110,7 +115,7 @@ test('a cancelled trace never publishes over whatever replaced it', async (t) =>
   t.mock.method(globalThis, 'fetch', async () => stream.response);
 
   const states: TraceState[] = [];
-  const finished = runTrace(request(), (state) => states.push(state), controller.signal);
+  const finished = runTrace(request(), (state) => states.push(state), TEST_MODEL_CONFIG, controller.signal);
   await new Promise((resolve) => setTimeout(resolve, 0));
   controller.abort();
   await finished;
@@ -129,7 +134,7 @@ test('a model that cannot produce a navigable trace ends as an error, not a brok
   });
 
   const states: TraceState[] = [];
-  await runTrace(request(), (state) => states.push(state));
+  await runTrace(request(), (state) => states.push(state), TEST_MODEL_CONFIG);
   assert.equal(attempts, 2, 'the model is told what was wrong and asked once more');
   const last = states.at(-1);
   assert.equal(last?.status, 'error');

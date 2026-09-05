@@ -6,6 +6,11 @@ import type { FlowchartProgress, FlowchartGenerationContext } from '../src/lib/f
 import { analysisStub, sampleGraph, missingPalindromeBrace } from './flowchartFixtures.ts';
 import { controlledStream, streamResponse } from './streamFixtures.ts';
 
+/** These tests never reach a provider; the backend contract just requires a
+ * model to be named on every LLM request. */
+const TEST_MODEL_CONFIG = { provider: 'openai', model: 'gpt-4o', apiKey: 'sk-test' } as const;
+
+
 test('a suggestion and the student graph are observable while the same LLM response is still pending', async (t) => {
   const stream = controlledStream();
   let fetched!: () => void;
@@ -24,9 +29,7 @@ test('a suggestion and the student graph are observable while the same LLM respo
   let finished = false;
   const request = requestReliableFlowchart({ language: 'java', code: missingPalindromeBrace,
     practice: { title: '', description: '', constraints: [], examples: [] },
-  }, (context) => { contexts.push(context); if (context.missingSymbols?.length) reportReady(); }, {
-    onProgress: (part) => { progress.push(part); if (part.student) studentReady(); },
-  }).then((result) => { finished = true; return result; });
+  }, { modelConfig: TEST_MODEL_CONFIG, onGenerationReady: (context) => { contexts.push(context); if (context.missingSymbols?.length) reportReady(); }, onProgress: (part) => { progress.push(part); if (part.student) studentReady(); } }).then((result) => { finished = true; return result; });
   await requested;
   const suggestion = { symbol: '}', line: 10, anchor: 'return false;', placement: 'after', explanation: 'The if block may need a closing brace.' };
   stream.send({ type: 'delta', text: '{"missingSymbols":[' + JSON.stringify(suggestion) });
@@ -59,7 +62,7 @@ test('retries discard completed sections from the previous attempt instead of mi
     : streamResponse([{ type: 'delta', text: JSON.stringify(++attempt === 1 ? first : second) }, { type: 'done' }]));
   const result = await requestReliableFlowchart({ language: 'java', code: 'broken',
     practice: { title: '', description: '', constraints: [], examples: [] },
-  }, undefined, { onProgress: (value) => progress.push(value) });
+  }, { modelConfig: TEST_MODEL_CONFIG, onProgress: (value) => progress.push(value) });
   assert.ok(progress.some((part) => part.attempt === 1 && part.student && !part.llm));
   assert.deepEqual(progress.find((part) => part.attempt === 2), { attempt: 2 });
   assert.equal(result.student.nodes[1].data.label, 'different attempt');
@@ -73,7 +76,7 @@ test('a grounded graph cannot be previewed without covering required source anch
     : streamResponse([{ type: 'delta', text: JSON.stringify(sampleGraph(++attempt > 1)) }, { type: 'done' }]));
   await requestReliableFlowchart({ language: 'java', code: 'valid',
     practice: { title: '', description: '', constraints: [], examples: [] },
-  }, undefined, { onProgress: (value) => progress.push(value) });
+  }, { modelConfig: TEST_MODEL_CONFIG, onProgress: (value) => progress.push(value) });
   assert.ok(progress.filter((part) => part.attempt === 1).every((part) => !part.student));
   assert.ok(progress.some((part) => part.attempt === 2 && part.student));
 });
