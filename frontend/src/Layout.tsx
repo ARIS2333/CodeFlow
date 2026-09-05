@@ -12,6 +12,7 @@ import {
   toModelConfig,
   type ModelSettings,
 } from './lib/modelSettings';
+import { loadWorkspaceCache, updateWorkspaceCache } from './lib/workspaceCache';
 
 interface LayoutProps {
   showRightPanel: boolean;
@@ -28,18 +29,23 @@ export const Layout = ({
   showRightPanel,
   onTogglePanel
 }: LayoutProps) => {
+  const cachedWorkspace = useRef(loadWorkspaceCache()).current;
   // State to manage the width of the right panel, initialized with default width from config
   const [panelWidth, setPanelWidth] = useState(() =>
     panelConfig.defaultWidth()
   );
   
   // Keep status and data together so closing the panel does not lose progress.
-  const [flowchartState, setFlowchartState] = useState<FlowchartState>({ status: 'idle' });
+  const [flowchartState, setFlowchartState] = useState<FlowchartState>(
+    cachedWorkspace?.flowchartState ?? { status: 'idle' },
+  );
 
   // The trace lives here rather than in the panel so that a re-trace survives
   // the panel being closed, and so a new run can cancel one the student left
   // running against flowcharts that no longer exist.
-  const [traceState, setTraceState] = useState<TraceState>({ status: 'idle' });
+  const [traceState, setTraceState] = useState<TraceState>(
+    cachedWorkspace?.traceState ?? { status: 'idle' },
+  );
   const retraceAbort = useRef<AbortController | null>(null);
 
   /*
@@ -67,6 +73,10 @@ export const Layout = ({
   }, []);
 
   useEffect(() => cancelRetrace, [cancelRetrace]);
+
+  useEffect(() => {
+    updateWorkspaceCache({ flowchartState, traceState });
+  }, [flowchartState, traceState]);
 
   const startRetrace = useCallback((request: TraceRequest) => {
     if (!settings) {

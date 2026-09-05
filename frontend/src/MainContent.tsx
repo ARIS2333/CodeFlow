@@ -4,8 +4,10 @@ import { java } from '@codemirror/lang-java';
 import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { autocompletion, CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-import { keymap } from '@codemirror/view';
-import { completionKeymap } from '@codemirror/autocomplete';
+import { keymap, type ViewUpdate } from '@codemirror/view';
+import { acceptCompletion, completionKeymap } from '@codemirror/autocomplete';
+import { indentLess, insertTab } from '@codemirror/commands';
+import { Prec } from '@codemirror/state';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
@@ -30,6 +32,11 @@ import {
   type TestResult,
 } from './lib/llmSchemas';
 import { toModelConfig, type ModelSettings } from './lib/modelSettings';
+import {
+  clearWorkspaceCache,
+  loadWorkspaceCache,
+  updateWorkspaceCache,
+} from './lib/workspaceCache';
 
 interface MainContentProps {
   flowchartState: FlowchartState;
@@ -68,6 +75,20 @@ const jsKeywords = [
   'public', 'return', 'short', 'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws',
   'transient', 'true', 'try', 'typeof', 'var', 'void', 'volatile', 'while', 'with', 'yield'
 ];
+
+/**
+ * The starter code each language opens with. Kept as constants so that
+ * switching language can tell an untouched template from work worth keeping.
+ */
+const STARTER_CODE: Record<'java' | 'python', string> = {
+  java: `public int MyFunction(int a, int b) {
+  // Change the input variable and the return type of the function as needed.
+
+}`,
+  python: `def MyFunction(a, b):
+  # Change the input variable as needed.
+  `,
+};
 
 // Autocompletion function for Java
 const javaCompletion = (context: CompletionContext): CompletionResult | null => {
@@ -126,20 +147,31 @@ export const MainContent = ({
   settings,
   onRequireSettings,
 }: MainContentProps) => {
-  const [code, setCode] = useState(`public int MyFunction(int a, int b) {
-  // Change the input variable and the return type of the function as needed.
-  // Press "Enter" to choose the keyword, not "Tab".
-
-}`);
-  const [language, setLanguage] = useState<'java' | 'python'>('java');
-  const [evaluationState, setEvaluationState] = useState<EvaluationState>({ status: 'idle' });
+  const cachedWorkspace = useRef(loadWorkspaceCache()).current;
+  const initialLanguage = cachedWorkspace?.language ?? 'java';
+  const [code, setCode] = useState(
+    cachedWorkspace?.code ?? STARTER_CODE[initialLanguage],
+  );
+  const [language, setLanguage] = useState<'java' | 'python'>(initialLanguage);
+  const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [evaluationState, setEvaluationState] = useState<EvaluationState>(
+    cachedWorkspace?.evaluationState ?? { status: 'idle' },
+  );
   const activeRun = useRef<AnalysisRun | null>(null);
+  const uploadCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // CodeMirror keeps the extension instance it was given, so the shortcut reads
+  // the handler through a ref rather than closing over a stale render's copy.
+  const runShortcut = useRef<() => void>(() => {});
   const isCodeEvaluating = evaluationState.status === 'loading';
   const isRunning = isCodeEvaluating || flowchartState.status === 'loading';
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
 
-  useEffect(() => () => activeRun.current?.cancel(), []);
+  useEffect(() => () => {
+    activeRun.current?.cancel();
+    if (uploadCommitTimer.current) clearTimeout(uploadCommitTimer.current);
+  }, []);
 
   const clearResults = () => {
     activeRun.current?.cancel();
@@ -150,39 +182,94 @@ export const MainContent = ({
     onTraceStateChange({ status: 'idle' });
   };
 
-  // Update code when language changes
-  useEffect(() => {
-    if (language === 'python') {
-      setCode(`def MyFunction(a, b):
-  # Change the input variable as needed.
-  # Press "Enter" to choose the keyword, not "Tab".
-  `);
-    } else {
-      setCode(`public int MyFunction(int a, int b) {
-  // Change the input variable and the return type of the function as needed.
-  // Press "Enter" to choose the keyword, not "Tab".
+  /**
+   * Switching language replaces the editor contents, which used to throw away
+   * whatever the student had written without a word. Only an untouched starter
+   * template is replaced silently; real work has to be confirmed first, and
+   * declining leaves both the code and the language selector where they were.
+   */
+  const handleLanguageChange = (next: 'java' | 'python') => {
+    if (next === language) return;
 
-}`);
-    }
-  }, [language]);
+    const untouched = code.trim() === STARTER_CODE[language].trim() || !code.trim();
+    if (!untouched && !window.confirm(
+      `Switch to ${next === 'java' ? 'Java' : 'Python'}? Your current code will be replaced.`
+    )) return;
+
+    setLanguage(next);
+    setCode(STARTER_CODE[next]);
+    setCursor({ line: 1, column: 1 });
+    clearResults();
+  };
   const [isUploadPopupOpen, setIsUploadPopupOpen] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(cachedWorkspace?.problem ?? null);
   const [isLoading, setIsLoading] = useState(false);
-  const [problemDetails, setProblemDetails] = useState<ProblemDetails | null>(null);
+  const [problemDetails, setProblemDetails] = useState<ProblemDetails | null>(
+    cachedWorkspace?.problemDetails ?? null,
+  );
   const [apiError, setApiError] = useState<string | null>(null);
   const [isApiProcessing, setIsApiProcessing] = useState(false);
+  const [uploadPopupVersion, setUploadPopupVersion] = useState(0);
   const isRunDisabled = isRunning || !problemDetails || isApiProcessing || isLoading;
+
+  useEffect(() => {
+    updateWorkspaceCache({
+      code,
+      language,
+      problem,
+      problemDetails,
+      evaluationState,
+    });
+  }, [code, language, problem, problemDetails, evaluationState]);
+
+  /*
+   * The footer's indicator used to be a hardcoded green dot reading "Ready",
+   * which stayed green while a run was in flight and after one had failed.
+   * Derive it from the run instead, so it is worth looking at.
+   */
+  const status = isRunning
+    ? { dot: 'bg-amber-400 animate-pulse', label: 'Running' }
+    : codeEvaluationError || flowchartState.status === 'error'
+      ? { dot: 'bg-red-500', label: 'Last run failed' }
+      : !problemDetails
+        ? { dot: 'bg-gray-500', label: 'Upload a problem' }
+        : { dot: 'bg-green-500', label: 'Ready' };
 
   const handleUpload = (content: string, problemDetails: ProblemDetails | null, error: string | null) => {
     clearResults();
     setIsLoading(true);
     // Simulate a small delay for UI consistency
-    setTimeout(() => {
+    if (uploadCommitTimer.current) clearTimeout(uploadCommitTimer.current);
+    uploadCommitTimer.current = setTimeout(() => {
       setProblem(content);
       setProblemDetails(problemDetails);
       setApiError(error);
       setIsLoading(false);
+      uploadCommitTimer.current = null;
     }, 500);
+  };
+
+  const handleClearAll = () => {
+    if (!window.confirm('Clear the problem, code, and all generated results?')) return;
+
+    clearResults();
+    if (uploadCommitTimer.current) {
+      clearTimeout(uploadCommitTimer.current);
+      uploadCommitTimer.current = null;
+    }
+    // Remounting UploadPopup aborts an upload even when its dialog was closed
+    // while the request continued in the background.
+    setUploadPopupVersion((version) => version + 1);
+    setIsUploadPopupOpen(false);
+    setIsApiProcessing(false);
+    setIsLoading(false);
+    setProblem(null);
+    setProblemDetails(null);
+    setApiError(null);
+    setLanguage('java');
+    setCode(STARTER_CODE.java);
+    setCursor({ line: 1, column: 1 });
+    clearWorkspaceCache();
   };
 
   const handleRunCode = () => {
@@ -246,6 +333,28 @@ export const MainContent = ({
     });
   };
 
+  useEffect(() => { runShortcut.current = handleRunCode; });
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyState('copied');
+    } catch {
+      // The clipboard API can be refused outright (denied permission, an
+      // insecure context, a locked-down lab browser). Say so instead of
+      // silently doing nothing, and point at the shortcut that still works.
+      setCopyState('failed');
+    }
+  };
+
+  // Return the button to its resting label, dropping the timer if the student
+  // navigates away or clicks again first.
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = setTimeout(() => setCopyState('idle'), 2000);
+    return () => clearTimeout(timer);
+  }, [copyState]);
+
   // Create extensions with autocompletion enabled for all languages
   const getExtensions = () => {
     const baseExtensions = [
@@ -254,9 +363,26 @@ export const MainContent = ({
         language === 'python' ? pythonCompletion :
         jsCompletion
       ]}),
+      // Highest precedence: react-codemirror installs basicSetup's keymaps
+      // ahead of these extensions, and its Enter binding would otherwise
+      // consume Mod-Enter before this one is consulted.
+      Prec.highest(keymap.of([
+        {
+          key: 'Mod-Enter',
+          preventDefault: true,
+          run: () => { runShortcut.current(); return true; },
+        },
+        // Tab picks the highlighted suggestion while the completion popup is
+        // open, and only indents when there is nothing to accept.
+        // acceptCompletion returns false with no popup showing, so the next
+        // Tab binding takes over.
+        { key: 'Tab', run: acceptCompletion },
+        { key: 'Tab', run: insertTab, shift: indentLess },
+      ])),
       keymap.of([
-        // Add completion keymap for Tab key
-        ...completionKeymap
+        // Enter also accepts a suggestion, which is what the starter comment
+        // used to tell students to use because Tab did not work.
+        ...completionKeymap,
       ])
     ];
 
@@ -276,23 +402,32 @@ export const MainContent = ({
         {/* Combined Practice Problem and Analysis Section */}
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
-          <button
-            onClick={() => {
-              if (!settings) {
-                onRequireSettings('Choose a model before uploading a problem.');
-                return;
-              }
-              setIsUploadPopupOpen(true);
-            }}
-            disabled={isApiProcessing}
-            className={`px-4 py-2 rounded-md text-white transition-colors mb-4 ${
-              isApiProcessing
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {isApiProcessing ? 'Processing...' : 'Upload'}
-          </button>
+          <div className="mb-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-100"
+            >
+              Clear All
+            </button>
+            <button
+              onClick={() => {
+                if (!settings) {
+                  onRequireSettings('Choose a model before uploading a problem.');
+                  return;
+                }
+                setIsUploadPopupOpen(true);
+              }}
+              disabled={isApiProcessing}
+              className={`px-4 py-2 rounded-md text-white transition-colors ${
+                isApiProcessing
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              {isApiProcessing ? 'Processing...' : 'Upload'}
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
@@ -384,6 +519,7 @@ export const MainContent = ({
         {/* Only mounted once a model is chosen, so modelConfig is always defined. */}
         {settings && (
           <UploadPopup
+            key={uploadPopupVersion}
             isOpen={isUploadPopupOpen}
             onClose={() => setIsUploadPopupOpen(false)}
             onUpload={handleUpload}
@@ -407,12 +543,22 @@ export const MainContent = ({
               </span>
             </div>
             <div className="flex items-center space-x-2">
+              <button
+                onClick={handleCopyCode}
+                title="Copy code to clipboard"
+                className={`rounded px-2 py-1 text-sm transition-colors hover:bg-gray-700 ${
+                  copyState === 'failed'
+                    ? 'text-amber-400'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                {copyState === 'copied' ? 'Copied'
+                  : copyState === 'failed' ? 'Use \u2318C'
+                    : 'Copy'}
+              </button>
               <select
                 value={language}
-                onChange={(e) => {
-                  clearResults();
-                  setLanguage(e.target.value as 'java' | 'python');
-                }}
+                onChange={(e) => handleLanguageChange(e.target.value as 'java' | 'python')}
                 className="bg-gray-700 text-white text-sm rounded px-2 py-1"
               >
                 <option value="java">Java</option>
@@ -433,14 +579,39 @@ export const MainContent = ({
           </div>
 
           {/* CodeMirror Editor */}
-          <div className="min-h-[400px]">
+          {/*
+            Drag the bottom edge to resize. The editor fills whatever height the
+            container has, so a long solution no longer has to be read through a
+            fixed 400px window.
+          */}
+          <div className="h-[400px] min-h-[200px] resize-y overflow-auto">
             <CodeMirror
+              /*
+               * Remount on a language change. Reconfiguring the existing editor
+               * fires onChange with the outgoing document, which would write the
+               * previous language's code back over the starter template that
+               * handleLanguageChange just set — leaving Java source labelled as
+               * Python and sent to the parser as Python.
+               */
+              key={language}
               value={code}
-              height="400px"
+              height="100%"
               extensions={getExtensions()}
               theme={vscodeDark}
               onChange={(value) => setCode(value)}
-              className="text-sm"
+              // `height="100%"` resolves against the wrapper this className
+              // lands on, so that div needs a height of its own or the editor
+              // collapses to its content.
+              onUpdate={(update: ViewUpdate) => {
+                // Report where the caret actually is. The footer used to show
+                // the document's line count and a hardcoded column, which reads
+                // like a real IDE status bar while naming the wrong line.
+                if (!update.selectionSet && !update.docChanged) return;
+                const head = update.state.selection.main.head;
+                const line = update.state.doc.lineAt(head);
+                setCursor({ line: line.number, column: head - line.from + 1 });
+              }}
+              className="h-full text-sm"
             />
           </div>
 
@@ -449,11 +620,12 @@ export const MainContent = ({
             <div className="flex items-center space-x-4">
               <span className="capitalize">{language}</span>
               <span>UTF-8</span>
-              <span>Ln {code.split('\n').length}, Col 1</span>
+              <span>Ln {cursor.line}, Col {cursor.column}</span>
+              <span>{code.split('\n').length} lines</span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              <span>Ready</span>
+              <span className={`w-2 h-2 rounded-full ${status.dot}`}></span>
+              <span>{status.label}</span>
             </div>
           </div>
         </div>
@@ -462,12 +634,6 @@ export const MainContent = ({
         <div className="bg-gray-900 rounded-xl mt-4 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-white font-semibold">Output</h3>
-            <button
-              className="text-gray-400 hover:text-white text-sm"
-              onClick={clearResults}
-            >
-              Clear
-            </button>
           </div>
           <div aria-busy={isCodeEvaluating} className="bg-black rounded p-3 text-green-400 font-mono text-sm min-h-[100px]">
             {isCodeEvaluating ? (
