@@ -35,6 +35,47 @@ python3 -m venv venv
 Credentials live in `.env` (already filled in, gitignored). `.env.example`
 shows the required keys if you need to rotate them.
 
+## Database
+
+Postgres, reached through SQLAlchemy (`db.py`) with schema changes managed by
+Alembic (`migrations/`). Models belong in `models.py`, or in a module imported
+from it — `migrations/env.py` imports that module so `--autogenerate` sees the
+whole schema, and a table missing from `Base.metadata` is silently absent from
+generated migrations.
+
+The engine is created lazily, so `DATABASE_URL` is only required once a
+database-backed feature is used. `/health`, `/api/resource`, and
+`/api/analyze-code` still run without it, and the test suite makes no database
+connection.
+
+Point `DATABASE_URL` at any Postgres instance you can reach; the URL's
+`postgresql://` scheme is rewritten to `postgresql+psycopg://` in `db.py`, so
+Render's connection string works verbatim.
+
+```bash
+./venv/bin/alembic revision --autogenerate -m "add users"
+./venv/bin/alembic upgrade head
+```
+
+Render applies migrations through `preDeployCommand` on each deploy. Do not
+call `Base.metadata.create_all()` at import time — the Gunicorn workers start
+concurrently and would race.
+
+### Connection pool
+
+`db.py` bounds the pool per worker process because Gunicorn runs
+`WEB_CONCURRENCY` processes with `GUNICORN_THREADS` threads each, and a pool
+that grew per thread would exhaust the 100 connections a Basic Postgres
+instance allows. Keep
+
+    WEB_CONCURRENCY * (DB_POOL_SIZE + DB_MAX_OVERFLOW)
+
+comfortably below that limit; the defaults are `2 * (5 + 5) = 20`. Requests
+spend nearly all their time streaming from the model provider rather than
+holding a connection, so a small pool is not the bottleneck. Connections use
+`pool_pre_ping` and a 300-second recycle, since Render restarts instances for
+maintenance and drops idle server connections.
+
 ## Run
 
 ```bash

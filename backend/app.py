@@ -14,6 +14,7 @@ from agentscope.credential import DashScopeCredential
 from agentscope.message import SystemMsg, UserMsg
 from agentscope.model import ChatModelBase, DashScopeChatModel
 
+import db
 from code_analysis import CodeAnalysisError, analyze_code
 from model_stream import create_stream_blueprint
 
@@ -56,6 +57,9 @@ def build_model(*, stream: bool = False) -> ChatModelBase:
 app = Flask(__name__)
 CORS(app)
 app.register_blueprint(create_stream_blueprint(lambda: build_model(stream=True)))
+# Returns each request's session to the pool. The engine itself stays lazy, so
+# routes that do not touch the database still run without DATABASE_URL.
+db.init_app(app)
 
 
 @app.before_request
