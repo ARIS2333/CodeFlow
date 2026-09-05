@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict
 
 from flask import Blueprint, Response, jsonify, request
+from werkzeug.exceptions import BadRequest
 from agentscope.message import SystemMsg, UserMsg
 
 
@@ -115,7 +116,10 @@ def create_stream_blueprint(model_factory):
 
     @blueprint.post("/api/resource/stream")
     def resource_stream():
-        body = request.get_json(silent=True)
+        try:
+            body = request.get_json(force=True, silent=False)
+        except BadRequest:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
         if not isinstance(body, dict) or not isinstance(body.get("message"), str) or not body["message"].strip():
             return jsonify({"error": "Missing required string field: message"}), 400
         system = body.get("system_message", "You are a helpful assistant.")

@@ -41,6 +41,9 @@ shows the required keys if you need to rotate them.
 ./venv/bin/python app.py
 ```
 
+This command is for local development. Public deployment uses Gunicorn with
+`gunicorn -c gunicorn.conf.py app:app`; see the repository's `DEPLOYMENT.md`.
+
 Serves on `http://127.0.0.1:5001`:
 
 - `GET /health` — liveness check
@@ -62,8 +65,9 @@ client. Text deltas are forwarded immediately; the SDK's final accumulated
 snapshot is checked, not appended again. Reasoning/tool blocks are not forwarded.
 Client disconnects close the upstream response when the WSGI server detects
 them (heartbeats permit detection during silent periods). Provider transport
-retries are disabled for this endpoint; frontend output-format retries are
-separate. The shared evaluation model is not switched into streaming mode.
+retries are disabled for streaming and non-streaming requests; the frontend
+owns the small status-aware transport retry policy. Every request creates and
+closes its model HTTP client on the same async event loop.
 
 Reverse proxies must allow streaming and disable response buffering/compression
 that batches chunks. The response sets `X-Accel-Buffering: no` and

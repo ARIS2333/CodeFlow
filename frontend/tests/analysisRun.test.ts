@@ -38,8 +38,10 @@ const setup = () => {
   let reportGeneration!: (context: FlowchartGenerationContext) => void;
   let reportProgress!: (progress: FlowchartProgress) => void;
   let signal!: AbortSignal;
+  let feedbackSignal!: AbortSignal;
   const run = startAnalysisRun({
-    requestFeedback: () => {
+    requestFeedback: (abortSignal) => {
+      feedbackSignal = abortSignal;
       // Both panels must show loaders before either request starts.
       assert.equal(feedbackStates.at(-1)?.status, 'loading');
       assert.equal(flowchartStates.at(-1)?.status, 'loading');
@@ -56,7 +58,7 @@ const setup = () => {
     onFeedbackChange: (state) => feedbackStates.push(state),
     onFlowchartChange: (state) => flowchartStates.push(state),
   });
-  return { run, feedback, charts, feedbackStates, flowchartStates, started, signal,
+  return { run, feedback, charts, feedbackStates, flowchartStates, started, signal, feedbackSignal,
     reportProgress: (progress: FlowchartProgress) => reportProgress(progress),
     reportGeneration: (context: FlowchartGenerationContext) => reportGeneration(context) };
 };
@@ -78,8 +80,10 @@ test('streamed graphs and diagnostics preserve each other while both tasks are p
 test('cancel aborts the flowchart signal and ignores later streamed sections', async () => {
   const current = setup();
   assert.equal(current.signal.aborted, false);
+  assert.equal(current.feedbackSignal.aborted, false);
   current.run.cancel();
   assert.equal(current.signal.aborted, true);
+  assert.equal(current.feedbackSignal.aborted, true);
   current.reportProgress({ attempt: 1, student: flowchart.student });
   current.charts.reject(new Error('aborted'));
   await Promise.resolve();

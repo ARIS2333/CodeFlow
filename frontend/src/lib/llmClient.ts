@@ -16,35 +16,117 @@ export type ApiRequestConfig = {
   options: RequestInit;
 };
 
-export const makeApiRequestWithRetry = async (
-  requestConfig: ApiRequestConfig,
-  maxRetries: number = 3,
-  baseDelay: number = 1000 // 1 second
-): Promise<Response> => {
-  let lastError: Error | null = null;
+export class ApiRequestError extends Error {
+  public readonly status?: number;
+  public readonly requestId?: string;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    requestConfig.options.signal?.throwIfAborted();
-    try {
-      const response = await fetch(requestConfig.url, requestConfig.options);
+  constructor(
+    message: string,
+    status?: number,
+    requestId?: string,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.requestId = requestId;
+  }
+}
 
-      if (response.ok) {
-        return response;
-      }
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
 
-      throw new Error(`API request failed with status ${response.status}`);
-    } catch (error: unknown) {
-      requestConfig.options.signal?.throwIfAborted();
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`API request failed (attempt ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
+const abortableDelay = (milliseconds: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
+    const timer = setTimeout(resolve, milliseconds);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException('The request was aborted', 'AbortError'));
+    }, { once: true });
+  });
 
-      if (attempt < maxRetries) {
-        // Exponential backoff with jitter.
-        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+const readPublicError = async (response: Response): Promise<{ message: string; requestId?: string }> => {
+  try {
+    const payload = await response.clone().json() as unknown;
+    if (!isObject(payload)) return { message: `Request failed (${response.status})` };
+
+    if (typeof payload.error === 'string') {
+      return {
+        message: payload.error,
+        ...(typeof payload.requestId === 'string' ? { requestId: payload.requestId } : {}),
+      };
+    }
+
+    if (typeof payload.body === 'string') {
+      const body = JSON.parse(payload.body) as unknown;
+      if (isObject(body) && typeof body.error === 'string') {
+        return {
+          message: body.error,
+          ...(typeof body.requestId === 'string' ? { requestId: body.requestId } : {}),
+        };
       }
     }
+  } catch {
+    // A proxy may return HTML or an empty body. The status remains useful.
+  }
+  return { message: `Request failed (${response.status})` };
+};
+
+const retryDelay = (response: Response | undefined, attempt: number, baseDelay: number): number => {
+  const retryAfter = response?.headers.get('Retry-After');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  }
+  return baseDelay === 0 ? 0 : baseDelay * 2 ** attempt + Math.random() * 500;
+};
+
+export const makeApiRequestWithRetry = async (
+  requestConfig: ApiRequestConfig,
+  maxRetries: number = 2,
+  baseDelay: number = 1000,
+  timeoutMs: number = 130_000,
+): Promise<Response> => {
+  let lastError: Error | null = null;
+  const timeoutController = new AbortController();
+  const externalSignal = requestConfig.options.signal;
+  const onExternalAbort = () => timeoutController.abort(externalSignal?.reason);
+  externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
+  const timeout = setTimeout(
+    () => timeoutController.abort(new DOMException('The request timed out', 'TimeoutError')),
+    timeoutMs,
+  );
+
+  try {
+    externalSignal?.throwIfAborted();
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      timeoutController.signal.throwIfAborted();
+      let response: Response | undefined;
+      try {
+        response = await fetch(requestConfig.url, {
+          ...requestConfig.options,
+          signal: timeoutController.signal,
+        });
+
+        if (response.ok) return response;
+
+        const publicError = await readPublicError(response);
+        lastError = new ApiRequestError(publicError.message, response.status, publicError.requestId);
+        if (!RETRYABLE_STATUSES.has(response.status)) throw lastError;
+      } catch (error: unknown) {
+        timeoutController.signal.throwIfAborted();
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (error instanceof ApiRequestError && !RETRYABLE_STATUSES.has(error.status ?? 0)) {
+          throw error;
+        }
+      }
+
+      if (attempt < maxRetries) {
+        await abortableDelay(retryDelay(response, attempt, baseDelay), timeoutController.signal);
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 
   throw lastError || new Error('Max retries exceeded with no response');
@@ -107,6 +189,10 @@ export interface StructuredRequestOptions<T> {
   label: string;
   /** How many times to ask the model in total. */
   maxAttempts?: number;
+  /** Cancels all transport and output-format attempts for this operation. */
+  signal?: AbortSignal;
+  /** Overall deadline across all output-format attempts. */
+  timeoutMs?: number;
 }
 
 /**
@@ -121,70 +207,85 @@ export const requestStructured = async <T>({
   validate,
   label,
   maxAttempts = 3,
+  signal,
+  timeoutMs = 150_000,
 }: StructuredRequestOptions<T>): Promise<T> => {
   let problems: string[] = [];
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const userMessage =
-      attempt === 1 ? message : `${message}\n${buildRetryNotice(problems)}`;
-
-    const response = await makeApiRequestWithRetry({
-      url: API_URL,
-      options: {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          system_message: systemPrompt,
-        }),
-      },
-    });
-
-    const envelope = await response.json();
-    const unwrapped = unwrapEnvelope(envelope);
-
-    if (!unwrapped.ok) {
-      // A backend-side failure, not a formatting one: retrying the prompt will
-      // not help, so surface it straight away.
-      throw new Error(`${label}: ${unwrapped.error}`);
-    }
-
-    const parsed = parseLlmJson(unwrapped.text);
-
-    if (!parsed.ok) {
-      problems = [parsed.error];
-      console.warn(
-        `[${label}] unusable reply on attempt ${attempt}/${maxAttempts}:`,
-        parsed.error
-      );
-      continue;
-    }
-
-    const result = validate(parsed.value);
-
-    if (result.ok) {
-      const repairs = [...parsed.repairs, ...result.repairs];
-      if (repairs.length) {
-        console.info(
-          `[${label}] accepted the reply after ${repairs.length} repair(s):`,
-          repairs
-        );
-      }
-      return result.value;
-    }
-
-    problems = result.errors;
-    console.warn(
-      `[${label}] rejected the reply on attempt ${attempt}/${maxAttempts}:`,
-      result.errors
-    );
-  }
-
-  throw new Error(
-    `${label}: the model returned an invalid format ${maxAttempts} times in a row. ` +
-      `Last problems — ${problems.join('; ')}`
+  const operationController = new AbortController();
+  const onAbort = () => operationController.abort(signal?.reason);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const timeout = setTimeout(
+    () => operationController.abort(new DOMException(`${label} timed out`, 'TimeoutError')),
+    timeoutMs,
   );
+
+  try {
+    signal?.throwIfAborted();
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      operationController.signal.throwIfAborted();
+      const userMessage =
+        attempt === 1 ? message : `${message}\n${buildRetryNotice(problems)}`;
+
+      const response = await makeApiRequestWithRetry({
+        url: API_URL,
+        options: {
+          signal: operationController.signal,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            message: userMessage,
+            system_message: systemPrompt,
+          }),
+        },
+      });
+
+      const envelope = await response.json();
+      const unwrapped = unwrapEnvelope(envelope);
+
+      if (!unwrapped.ok) {
+        throw new Error(`${label}: ${unwrapped.error}`);
+      }
+
+      const parsed = parseLlmJson(unwrapped.text);
+
+      if (!parsed.ok) {
+        problems = [parsed.error];
+        console.warn(
+          `[${label}] unusable reply on attempt ${attempt}/${maxAttempts}:`,
+          parsed.error
+        );
+        continue;
+      }
+
+      const result = validate(parsed.value);
+
+      if (result.ok) {
+        const repairs = [...parsed.repairs, ...result.repairs];
+        if (repairs.length) {
+          console.info(
+            `[${label}] accepted the reply after ${repairs.length} repair(s):`,
+            repairs
+          );
+        }
+        return result.value;
+      }
+
+      problems = result.errors;
+      console.warn(
+        `[${label}] rejected the reply on attempt ${attempt}/${maxAttempts}:`,
+        result.errors
+      );
+    }
+
+    throw new Error(
+      `${label}: the model returned an invalid format ${maxAttempts} times in a row. ` +
+        `Last problems — ${problems.join('; ')}`
+    );
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', onAbort);
+  }
 };

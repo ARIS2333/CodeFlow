@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: codeflow-backend
+    runtime: python
+    branch: production
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn.conf.py app:app
+    healthCheckPath: /health
+    envVars:
+      - key: MODEL_PROVIDER
+        value: dashscope
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_WORKSPACE_ID
+        sync: false
+      - key: QWEN_MODEL
+        value: qwen3.7-max
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: GUNICORN_THREADS
+        value: "50"
+
+  - type: web
+    name: codeflow-frontend
+    runtime: static
+    branch: production
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      # Use the backend's public HTTPS URL, without a trailing slash.
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

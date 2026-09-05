@@ -35,6 +35,7 @@ interface MainContentProps {
   onFlowchartStateChange: (state: FlowchartState) => void;
   onTraceStateChange: (state: TraceState) => void;
   onRunStart: () => void;
+  onCancelRetrace: () => void;
 }
 
 // Java keywords for autocompletion
@@ -111,7 +112,13 @@ const jsCompletion = (context: CompletionContext): CompletionResult | null => {
   };
 };
 
-export const MainContent = ({ flowchartState, onFlowchartStateChange, onTraceStateChange, onRunStart }: MainContentProps) => {
+export const MainContent = ({
+  flowchartState,
+  onFlowchartStateChange,
+  onTraceStateChange,
+  onRunStart,
+  onCancelRetrace,
+}: MainContentProps) => {
   const [code, setCode] = useState(`public int MyFunction(int a, int b) {
   // Change the input variable and the return type of the function as needed.
   // Press "Enter" to choose the keyword, not "Tab".
@@ -130,6 +137,7 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onTraceSta
   const clearResults = () => {
     activeRun.current?.cancel();
     activeRun.current = null;
+    onCancelRetrace();
     setEvaluationState({ status: 'idle' });
     onFlowchartStateChange({ status: 'idle' });
     onTraceStateChange({ status: 'idle' });
@@ -193,11 +201,12 @@ export const MainContent = ({ flowchartState, onFlowchartStateChange, onTraceSta
     const message = JSON.stringify(requestPayload);
 
     activeRun.current = startAnalysisRun({
-      requestFeedback: () => requestStructured({
+      requestFeedback: (signal) => requestStructured({
         systemPrompt: systemPrompt_GenerateFeedback,
         message,
         validate: validateCodeEvaluation,
-        label: 'feedback'
+        label: 'feedback',
+        signal,
       }),
       requestFlowchart: (onGenerationReady, onProgress, signal) =>
         requestReliableFlowchart(requestPayload, onGenerationReady, { onProgress, signal }),

@@ -92,3 +92,4 @@ Exercise/   A reference dataset of real student code submissions
 ```
 
 See `frontend/README.md` and `backend/README.md` for how to run each piece.
+For the Render frontend/backend setup, see `DEPLOYMENT.md`.

@@ -16,7 +16,7 @@ export type FlowchartState =
   });
 
 interface AnalysisRunOptions {
-  requestFeedback: () => Promise<CodeEvaluationResponse>;
+  requestFeedback: (signal: AbortSignal) => Promise<CodeEvaluationResponse>;
   requestFlowchart: (
     onGenerationReady: (context: FlowchartGenerationContext) => void,
     onProgress: (progress: FlowchartProgress) => void,
@@ -38,7 +38,7 @@ interface AnalysisRunOptions {
 
 export interface AnalysisRun {
   isRunning: () => boolean;
-  /** Abort flowchart preprocessing/streaming; ignore late evaluation responses. */
+  /** Abort all requests in the run and ignore any late responses. */
   cancel: () => void;
 }
 
@@ -88,7 +88,11 @@ export const startAnalysisRun = ({
   // Clear both previous results and show both loaders before dispatching.
   onFeedbackChange({ status: 'loading' });
   onFlowchartChange({ status: 'loading' });
-  const feedback = runTask(requestFeedback, onFeedbackChange, 'Failed to evaluate your code');
+  const feedback = runTask(
+    () => requestFeedback(controller.signal),
+    onFeedbackChange,
+    'Failed to evaluate your code',
+  );
   const charts = runTask(
     () => requestFlowchart(
       (context) => {

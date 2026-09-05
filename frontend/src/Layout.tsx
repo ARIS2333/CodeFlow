@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
@@ -35,12 +35,21 @@ export const Layout = ({
   const [traceState, setTraceState] = useState<TraceState>({ status: 'idle' });
   const retraceAbort = useRef<AbortController | null>(null);
 
-  const startRetrace = useCallback((request: TraceRequest) => {
+  const cancelRetrace = useCallback(() => {
     retraceAbort.current?.abort();
+    retraceAbort.current = null;
+  }, []);
+
+  useEffect(() => cancelRetrace, [cancelRetrace]);
+
+  const startRetrace = useCallback((request: TraceRequest) => {
+    cancelRetrace();
     const controller = new AbortController();
     retraceAbort.current = controller;
-    void runTrace(request, setTraceState, controller.signal);
-  }, []);
+    void runTrace(request, setTraceState, controller.signal).finally(() => {
+      if (retraceAbort.current === controller) retraceAbort.current = null;
+    });
+  }, [cancelRetrace]);
 
   /**
    * Handler function to update the panel width
@@ -68,8 +77,9 @@ export const Layout = ({
           flowchartState={flowchartState}
           onFlowchartStateChange={setFlowchartState}
           onTraceStateChange={setTraceState}
+          onCancelRetrace={cancelRetrace}
           onRunStart={() => {
-            retraceAbort.current?.abort();
+            cancelRetrace();
             setTraceState({ status: 'idle' });
             if (!showRightPanel) onTogglePanel();
           }}

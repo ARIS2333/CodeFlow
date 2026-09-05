@@ -65,12 +65,15 @@ loader (including Tree-sitter preprocessing). Each panel displays its own result
 or error as soon as its task finishes, without waiting for the other panel.
 Closing Code Analysis does not stop generation. Run Code stays disabled while
 either task is pending. Clear, changing languages, or replacing the problem
-clears both panels and aborts the flowchart preprocessing/streaming request.
-Late evaluation responses are ignored; evaluation requests already sent to the
-backend are not cancelled. Unmounting also aborts the active flowchart request.
+clears both panels and aborts evaluation, flowchart/trace streaming, and manual
+re-trace requests. Unmounting also aborts the active requests.
 
 Run `npm test` (Node.js 22.6+ with type stripping) for the independent completion,
 failure isolation, and stale-response regression tests; these make no LLM calls.
+
+The API defaults to `http://127.0.0.1:5001` during local development. Set
+`VITE_API_BASE_URL` when building for a separate backend, as shown in
+`.env.example` and the repository's `DEPLOYMENT.md`.
 
 ### Flowchart Visualization
 The flowchart functionality ([FlowchartDiagram.tsx](src/FlowchartDiagram.tsx)) provides:
