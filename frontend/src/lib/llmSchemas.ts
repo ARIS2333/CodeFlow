@@ -621,9 +621,63 @@ export const validateCodeEvaluation = (
     });
   });
 
+  const blockingVerdicts = testResults
+    .map(({ yourOutput }) => yourOutput.trim().match(/^❌\s*(Compile Error|Syntax Error)\b/i)?.[1])
+    .filter((verdict): verdict is string => verdict !== undefined)
+    .map((verdict) => verdict.toLowerCase() === 'compile error'
+      ? '❌ Compile Error'
+      : '❌ Syntax Error');
+
+  if (blockingVerdicts.length > 0) {
+    const verdict = blockingVerdicts[0];
+    if (new Set(blockingVerdicts).size > 1) {
+      errors.push('the reply mixes Compile Error and Syntax Error verdicts');
+    }
+    if (testResults.some(({ yourOutput }) => yourOutput.trim() !== verdict)) {
+      errors.push(`${verdict} is a whole-submission failure and must be used exactly for every test case`);
+    }
+    if (isCorrect) {
+      errors.push(`"IsCorrect" cannot be true when the submission has ${verdict}`);
+    }
+  }
+
   if (errors.length) return { ok: false, errors };
 
   return { ok: true, value: { IsCorrect: isCorrect, TestResults: testResults }, repairs };
+};
+
+export const validateCodeEvaluationForAnalysis = (
+  input: unknown,
+  codeAnalysis: CodeAnalysis,
+): ValidationResult<CodeEvaluationResponse> => {
+  const result = validateCodeEvaluation(input);
+  if (!result.ok) return result;
+
+  const blockingVerdict = codeAnalysis.language === 'java'
+    ? codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0
+      ? '❌ Compile Error'
+      : undefined
+    : codeAnalysis.syntaxIssues.length > 0
+      ? '❌ Syntax Error'
+      : undefined;
+
+  if (!blockingVerdict) return result;
+
+  const alreadyCorrect = result.value.IsCorrect === false
+    && result.value.TestResults.every(({ yourOutput }) => yourOutput === blockingVerdict);
+  return {
+    ok: true,
+    value: {
+      IsCorrect: false,
+      TestResults: result.value.TestResults.map((test) => ({
+        ...test,
+        yourOutput: blockingVerdict,
+      })),
+    },
+    repairs: alreadyCorrect
+      ? result.repairs
+      : [...result.repairs, `applied source-backed ${blockingVerdict} to every test case`],
+  };
 };
 
 export const validateProblemDetails = (input: unknown): ValidationResult<ProblemDetails> => {

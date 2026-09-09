@@ -61,6 +61,7 @@ export const analysisStub = (
     { anchor: 't2', kind: 'terminal', construct: 'return', text: 'return 0', parentAnchor: null, branch: 'sequence', function: 'f', flowchartRequired: true, ...position },
   ],
   syntaxIssues: recovered ? [{ ...missingTokenIssue }] : [],
+  compileIssues: [],
   factsTruncated: false,
 });
 

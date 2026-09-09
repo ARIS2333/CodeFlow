@@ -159,10 +159,14 @@ export const requestReliableFlowchart = async (
     /** Fires once the grounded/inferred decision is made, before the model call. */
     onGenerationReady?: (context: FlowchartGenerationContext) => void;
     onProgress?: (progress: FlowchartProgress) => void;
+    /** Reuse a preflight shared with feedback so one run parses source once. */
+    codeAnalysis?: Promise<CodeAnalysis>;
     signal?: AbortSignal;
   },
 ): Promise<FlowchartData> => {
-  const codeAnalysis = await requestCodeAnalysis(request.language, request.code, options.signal);
+  const codeAnalysis = await (
+    options.codeAnalysis ?? requestCodeAnalysis(request.language, request.code, options.signal)
+  );
   options.signal?.throwIfAborted();
   const context = getFlowchartGenerationContext(codeAnalysis);
   options.onGenerationReady?.(context);

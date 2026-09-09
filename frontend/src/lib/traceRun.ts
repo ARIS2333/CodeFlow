@@ -16,24 +16,25 @@ export type TraceState =
 /** The evaluation prompt decorates outputs with these; they are not the value. */
 const VERDICT_MARKS = /[✅❌\u{1F527}]/gu;
 
-const isBlockingLanguageError = (result: TestResult): boolean =>
-  /(?:compil(?:e|ation)|syntax)\s*error/i.test(result.yourOutput);
+const isIncompleteExecution = (result: TestResult): boolean =>
+  /(?:compil(?:e|ation)|syntax|runtime|interface)\s*error|does\s+not\s+terminate/i
+    .test(result.yourOutput);
 
 const isPassing = (result: TestResult): boolean => result.yourOutput.includes('✅');
 
 /**
  * Pick the case worth walking through.
  *
- * A failing case is where the two traces have something to show, so it wins. A
- * A compilation or syntax error is not runnable at all and is never traced —
- * which also means code too broken to parse quietly gets no trace, without a
- * separate check. Runtime failures remain traceable because execution did start.
+ * A failing case is where the two completed traces have something to compare,
+ * so it wins. Compilation, syntax, interface, and runtime errors are excluded,
+ * as are non-terminating cases: none provides the complete end-to-end path this
+ * player promises. If another case returns normally, it remains eligible.
  * Among equals the shortest input goes first: it is a rough but cheap proxy for
  * the fewest loop iterations, and a short trace is the one a student reads.
  */
 export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
   const runnable = results.filter(
-    (result) => result.input.trim() && !isBlockingLanguageError(result)
+    (result) => result.input.trim() && !isIncompleteExecution(result)
   );
   if (!runnable.length) return null;
 
@@ -49,7 +50,7 @@ export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
 };
 
 export const noTraceableCaseReason =
-  'No test case could be traced. The code did not run for any of the inputs above.';
+  'No test case could finish successfully. Check for a compile or syntax error, a runtime error, an incorrect function name or parameters, or an infinite loop.';
 
 const comparableValue = (value: string): string =>
   value

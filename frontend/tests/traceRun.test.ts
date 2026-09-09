@@ -60,10 +60,19 @@ test('code with a blocking Java or Python language error is never traced', () =>
   ]), null);
 });
 
-test('a case-specific runtime failure can still be traced', () => {
+test('runtime failures and non-terminating cases are not automatically traced', () => {
   assert.equal(selectTraceCase([
     result('f(1, 0)', '❌ Runtime Error: ZeroDivisionError'),
-  ])?.input, 'f(1, 0)');
+    result('f(2, 0)', '❌ Runtime Error: NameError'),
+    result('f(3, 0)', '❌ Does Not Terminate'),
+  ]), null);
+});
+
+test('a normally completed case is traced when another case raises', () => {
+  assert.equal(selectTraceCase([
+    result('f(1, 0)', '❌ Runtime Error: ZeroDivisionError'),
+    result('f(3, 4)', '❌ 6'),
+  ])?.input, 'f(3, 4)');
 });
 
 test('an all-passing run still gets a trace, as a confirmation of the path taken', () => {

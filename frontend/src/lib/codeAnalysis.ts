@@ -33,6 +33,13 @@ export interface SyntaxIssue extends SourcePosition {
   expected?: string;
 }
 
+export interface CompileIssue extends SourcePosition {
+  id: string;
+  kind: string;
+  text: string;
+  expected?: string;
+}
+
 export interface CodeAnalysis {
   analysisVersion: 1;
   language: SupportedLanguage;
@@ -48,6 +55,7 @@ export interface CodeAnalysis {
   } & SourcePosition>;
   facts: CodeFact[];
   syntaxIssues: SyntaxIssue[];
+  compileIssues: CompileIssue[];
   factsTruncated: boolean;
 }
 
@@ -96,6 +104,7 @@ const validateAnalysis = (
     !Array.isArray(input.functions) ||
     !Array.isArray(input.facts) ||
     !Array.isArray(input.syntaxIssues) ||
+    !Array.isArray(input.compileIssues) ||
     typeof input.factsTruncated !== 'boolean'
   ) {
     throw new Error('code analysis: the backend response has an invalid contract');
@@ -182,6 +191,29 @@ const validateAnalysis = (
     return issue;
   });
 
+  const compileIssues = input.compileIssues.map((entry, index): CompileIssue => {
+    if (
+      !isObject(entry) ||
+      typeof entry.id !== 'string' ||
+      typeof entry.kind !== 'string' ||
+      typeof entry.text !== 'string'
+    ) {
+      throw new Error(`code analysis: compileIssues[${index}] is invalid`);
+    }
+    const position = parsePosition(entry);
+    if (!position) {
+      throw new Error(`code analysis: compileIssues[${index}] has no source position`);
+    }
+    const issue: CompileIssue = {
+      id: entry.id,
+      kind: entry.kind,
+      text: entry.text,
+      ...position,
+    };
+    if (typeof entry.expected === 'string') issue.expected = entry.expected;
+    return issue;
+  });
+
   return {
     analysisVersion: 1,
     language: expectedLanguage,
@@ -191,6 +223,7 @@ const validateAnalysis = (
     functions,
     facts,
     syntaxIssues,
+    compileIssues,
     factsTruncated: input.factsTruncated,
   };
 };

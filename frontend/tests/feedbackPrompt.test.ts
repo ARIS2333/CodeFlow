@@ -5,6 +5,11 @@ import {
   systemPrompt_GenerateJavaFeedback,
   systemPrompt_GeneratePythonFeedback,
 } from '../src/config/systemPrompt_GenerateFeedback.ts';
+import {
+  validateCodeEvaluation,
+  validateCodeEvaluationForAnalysis,
+} from '../src/lib/llmSchemas.ts';
+import { analysisStub } from './flowchartFixtures.ts';
 
 test('Java feedback uses Java compilation rules and accepts method-only exercises', () => {
   const prompt = feedbackSystemPromptFor('java');
@@ -12,6 +17,10 @@ test('Java feedback uses Java compilation rules and accepts method-only exercise
   assert.match(prompt, /"❌ Compile Error"/);
   assert.match(prompt, /placed unchanged inside a\s+valid class/);
   assert.match(prompt, /static type-checking failure/);
+  assert.match(prompt, /MANDATORY JAVA COMPILATION GATE/);
+  assert.match(prompt, /body can complete normally/);
+  assert.match(prompt, /nested-if false path reaching the method\s+end/);
+  assert.match(prompt, /outsideMode = true/);
   assert.match(prompt, /Runtime Error: <exception class>/);
 });
 
@@ -21,6 +30,11 @@ test('Python feedback separates syntax errors from runtime exceptions', () => {
   assert.match(prompt, /"❌ Syntax Error"/);
   assert.match(prompt, /Runtime Error: <exception type>/);
   assert.match(prompt, /reaching the end without return produces None/);
+  assert.match(prompt, /identifiers are case-sensitive/);
+  assert.match(prompt, /def f\(outsideMode\).*OutsideMode raises NameError/s);
+  assert.match(prompt, /first condition executed.*every call fails/s);
+  assert.match(prompt, /UnboundLocalError only for paths that reach it/);
+  assert.match(prompt, /Once a case raises an exception, it has no return value/);
   assert.doesNotMatch(prompt, /use exactly\s+"❌ Compile Error"/);
 });
 
@@ -31,5 +45,64 @@ test('both prompts derive expected values independently and preserve the JSON co
     assert.match(prompt, /"IsCorrect"/);
     assert.match(prompt, /"TestResults"/);
     assert.match(prompt, /Return JSON only/);
+  }
+});
+
+test('a blocking language error cannot be mixed with simulated outputs', () => {
+  const result = validateCodeEvaluation({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'in1To10(5, false)', expected: 'true', yourOutput: '❌ Compile Error' },
+      { input: 'in1To10(11, false)', expected: 'false', yourOutput: '✅ false' },
+    ],
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.errors.join(' '), /whole-submission failure/);
+  }
+});
+
+test('a compilation failure is accepted only when every case is blocked', () => {
+  const result = validateCodeEvaluation({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'in1To10(5, false)', expected: 'true', yourOutput: '❌ Compile Error' },
+      { input: 'in1To10(11, false)', expected: 'false', yourOutput: '❌ Compile Error' },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test('source-backed Java compile issues override invented runtime outputs', () => {
+  const analysis = analysisStub('java');
+  analysis.compileIssues = [{
+    id: 'compile-1',
+    kind: 'missing-return',
+    text: 'Non-void method can complete without returning a value.',
+    expected: 'return',
+    startLine: 1,
+    startColumn: 1,
+    endLine: 10,
+    endColumn: 2,
+    startByte: 0,
+    endByte: 100,
+  }];
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'in1To10(5, false)', expected: 'true', yourOutput: '✅ true' },
+      { input: 'in1To10(11, false)', expected: 'false', yourOutput: '❌ true' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.IsCorrect, false);
+    assert.deepEqual(
+      result.value.TestResults.map(({ yourOutput }) => yourOutput),
+      ['❌ Compile Error', '❌ Compile Error'],
+    );
   }
 });

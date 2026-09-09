@@ -32,10 +32,11 @@ import {
   type TraceState,
 } from './lib/traceRun';
 import {
-  validateCodeEvaluation,
+  validateCodeEvaluationForAnalysis,
   type ProblemDetails,
   type TestResult,
 } from './lib/llmSchemas';
+import { requestCodeAnalysis, type CodeAnalysis } from './lib/codeAnalysis';
 import { toModelConfig, type ModelSettings } from './lib/modelSettings';
 import {
   clearWorkspaceCache,
@@ -330,20 +331,31 @@ export const MainContent = ({
       language: language,
       code: code
     };
-    const message = JSON.stringify(requestPayload);
+    let codeAnalysisPromise: Promise<CodeAnalysis> | null = null;
+    const getCodeAnalysis = (signal: AbortSignal) => {
+      codeAnalysisPromise ??= requestCodeAnalysis(language, code, signal);
+      return codeAnalysisPromise;
+    };
 
     activeRun.current = startAnalysisRun({
-      requestFeedback: (signal) => requestStructured({
-        systemPrompt: feedbackSystemPromptFor(language),
-        message,
-        validate: validateCodeEvaluation,
-        label: 'feedback',
-        signal,
-        modelConfig,
-      }),
+      requestFeedback: async (signal) => {
+        const codeAnalysis = await getCodeAnalysis(signal);
+        return requestStructured({
+          systemPrompt: feedbackSystemPromptFor(language),
+          message: JSON.stringify({ ...requestPayload, codeAnalysis }),
+          validate: (input) => validateCodeEvaluationForAnalysis(input, codeAnalysis),
+          label: 'feedback',
+          signal,
+          modelConfig,
+        });
+      },
       requestFlowchart: (onGenerationReady, onProgress, signal) =>
         requestReliableFlowchart(requestPayload, {
-          modelConfig, onGenerationReady, onProgress, signal,
+          modelConfig,
+          onGenerationReady,
+          onProgress,
+          codeAnalysis: getCodeAnalysis(signal),
+          signal,
         }),
       // The trace needs an input from the evaluation and node ids from the
       // flowchart, so startAnalysisRun only calls this once both have landed.

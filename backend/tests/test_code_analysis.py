@@ -82,6 +82,41 @@ class CodeAnalysisTests(unittest.TestCase):
         )
         self.assertIn("while (n > 0)", loop["text"])
 
+    def test_java_reports_a_non_void_method_that_can_fall_through(self):
+        result = analyze_code(
+            "java",
+            """public boolean in1To10(int n, boolean outsideMode) {
+    if (n >= 1 && n <= 10) {
+        return true;
+    } else if (outsideMode = true) {
+        if (n <= 1 || n >= 10) {
+            return true;
+        }
+    } else {
+        return false;
+    }
+}""",
+        )
+
+        self.assertEqual(result["parseStatus"], "clean")
+        self.assertEqual(len(result["compileIssues"]), 1)
+        self.assertEqual(result["compileIssues"][0]["kind"], "missing-return")
+        self.assertIn("in1To10", result["compileIssues"][0]["text"])
+
+    def test_java_accepts_non_void_methods_when_all_paths_return(self):
+        result = analyze_code(
+            "java",
+            """public boolean in1To10(int n, boolean outsideMode) {
+    if (outsideMode) {
+        return n <= 1 || n >= 10;
+    } else {
+        return n >= 1 && n <= 10;
+    }
+}""",
+        )
+
+        self.assertEqual(result["compileIssues"], [])
+
     def test_python_preserves_elif_and_else_branch_context(self):
         result = analyze_code(
             "python",

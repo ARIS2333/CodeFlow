@@ -230,6 +230,115 @@ def _syntax_issues(root: Node, source: bytes) -> list[dict[str, Any]]:
     return issues
 
 
+def _java_can_complete_normally(node: Node) -> bool | None:
+    """Conservatively model Java's normal-completion rule.
+
+    True and False are returned only for statement shapes whose completion is
+    unambiguous without name or type resolution. None means that constructs such
+    as loops, switch, and try require more compiler context, so callers must not
+    claim a missing return from this lightweight analysis alone.
+    """
+    if node.type in {"return_statement", "throw_statement"}:
+        return False
+
+    if node.type == "block":
+        can_reach_next: bool | None = True
+        for child in node.named_children:
+            if can_reach_next is False:
+                break
+            child_completion = _java_can_complete_normally(child)
+            if can_reach_next is True:
+                can_reach_next = child_completion
+            elif child_completion is False:
+                # Whether the previous statement falls through or exits, this
+                # sequence cannot reach the end of the block normally.
+                can_reach_next = False
+        return can_reach_next
+
+    if node.type == "if_statement":
+        consequence = node.child_by_field_name("consequence")
+        alternative = node.child_by_field_name("alternative")
+        if consequence is None:
+            return None
+        if alternative is None:
+            # Java treats an if-without-else as able to fall through; it does not
+            # prove that a non-constant guard must be true.
+            return True
+        branch_completion = (
+            _java_can_complete_normally(consequence),
+            _java_can_complete_normally(alternative),
+        )
+        if True in branch_completion:
+            return True
+        if branch_completion == (False, False):
+            return False
+        return None
+
+    if node.type in {"labeled_statement", "synchronized_statement"}:
+        body = node.child_by_field_name("body")
+        return _java_can_complete_normally(body) if body is not None else None
+
+    if node.type in {
+        "while_statement",
+        "do_statement",
+        "for_statement",
+        "enhanced_for_statement",
+        "switch_expression",
+        "try_statement",
+    }:
+        return None
+
+    # Declarations, expressions, assertions, and empty statements all fall
+    # through when they complete. Other unfamiliar nodes stay conservative.
+    if node.type in {
+        "local_variable_declaration",
+        "expression_statement",
+        "assert_statement",
+        "empty_statement",
+        "class_declaration",
+        "interface_declaration",
+        "enum_declaration",
+        "record_declaration",
+        "line_comment",
+        "block_comment",
+    }:
+        return True
+    return None
+
+
+def _java_compile_issues(root: Node, source: bytes) -> list[dict[str, Any]]:
+    """Report only source-backed Java compilation failures we can prove."""
+    issues: list[dict[str, Any]] = []
+
+    def visit(node: Node) -> None:
+        if node.type == "method_declaration":
+            return_type = node.child_by_field_name("type")
+            body = node.child_by_field_name("body")
+            if (
+                return_type is not None
+                and body is not None
+                and _source_text(return_type, source).strip() != "void"
+                and _java_can_complete_normally(body) is True
+            ):
+                name_node = node.child_by_field_name("name")
+                name = _source_text(name_node, source) if name_node is not None else "method"
+                issues.append(
+                    {
+                        "id": f"compile-{len(issues) + 1}",
+                        "kind": "missing-return",
+                        "text": f'Non-void method "{name}" can complete without returning a value.',
+                        "expected": "return",
+                        **_position(body),
+                    }
+                )
+
+        for child in node.named_children:
+            visit(child)
+
+    visit(root)
+    return issues
+
+
 def analyze_code(language: str, code: str) -> dict[str, Any]:
     """Return source-backed structural facts for Java or Python code."""
     if not isinstance(language, str):
@@ -429,6 +538,12 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
             }
         )
 
+    compile_issues = (
+        _java_compile_issues(tree.root_node, source)
+        if normalized_language == "java" and not syntax_issues
+        else []
+    )
+
     return {
         "analysisVersion": 1,
         "language": normalized_language,
@@ -441,5 +556,6 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
         "functions": functions,
         "facts": facts,
         "syntaxIssues": syntax_issues,
+        "compileIssues": compile_issues,
         "factsTruncated": facts_truncated,
     }
