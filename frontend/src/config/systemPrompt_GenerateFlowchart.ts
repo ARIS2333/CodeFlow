@@ -189,24 +189,36 @@ describe, rank, or explain a logic mistake. Do not write "wrong", "missing",
 only as honest differences in conditions, steps, and edges.
 
 ${inferred
-    ? 'Outside the graph, missingSymbols provides the missing-symbol feedback described above. Within graph nodes, only token-level syntax annotations are allowed:'
-    : 'The only explicit annotation is a token-level syntax error:'}
+    ? 'Outside the graph, missingSymbols provides the missing-symbol feedback described above. Within graph nodes, only the token-level source annotations below are allowed:'
+    : 'The only explicit annotations are the token-level source errors below:'}
 - syntaxErrors belongs only on the student node containing the bad token.
 - symbol is the shortest offending text and MUST occur verbatim in label.
 - occurrence is 1-based when the symbol repeats.
 - For a missing token, mark the nearest visible token immediately before the gap.
 - For a missing token, also put the absent token in expected. Never put the
   absent token itself in symbol because symbol must be visible in the label.
+- Treat an identifier capitalization mismatch as a markable source error in
+  both Java and Python. Mark it only when the visible identifier does not resolve
+  as written and differs solely by letter case from exactly one parameter,
+  local variable, field, function, or method that is available in that scope.
+  Put the student's spelling in symbol and the declared spelling in expected.
+  Example: for parameter outsideMode used as OutsideMode, emit
+  { "symbol": "OutsideMode", "expected": "outsideMode" } on that node.
+- Do not guess when several declarations match case-insensitively, and do not
+  mark a legal reference that independently exists with the student's casing.
 - Quote the student's code in that node so the symbol can be located.
-- Do not use syntaxErrors for a type error, name error, or logic error unless an
-  actual visible token is the syntax mistake.
+- Apart from the narrowly defined capitalization mismatch above, do not use
+  syntaxErrors for a type error, name error, or logic error unless an actual
+  visible token is the syntax mistake.
 
 Before answering, privately verify all of the following:
 1. Every student edge agrees with the source-supported order, nesting, exits,
    and loops. Do not silently correct the student's logic.
 2. Every llm path satisfies the exercise and examples.
 3. Shared steps use matching labels and decomposition.
-4. The output satisfies the graph contract below.
+4. Every identifier-capitalization mark names a declared in-scope identifier
+   whose spelling differs only by case, and symbol occurs in that node's label.
+5. The output satisfies the graph contract below.
 
 ${inferred ? buildFlowchartOutputContract(true) : flowchartOutputContract}
 

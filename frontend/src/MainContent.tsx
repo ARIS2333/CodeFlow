@@ -11,7 +11,7 @@ import { Prec } from '@codemirror/state';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
-import { systemPrompt_GenerateFeedback } from './config/systemPrompt_GenerateFeedback';
+import { feedbackSystemPromptFor } from './config/systemPrompt_GenerateFeedback';
 import { requestStructured } from './lib/llmClient';
 import { requestReliableFlowchart } from './lib/flowchartClient';
 import {
@@ -301,7 +301,7 @@ export const MainContent = ({
 
     activeRun.current = startAnalysisRun({
       requestFeedback: (signal) => requestStructured({
-        systemPrompt: systemPrompt_GenerateFeedback,
+        systemPrompt: feedbackSystemPromptFor(language),
         message,
         validate: validateCodeEvaluation,
         label: 'feedback',
@@ -658,7 +658,7 @@ export const MainContent = ({
                       <div key={index} className="flex items-start">
                         <span className="mr-2">
                           {test.yourOutput.includes('✅') ? '✅' :
-                           test.yourOutput.includes('❌ Compile Error') ? '🔧' : '❌'}
+                           /❌ (?:Compil(?:e|ation)|Syntax)\s*Error/i.test(test.yourOutput) ? '🔧' : '❌'}
                         </span>
                         <span className="flex-1">
                           <span className="text-gray-300">Input:</span> {test.input} →

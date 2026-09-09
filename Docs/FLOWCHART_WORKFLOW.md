@@ -97,7 +97,7 @@ The frontend converts the graph into React Flow's rendering format and mounts th
 
 ## 6. Follow with an execution trace
 
-**Input:** The completed graph pair, original problem and source, and a test input selected from the evaluation results. The application prefers a failing case, chooses the shortest input among the preferred cases, and excludes cases reported as compile errors. If no case is traceable, it displays a reason and skips tracing.
+**Input:** The completed graph pair, original problem and source, and a test input selected from the evaluation results. The application prefers a failing case, chooses the shortest input among the preferred cases, and excludes cases blocked by Java compilation errors or Python syntax errors. A case-specific runtime failure remains traceable because execution did start. If no case is traceable, it displays a reason and skips tracing.
 
 Once both earlier tasks succeed, a separate model request asks for a sequence of steps through the existing graph nodes for each side. It receives the chosen input and expected result when available. The evaluation's reported student output is kept out of the prompt so it can serve as a separate comparison afterward.
 

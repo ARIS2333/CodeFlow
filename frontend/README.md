@@ -63,6 +63,13 @@ Each run starts evaluation and flowchart generation independently. Output shows
 the evaluation loader; Code Analysis opens automatically and shows the flowchart
 loader (including Tree-sitter preprocessing). Each panel displays its own result
 or error as soon as its task finishes, without waiting for the other panel.
+Evaluation selects a language-specific policy: Java distinguishes source-wide
+compilation errors from case-specific runtime exceptions, while Python reports
+parse failures as syntax errors and execution-time exceptions as runtime errors.
+Both policies share the same `IsCorrect`/`TestResults` JSON response contract.
+Flowchart token annotations also cover unresolved Java or Python identifiers
+that differ only by capitalization from one in-scope declaration, such as
+`OutsideMode` when the parameter is declared as `outsideMode`.
 Closing Code Analysis does not stop generation. Run Code stays disabled while
 either task is pending. Clear, changing languages, or replacing the problem
 clears both panels and aborts evaluation, flowchart/trace streaming, and manual

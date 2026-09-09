@@ -38,7 +38,7 @@ test('the shortest failing input wins, since a short walk is the one a student r
   assert.equal(chosen?.input, 'f(1, 2)');
 });
 
-test('code that did not compile is never traced', () => {
+test('code with a blocking Java or Python language error is never traced', () => {
   assert.equal(selectTraceCase([
     result('f(1, 2)', '❌ Compile Error'),
     result('f(3, 4)', '❌ Compile Error'),
@@ -49,6 +49,21 @@ test('code that did not compile is never traced', () => {
     result('f(1, 2)', '❌ Compile Error'),
     result('f(3, 4)', '❌ 7'),
   ])?.input, 'f(3, 4)');
+
+  assert.equal(selectTraceCase([
+    result('f(1, 2)', '❌ Syntax Error'),
+    result('f(3, 4)', '❌ SyntaxError'),
+  ]), null);
+
+  assert.equal(selectTraceCase([
+    result('f(1, 2)', '❌ Compilation Error'),
+  ]), null);
+});
+
+test('a case-specific runtime failure can still be traced', () => {
+  assert.equal(selectTraceCase([
+    result('f(1, 0)', '❌ Runtime Error: ZeroDivisionError'),
+  ])?.input, 'f(1, 0)');
 });
 
 test('an all-passing run still gets a trace, as a confirmation of the path taken', () => {
@@ -104,6 +119,18 @@ test('a trace that agrees with the test run carries no caveat', async (t) => {
 
   const states: TraceState[] = [];
   await runTrace(request('❌ 3'), (state) => states.push(state), TEST_MODEL_CONFIG);
+  const last = states.at(-1);
+  assert.equal(last?.status === 'success' && last.warning, undefined);
+});
+
+test('a runtime-error verdict agrees with a trace that names the exception', async (t) => {
+  const reply = traceReply();
+  reply.student.finalOutput = 'ZeroDivisionError';
+  t.mock.method(globalThis, 'fetch', async () =>
+    streamResponse([{ type: 'delta', text: JSON.stringify(reply) }, { type: 'done' }]));
+
+  const states: TraceState[] = [];
+  await runTrace(request('❌ Runtime Error: ZeroDivisionError'), (state) => states.push(state), TEST_MODEL_CONFIG);
   const last = states.at(-1);
   assert.equal(last?.status === 'success' && last.warning, undefined);
 });

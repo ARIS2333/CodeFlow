@@ -24,7 +24,7 @@ import type { SyntaxErrorMark } from './lib/llmSchemas';
 import '@xyflow/react/dist/style.css';
 
 // Define types for our flowchart data
-// A token-level syntax mistake, located by plain text search inside the label.
+// A token-level source mistake, located by plain text search inside the label.
 // `occurrence` is 1-based and picks which match to mark when the symbol repeats.
 interface LabelSegment {
   text: string;
@@ -32,7 +32,7 @@ interface LabelSegment {
   expected?: string;
 }
 
-// Split a label into plain and syntax-marked segments. Syntax errors are shown
+// Split a label into plain and marked segments. Source errors are shown
 // by colouring the offending symbol in place rather than by adding text, so the
 // node stays compact and the written explanations are reserved for logic errors.
 // A symbol that isn't found in the label is skipped: the rest of the label still
@@ -105,8 +105,7 @@ interface FlowchartDiagramProps {
 // Custom Node Component following the pattern you provided
 // Every node looks the same. A logic mistake is never marked here: the student
 // finds it by comparing their flow against the recommended one, and marking it
-// would take that discovery away. Only token-level syntax slips get a mark, and
-// only on the offending character.
+// would take that discovery away. Only token-level source slips get a mark.
 const CustomNode = memo(({ id, data }: { id: string; data: FlowchartNodeData }) => {
   const { label, syntaxErrors } = data;
   const segments = markSyntaxErrors(label, syntaxErrors);
@@ -124,8 +123,8 @@ const CustomNode = memo(({ id, data }: { id: string; data: FlowchartNodeData }) 
                 key={index}
                 title={
                   segment.expected
-                    ? `Expected ${segment.expected} after this token`
-                    : 'Syntax error'
+                    ? `Expected ${segment.expected}`
+                    : 'Source error'
                 }
                 className="rounded-sm bg-amber-100 px-px font-semibold text-amber-900 underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-2"
               >

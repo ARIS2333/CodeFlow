@@ -16,8 +16,8 @@ export type TraceState =
 /** The evaluation prompt decorates outputs with these; they are not the value. */
 const VERDICT_MARKS = /[✅❌\u{1F527}]/gu;
 
-const isCompileError = (result: TestResult): boolean =>
-  /compile\s*error/i.test(result.yourOutput);
+const isBlockingLanguageError = (result: TestResult): boolean =>
+  /(?:compil(?:e|ation)|syntax)\s*error/i.test(result.yourOutput);
 
 const isPassing = (result: TestResult): boolean => result.yourOutput.includes('✅');
 
@@ -25,13 +25,16 @@ const isPassing = (result: TestResult): boolean => result.yourOutput.includes('�
  * Pick the case worth walking through.
  *
  * A failing case is where the two traces have something to show, so it wins. A
- * compile error is not runnable at all and is never traced — which also means
- * code too broken to parse quietly gets no trace, without a separate check.
+ * A compilation or syntax error is not runnable at all and is never traced —
+ * which also means code too broken to parse quietly gets no trace, without a
+ * separate check. Runtime failures remain traceable because execution did start.
  * Among equals the shortest input goes first: it is a rough but cheap proxy for
  * the fewest loop iterations, and a short trace is the one a student reads.
  */
 export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
-  const runnable = results.filter((result) => result.input.trim() && !isCompileError(result));
+  const runnable = results.filter(
+    (result) => result.input.trim() && !isBlockingLanguageError(result)
+  );
   if (!runnable.length) return null;
 
   const failing = runnable.filter((result) => !isPassing(result));
@@ -48,9 +51,18 @@ export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
 export const noTraceableCaseReason =
   'No test case could be traced. The code did not run for any of the inputs above.';
 
+const comparableValue = (value: string): string =>
+  value
+    .replace(VERDICT_MARKS, '')
+    .trim()
+    // Evaluation labels an exception as a runtime error; the trace reports the
+    // exception itself. Strip only that verdict prefix before comparing them.
+    .replace(/^runtime\s*error\s*:\s*/i, '')
+    .trim()
+    .toLowerCase();
+
 const sameValue = (left: string, right: string): boolean =>
-  left.replace(VERDICT_MARKS, '').trim().toLowerCase() ===
-  right.replace(VERDICT_MARKS, '').trim().toLowerCase();
+  comparableValue(left) === comparableValue(right);
 
 /**
  * The one cross-check we can make locally: two separate model replies described

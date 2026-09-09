@@ -65,6 +65,30 @@ for (const language of ['java', 'python'] as const) {
   });
 }
 
+for (const [language, code] of [
+  ['java', 'boolean f(boolean outsideMode) { return OutsideMode; }'],
+  ['python', 'def f(outsideMode):\n    return OutsideMode\n'],
+] as const) {
+  test(`${language}: an identifier capitalization mismatch can be highlighted`, async (t) => {
+    const graph = sampleGraph(true);
+    graph.student.nodes[1].data.label = 'return OutsideMode';
+    graph.student.nodes[1].data.syntaxErrors = [
+      { symbol: 'OutsideMode', expected: 'outsideMode' },
+    ];
+    const calls = mockRequests(t, analysisStub(language), [graph]);
+
+    const result = await requestReliableFlowchart({ ...request, language, code }, {
+      modelConfig: TEST_MODEL_CONFIG,
+    });
+
+    assert.deepEqual(result.student.nodes[1].data.syntaxErrors, [
+      { symbol: 'OutsideMode', expected: 'outsideMode' },
+    ]);
+    assert.match(calls[1].body.system_message, /identifier capitalization mismatch/);
+    assert.match(calls[1].body.system_message, /parameter outsideMode used as OutsideMode/);
+  });
+}
+
 for (const [name, language, code] of [
   ['Java else-if missing brace', 'java', missingElseBrace],
   ['Java palindrome missing brace', 'java', missingPalindromeBrace],
@@ -94,6 +118,7 @@ for (const [name, language, code] of [
     assert.match(calls[1].body.system_message, /Do not emit sourceAnchors/);
     assert.match(calls[1].body.system_message, /including = versus ==/);
     assert.match(calls[1].body.system_message, /NOT a confirmed correction/);
+    assert.match(calls[1].body.system_message, /identifier capitalization mismatch/);
   });
 }
 
