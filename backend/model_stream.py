@@ -37,6 +37,7 @@ def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180)
     """
     loop = asyncio.new_event_loop()
     model = stream = pending = None
+    stream_exhausted = False
     deadline = time.monotonic() + timeout
     accumulated = ""
 
@@ -80,6 +81,23 @@ def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180)
                     raise RuntimeError("Model stream was interrupted")
                 if not text.startswith(accumulated):
                     raise RuntimeError("Final model response did not match its streamed text")
+
+                # AgentScope yields its final accumulated snapshot before the
+                # underlying OpenAI-compatible SSE iterator has returned. Give
+                # the stack one more iteration so response context managers and
+                # httpcore byte streams unwind naturally. Breaking immediately
+                # and relying on aclose()+shutdown_asyncgens() forces GeneratorExit
+                # through nested generators and httpcore2 reports
+                # "generator didn't stop after athrow()".
+                pending = loop.create_task(anext(stream))
+                yield from wait_for(pending)
+                try:
+                    pending.result()
+                except StopAsyncIteration:
+                    stream_exhausted = True
+                else:
+                    raise RuntimeError("Provider yielded data after its final response")
+
                 if len(text) > len(accumulated):
                     yield frame({"type": "delta", "text": text[len(accumulated):]})
                 yield frame({
@@ -103,19 +121,25 @@ def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180)
             pending.cancel()
             loop.run_until_complete(asyncio.gather(pending, return_exceptions=True))
         try:
-            if stream is not None and hasattr(stream, "aclose"):
+            if not stream_exhausted and stream is not None and hasattr(stream, "aclose"):
                 loop.run_until_complete(stream.aclose())
+            # Closing an outer SDK generator can schedule a nested generator's
+            # finalizer with call_soon. Give that finalizer one loop turn before
+            # closing the HTTP client and event loop, otherwise Python can emit
+            # "Task was destroyed but it is pending" for the legacy httpx path.
+            loop.run_until_complete(asyncio.sleep(0))
         finally:
             try:
-                # Closing the outer SDK iterator may leave nested generators
-                # pending. Let those release response bodies before the client.
-                loop.run_until_complete(loop.shutdown_asyncgens())
+                # The SDK iterator and client own every async generator created
+                # for this request. Do not call loop.shutdown_asyncgens() here:
+                # httpcore2 2.12's nested safe_async_iterate context managers
+                # can receive a second GeneratorExit during global shutdown and
+                # emit "generator didn't stop after athrow()" even though the
+                # response is already being closed by the SDK.
+                if model is not None and hasattr(model, "client"):
+                    loop.run_until_complete(model.client.close())
             finally:
-                try:
-                    if model is not None and hasattr(model, "client"):
-                        loop.run_until_complete(model.client.close())
-                finally:
-                    loop.close()
+                loop.close()
 
 
 def create_stream_blueprint(model_factory=None):

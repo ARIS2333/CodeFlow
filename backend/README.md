@@ -113,7 +113,9 @@ generation deadline. Clients must not treat EOF alone as successful completion.
 
 Each request owns its streaming AgentScope model, async event loop, and HTTP
 client. Text deltas are forwarded immediately; the SDK's final accumulated
-snapshot is checked, not appended again. Reasoning/tool blocks are not forwarded.
+snapshot is checked, not appended again. After that snapshot, the iterator is
+advanced to its natural end so nested SSE/HTTP response contexts close without
+a second forced async-generator shutdown. Reasoning/tool blocks are not forwarded.
 Client disconnects close the upstream response when the WSGI server detects
 them (heartbeats permit detection during silent periods). Provider transport
 retries are disabled for streaming and non-streaming requests; the frontend
