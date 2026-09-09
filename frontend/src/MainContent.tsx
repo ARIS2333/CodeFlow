@@ -11,6 +11,11 @@ import { Prec } from '@codemirror/state';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import ReactMarkdown from 'react-markdown';
 import UploadPopup from './UploadPopup';
+import {
+  EXAMPLE_PROBLEM_DETAILS,
+  EXAMPLE_PROBLEM_SOURCE,
+  EXAMPLE_SUBMISSION,
+} from './config/exampleWorkspace';
 import { feedbackSystemPromptFor } from './config/systemPrompt_GenerateFeedback';
 import { requestStructured } from './lib/llmClient';
 import { requestReliableFlowchart } from './lib/flowchartClient';
@@ -272,6 +277,34 @@ export const MainContent = ({
     clearWorkspaceCache();
   };
 
+  const handleLoadExample = () => {
+    const exampleAlreadyLoaded = language === 'java'
+      && problem === EXAMPLE_PROBLEM_SOURCE
+      && code === EXAMPLE_SUBMISSION;
+    const hasWorkspaceContent = problem !== null
+      || code.trim() !== STARTER_CODE[language].trim();
+
+    if (!exampleAlreadyLoaded && hasWorkspaceContent && !window.confirm(
+      'Load the example? This will replace your current problem and code.'
+    )) return;
+
+    clearResults();
+    if (uploadCommitTimer.current) {
+      clearTimeout(uploadCommitTimer.current);
+      uploadCommitTimer.current = null;
+    }
+    setUploadPopupVersion((version) => version + 1);
+    setIsUploadPopupOpen(false);
+    setIsApiProcessing(false);
+    setIsLoading(false);
+    setApiError(null);
+    setProblem(EXAMPLE_PROBLEM_SOURCE);
+    setProblemDetails(EXAMPLE_PROBLEM_DETAILS);
+    setLanguage('java');
+    setCode(EXAMPLE_SUBMISSION);
+    setCursor({ line: 1, column: 1 });
+  };
+
   const handleRunCode = () => {
     // Keep the run button locked until both tasks settle, but display each
     // task's result as soon as it is ready. The ref also guards double clicks.
@@ -403,6 +436,18 @@ export const MainContent = ({
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
           <div className="mb-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLoadExample}
+              disabled={isRunning || isApiProcessing || isLoading}
+              className={`rounded-md border px-4 py-2 transition-colors ${
+                isRunning || isApiProcessing || isLoading
+                  ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                  : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              Load Example
+            </button>
             <button
               type="button"
               onClick={handleClearAll}

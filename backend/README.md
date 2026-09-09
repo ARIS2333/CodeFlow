@@ -43,6 +43,13 @@ shows the required keys if you need to rotate them.
 ./venv/bin/python app.py
 ```
 
+or
+```bash
+./venv/Scripts/python.exe app.py
+```
+
+
+
 This command is for local development. Public deployment uses Gunicorn with
 `gunicorn -c gunicorn.conf.py app:app`; see the repository's `DEPLOYMENT.md`.
 
