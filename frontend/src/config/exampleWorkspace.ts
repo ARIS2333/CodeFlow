@@ -20,11 +20,10 @@ export const EXAMPLE_PROBLEM_DETAILS: ProblemDetails = {
 export const EXAMPLE_SUBMISSION = `public boolean in1To10(int n, boolean outsideMode) {
     if (n >= 1 && n <= 10) {
         return true;
-    } else if (outsideMode = true) {
+    } else if (outsideMode == true) {
         if (n <= 1 || n >= 10) {
             return true;
         }
-    } else {
-        return false;
     }
+    return false;
 }`;
