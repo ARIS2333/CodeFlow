@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 
 from agentscope.credential import CredentialFactory
 from agentscope.model import ChatModelBase, DashScopeChatModel
+from openai_responses import CodeFlowResponseModel
 
 # Providers offered to students. Every one of these credentials takes the same
 # `api_key` + optional `base_url` pair, which is what keeps `build_model`
@@ -229,6 +230,8 @@ def build_model(spec: ModelSpec, *, stream: bool = False) -> ChatModelBase:
 
     credential = CredentialFactory.from_dict(payload)
     model_class = credential.get_chat_model_class()
+    if spec.provider == "openai" and spec.model == "gpt-5.6-sol":
+        model_class = CodeFlowResponseModel
 
     kwargs: dict[str, object] = {
         "credential": credential,

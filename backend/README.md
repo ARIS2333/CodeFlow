@@ -141,3 +141,27 @@ Run local tests without any live model calls:
 ```bash
 ./venv/bin/python -m unittest discover -s tests
 ```
+# OpenAI Responses configuration
+
+For the shared research model, set the backend environment variables:
+
+```dotenv
+PROVIDER=openai
+BASE_URL=https://api.openai.com/v1
+MODEL=gpt-5.6-sol
+API_KEY=your-openai-api-key
+RESEARCH_PASSWORD=your-study-password
+```
+
+Restart the backend after changing local configuration. For Render, update the
+backend service's environment variables separately and redeploy.
+
+The exact `openai` / `gpt-5.6-sol` combination uses AgentScope's Responses
+adapter with low reasoning effort, standard reasoning mode, automatic reasoning
+summary, medium text verbosity, and `store=True`. It requests encrypted reasoning
+content and search sources as in the supplied API configuration, but enables no
+tools. Other provider/model combinations retain their existing adapters.
+
+The frontend keeps its existing NDJSON stream. Only text deltas are forwarded;
+reasoning summaries are excluded. An incomplete, failed, or prematurely ended
+Responses stream produces an error instead of a successful completion.
