@@ -40,11 +40,13 @@ shows the required keys if you need to rotate them.
 ## Run
 
 ```bash
-./venv/bin/python app.py
+source venv/bin/activate
+./venv//python app.py
 ```
 
 or
 ```bash
+source venv/Scripts/activate
 ./venv/Scripts/python.exe app.py
 ```
 
