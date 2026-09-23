@@ -14,7 +14,7 @@ import UploadPopup from './UploadPopup';
 import {
   EXAMPLE_PROBLEM_DETAILS,
   EXAMPLE_PROBLEM_SOURCE,
-  EXAMPLE_SUBMISSION,
+  EXAMPLE_SUBMISSIONS,
 } from './config/exampleWorkspace';
 import { feedbackSystemPromptFor } from './config/systemPrompt_GenerateFeedback';
 import { requestStructured } from './lib/llmClient';
@@ -291,10 +291,10 @@ export const MainContent = ({
     clearWorkspaceCache();
   };
 
-  const handleLoadExample = () => {
-    const exampleAlreadyLoaded = language === 'java'
+  const handleLoadExample = (exampleLanguage: SupportedLanguage) => {
+    const exampleAlreadyLoaded = language === exampleLanguage
       && problem === EXAMPLE_PROBLEM_SOURCE
-      && code === EXAMPLE_SUBMISSION;
+      && code === EXAMPLE_SUBMISSIONS[exampleLanguage];
     const hasWorkspaceContent = problem !== null
       || code.trim() !== STARTER_CODE[language].trim();
 
@@ -314,8 +314,8 @@ export const MainContent = ({
     setApiError(null);
     setProblem(EXAMPLE_PROBLEM_SOURCE);
     setProblemDetails(EXAMPLE_PROBLEM_DETAILS);
-    setLanguage('java');
-    setCode(EXAMPLE_SUBMISSION);
+    setLanguage(exampleLanguage);
+    setCode(EXAMPLE_SUBMISSIONS[exampleLanguage]);
     setCursor({ line: 1, column: 1 });
   };
 
@@ -461,9 +461,14 @@ export const MainContent = ({
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
           <div className="mb-4 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleLoadExample}
+            <select
+              aria-label="Load example language"
+              value=""
+              onChange={(event) => {
+                if (event.target.value) {
+                  handleLoadExample(event.target.value as SupportedLanguage);
+                }
+              }}
               disabled={isRunning || isApiProcessing || isLoading}
               className={`rounded-md border px-4 py-2 transition-colors ${
                 isRunning || isApiProcessing || isLoading
@@ -471,8 +476,11 @@ export const MainContent = ({
                   : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
               }`}
             >
-              Load Example
-            </button>
+              <option value="" disabled>Load Example</option>
+              <option value="java">Java example</option>
+              <option value="python">Python example</option>
+              <option value="cpp">C++ example</option>
+            </select>
             <button
               type="button"
               onClick={handleClearAll}
