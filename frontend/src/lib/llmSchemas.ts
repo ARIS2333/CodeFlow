@@ -653,7 +653,7 @@ export const validateCodeEvaluationForAnalysis = (
   const result = validateCodeEvaluation(input);
   if (!result.ok) return result;
 
-  const blockingVerdict = codeAnalysis.language === 'java'
+  const blockingVerdict = codeAnalysis.language === 'java' || codeAnalysis.language === 'cpp'
     ? codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0
       ? '❌ Compile Error'
       : undefined

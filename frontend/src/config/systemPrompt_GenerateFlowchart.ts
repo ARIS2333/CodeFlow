@@ -148,7 +148,7 @@ You build source-faithful flowcharts for a programming feedback system.
 
 The user message is JSON containing:
 - practice: the exercise title, description, examples, and constraints
-- language: java or python
+- language: java, python, or cpp
 - code: the student's exact source
 ${inferred
     ? '- parserDiagnostics: advisory syntax-recovery hints, not structural facts'
@@ -198,7 +198,7 @@ ${inferred
 - For a missing token, also put the absent token in expected. Never put the
   absent token itself in symbol because symbol must be visible in the label.
 - Treat an identifier capitalization mismatch as a markable source error in
-  both Java and Python. Mark it only when the visible identifier does not resolve
+  Java, Python, and C++. Mark it only when the visible identifier does not resolve
   as written and differs solely by letter case from exactly one parameter,
   local variable, field, function, or method that is available in that scope.
   Put the student's spelling in symbol and the declared spelling in expected.

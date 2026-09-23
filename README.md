@@ -30,7 +30,7 @@ mistakes.
 - **Personalized problems** — students paste in their own practice problem;
   the system reformats it and generates illustrative examples.
 - **Code decomposition & visualization** — an error-tolerant Tree-sitter pass
-  first anchors the student's Java or Python structures to exact source
+  first anchors the student's Java, Python, or C++ structures to exact source
   locations. The LLM uses those facts to build nodes and control-flow edges,
   and local semantic validation checks the result before it is rendered.
 - **Error detection** — syntax errors (e.g. `=` vs `==`, missing semicolons,
@@ -51,7 +51,7 @@ mistakes.
 
 1. **Upload a problem** — paste a problem description; the LLM structures
    it into a title, description, and examples.
-2. **Write a solution** — the built-in editor supports Java and Python.
+2. **Write a solution** — the built-in editor supports Java, Python, and C++.
 3. **Run it** — the LLM evaluates correctness against test cases and shows
    the results.
 4. **View flowcharts** — a panel opens showing the student's flowchart

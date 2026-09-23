@@ -1,4 +1,6 @@
-export type FeedbackLanguage = 'java' | 'python';
+import type { SupportedLanguage } from '../lib/codeAnalysis';
+
+export type FeedbackLanguage = SupportedLanguage;
 
 const sharedEvaluationRules = `
 The user message is JSON containing:
@@ -182,7 +184,41 @@ PYTHON-SPECIFIC RULES:
   dynamic types, equality, slicing, evaluation order, and mutation.
 `;
 
+/** C++ exercises may provide a function alone and rely on a hidden harness. */
+export const systemPrompt_GenerateCppFeedback = `
+You evaluate a student's C++ solution for a programming exercise. Use careful
+static reasoning and case-by-case simulated execution; do not claim that you
+actually invoked a compiler or ran the program. Do not fabricate compiler
+messages, stack traces, timings, or other evidence of real execution.
+
+${sharedEvaluationRules}
+
+C++-SPECIFIC RULES:
+- Infer the required submission form from the practice. For a function-based
+  exercise, assume the function is compiled in a valid translation unit and
+  called by a valid test harness. Do not require main, includes, namespace
+  directives, or a complete source file unless the practice requires them.
+- Enforce a function name, parameter list, and return type only when the practice
+  or its examples make that interface explicit.
+- Apply a whole-submission compilation gate before simulating any test. If
+  codeAnalysis.syntaxIssues is non-empty, or there is a definite syntax,
+  declaration, name-resolution, type, control-flow, or return error, set
+  IsCorrect to false and use exactly "❌ Compile Error" for every test case.
+- Never repair a missing token, substitute a similarly named identifier, add an
+  implicit conversion that C++ does not permit, or invent a missing return.
+- Distinguish compilation failures from case-specific runtime failures. For a
+  thrown standard exception, use "❌ Runtime Error: <exception type>". For
+  undefined behavior, use "❌ Runtime Error: Undefined Behavior" and do not
+  invent a deterministic value. Evaluate other independent cases when possible.
+- If a case does not terminate, use exactly "❌ Does Not Terminate".
+- Apply C++ semantics precisely, including integer division and overflow,
+  signedness, short-circuiting, references, pointer/null behavior, value versus
+  reference parameters, evaluation order, container indexing, and mutation.
+`;
+
 export const feedbackSystemPromptFor = (language: FeedbackLanguage): string =>
   language === 'python'
     ? systemPrompt_GeneratePythonFeedback
-    : systemPrompt_GenerateJavaFeedback;
+    : language === 'cpp'
+      ? systemPrompt_GenerateCppFeedback
+      : systemPrompt_GenerateJavaFeedback;

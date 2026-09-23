@@ -142,6 +142,41 @@ class CodeAnalysisTests(unittest.TestCase):
         self.assertEqual(returns[-1]["parentAnchor"], elif_fact["anchor"])
         self.assertEqual(returns[-1]["branch"], "false")
 
+    def test_cpp_extracts_functions_loops_conditions_and_returns(self):
+        result = analyze_code(
+            "cpp",
+            """int sumPositive(const std::vector<int>& values) {
+  int total = 0;
+  for (int value : values) {
+    if (value > 0) total += value;
+  }
+  return total;
+}
+""",
+        )
+
+        self.assertEqual(result["parseStatus"], "clean")
+        self.assertEqual([item["name"] for item in result["functions"]], ["sumPositive"])
+        self.assertEqual(
+            [fact["construct"] for fact in result["facts"]],
+            ["declaration", "range-for", "if", "expression", "return"],
+        )
+        loop = next(fact for fact in result["facts"] if fact["construct"] == "range-for")
+        condition = next(fact for fact in result["facts"] if fact["construct"] == "if")
+        self.assertEqual(condition["parentAnchor"], loop["anchor"])
+        self.assertEqual(condition["branch"], "body")
+        self.assertEqual(result["compileIssues"], [])
+
+    def test_cpp_recovers_a_missing_parenthesis(self):
+        result = analyze_code(
+            "cpp",
+            "int sign(int value) { if (value > 0 { return 1; } return 0; }",
+        )
+
+        self.assertEqual(result["parseStatus"], "recovered")
+        self.assertTrue(result["syntaxIssues"])
+        self.assertTrue(any(fact["construct"] == "if" for fact in result["facts"]))
+
     def test_python_reports_but_does_not_crash_on_incomplete_code(self):
         result = analyze_code(
             "python",

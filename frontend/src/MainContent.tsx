@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { java } from '@codemirror/lang-java';
 import { python } from '@codemirror/lang-python';
-import { javascript } from '@codemirror/lang-javascript';
+import { cpp } from '@codemirror/lang-cpp';
 import { autocompletion, CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { keymap, type ViewUpdate } from '@codemirror/view';
 import { acceptCompletion, completionKeymap } from '@codemirror/autocomplete';
@@ -36,7 +36,11 @@ import {
   type ProblemDetails,
   type TestResult,
 } from './lib/llmSchemas';
-import { requestCodeAnalysis, type CodeAnalysis } from './lib/codeAnalysis';
+import {
+  requestCodeAnalysis,
+  type CodeAnalysis,
+  type SupportedLanguage,
+} from './lib/codeAnalysis';
 import { toModelConfig, type ModelSettings } from './lib/modelSettings';
 import {
   clearWorkspaceCache,
@@ -72,21 +76,26 @@ const pythonKeywords = [
   'raise', 'return', 'try', 'while', 'with', 'yield', 'True', 'False', 'None'
 ];
 
-// JavaScript keywords for autocompletion
-const jsKeywords = [
-  'abstract', 'arguments', 'await', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class', 'const',
-  'continue', 'debugger', 'default', 'delete', 'do', 'double', 'else', 'enum', 'eval', 'export', 'extends',
-  'false', 'final', 'finally', 'float', 'for', 'function', 'goto', 'if', 'implements', 'import', 'in',
-  'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new', 'null', 'package', 'private', 'protected',
-  'public', 'return', 'short', 'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws',
-  'transient', 'true', 'try', 'typeof', 'var', 'void', 'volatile', 'while', 'with', 'yield'
+// C++ keywords (including alternative operators and modern standard additions).
+const cppKeywords = [
+  'alignas', 'alignof', 'and', 'and_eq', 'asm', 'atomic_cancel', 'atomic_commit', 'atomic_noexcept',
+  'auto', 'bitand', 'bitor', 'bool', 'break', 'case', 'catch', 'char', 'char8_t', 'char16_t', 'char32_t',
+  'class', 'compl', 'concept', 'const', 'consteval', 'constexpr', 'constinit', 'const_cast', 'continue',
+  'co_await', 'co_return', 'co_yield', 'decltype', 'default', 'delete', 'do', 'double', 'dynamic_cast',
+  'else', 'enum', 'explicit', 'export', 'extern', 'false', 'float', 'for', 'friend', 'goto', 'if',
+  'inline', 'int', 'long', 'mutable', 'namespace', 'new', 'noexcept', 'not', 'not_eq', 'nullptr',
+  'operator', 'or', 'or_eq', 'private', 'protected', 'public', 'reflexpr', 'register', 'reinterpret_cast',
+  'requires', 'return', 'short', 'signed', 'sizeof', 'static', 'static_assert', 'static_cast', 'struct',
+  'switch', 'synchronized', 'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef',
+  'typeid', 'typename', 'union', 'unsigned', 'using', 'virtual', 'void', 'volatile', 'wchar_t', 'while',
+  'xor', 'xor_eq'
 ];
 
 /**
  * The starter code each language opens with. Kept as constants so that
  * switching language can tell an untouched template from work worth keeping.
  */
-const STARTER_CODE: Record<'java' | 'python', string> = {
+const STARTER_CODE: Record<SupportedLanguage, string> = {
   java: `public int MyFunction(int a, int b) {
   // Change the input variable and the return type of the function as needed.
 
@@ -94,6 +103,10 @@ const STARTER_CODE: Record<'java' | 'python', string> = {
   python: `def MyFunction(a, b):
   # Change the input variable as needed.
   `,
+  cpp: `int MyFunction(int a, int b) {
+  // Change the input variables and return type as needed.
+
+}`,
 };
 
 // Autocompletion function for Java
@@ -128,12 +141,12 @@ const pythonCompletion = (context: CompletionContext): CompletionResult | null =
   };
 };
 
-// Autocompletion function for JavaScript
-const jsCompletion = (context: CompletionContext): CompletionResult | null => {
+// Autocompletion function for C++
+const cppCompletion = (context: CompletionContext): CompletionResult | null => {
   const word = context.matchBefore(/\w*/);
   if (!word || (word.from == word.to && !context.explicit)) return null;
 
-  const options = jsKeywords.map(keyword => ({
+  const options = cppKeywords.map(keyword => ({
     label: keyword,
     type: "keyword"
   }));
@@ -158,7 +171,7 @@ export const MainContent = ({
   const [code, setCode] = useState(
     cachedWorkspace?.code ?? STARTER_CODE[initialLanguage],
   );
-  const [language, setLanguage] = useState<'java' | 'python'>(initialLanguage);
+  const [language, setLanguage] = useState<SupportedLanguage>(initialLanguage);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [evaluationState, setEvaluationState] = useState<EvaluationState>(
@@ -194,12 +207,12 @@ export const MainContent = ({
    * template is replaced silently; real work has to be confirmed first, and
    * declining leaves both the code and the language selector where they were.
    */
-  const handleLanguageChange = (next: 'java' | 'python') => {
+  const handleLanguageChange = (next: SupportedLanguage) => {
     if (next === language) return;
 
     const untouched = code.trim() === STARTER_CODE[language].trim() || !code.trim();
     if (!untouched && !window.confirm(
-      `Switch to ${next === 'java' ? 'Java' : 'Python'}? Your current code will be replaced.`
+      `Switch to ${next === 'java' ? 'Java' : next === 'python' ? 'Python' : 'C++'}? Your current code will be replaced.`
     )) return;
 
     setLanguage(next);
@@ -406,7 +419,7 @@ export const MainContent = ({
       autocompletion({override: [
         language === 'java' ? javaCompletion :
         language === 'python' ? pythonCompletion :
-        jsCompletion
+        cppCompletion
       ]}),
       // Highest precedence: react-codemirror installs basicSetup's keymaps
       // ahead of these extensions, and its Enter binding would otherwise
@@ -436,7 +449,7 @@ export const MainContent = ({
     } else if (language === 'python') {
       return [...baseExtensions, python()];
     } else {
-      return [...baseExtensions, javascript()];
+      return [...baseExtensions, cpp()];
     }
   };
 
@@ -596,7 +609,9 @@ export const MainContent = ({
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               </div>
               <span className="text-gray-300 text-sm ml-4">
-                {language === 'java' ? 'Solution.java' : 'Solution.py'}
+                {language === 'java' ? 'Solution.java'
+                  : language === 'python' ? 'Solution.py'
+                    : 'Solution.cpp'}
               </span>
             </div>
             <div className="flex items-center space-x-2">
@@ -615,11 +630,12 @@ export const MainContent = ({
               </button>
               <select
                 value={language}
-                onChange={(e) => handleLanguageChange(e.target.value as 'java' | 'python')}
+                onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
                 className="bg-gray-700 text-white text-sm rounded px-2 py-1"
               >
                 <option value="java">Java</option>
                 <option value="python">Python</option>
+                <option value="cpp">C++</option>
               </select>
               <button
                 onClick={handleRunCode}

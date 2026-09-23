@@ -18,7 +18,7 @@ credential is shaped differently (Ollama uses `host`, xAI `api_host`, Gemini has
 no base URL) would need a field mapping as well.
 
 The backend also exposes an error-tolerant Tree-sitter analysis endpoint used to
-ground flowchart generation. It extracts source-positioned Java/Python control,
+ground flowchart generation. It extracts source-positioned Java/Python/C++ control,
 process, terminal, nesting, and syntax-recovery facts without executing student
 code. Clean parses constrain student graphs through source anchors. Recovered
 parses instead ask the model to infer flow from the original source without
@@ -63,7 +63,7 @@ Serves on `http://127.0.0.1:5001`:
   whether this server has a research password configured
 - `POST /api/verify-config` — check a `modelConfig` without spending a model call
 - `POST /api/analyze-code` — deterministic Tree-sitter facts from
-  `{ "language": "java" | "python", "code": "..." }`
+  `{ "language": "java" | "python" | "cpp", "code": "..." }`
 
 ## Request size
 

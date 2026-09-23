@@ -73,7 +73,7 @@ class ResponsesTests(unittest.TestCase):
         payload = requests[0]
         self.assertTrue(payload["stream"])
         self.assertEqual(payload["model"], "gpt-5.6-sol")
-        self.assertEqual(payload["reasoning"], {"effort": "low", "mode": "standard", "summary": "auto"})
+        self.assertEqual(payload["reasoning"], {"effort": "none", "mode": "standard", "summary": "auto"})
         self.assertEqual(payload["text"], {"format": {"type": "text"}, "verbosity": "medium"})
         self.assertTrue(payload["store"])
         self.assertEqual(payload["include"], ["reasoning.encrypted_content", "web_search_call.action.sources"])

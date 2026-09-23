@@ -15,6 +15,7 @@ from typing import Any
 from tree_sitter import Language, Node, Parser
 import tree_sitter_java
 import tree_sitter_python
+import tree_sitter_cpp
 
 
 MAX_SOURCE_BYTES = 100_000
@@ -39,11 +40,20 @@ CONTROL_TYPES: dict[str, dict[str, str]] = {
         "try_statement": "try",
         "match_statement": "match",
     },
+    "cpp": {
+        "if_statement": "if",
+        "while_statement": "while",
+        "for_statement": "for",
+        "for_range_loop": "range-for",
+        "do_statement": "do-while",
+        "switch_statement": "switch",
+    },
 }
 
 FUNCTION_TYPES: dict[str, set[str]] = {
     "java": {"method_declaration", "constructor_declaration"},
     "python": {"function_definition"},
+    "cpp": {"function_definition"},
 }
 
 PROCESS_TYPES: dict[str, set[str]] = {
@@ -56,6 +66,11 @@ PROCESS_TYPES: dict[str, set[str]] = {
         "expression_statement",
         "assert_statement",
         "pass_statement",
+    },
+    "cpp": {
+        "declaration",
+        "expression_statement",
+        "static_assert_declaration",
     },
 }
 
@@ -72,6 +87,12 @@ EXIT_TYPES: dict[str, dict[str, tuple[str, str]]] = {
         "break_statement": ("process", "break"),
         "continue_statement": ("process", "continue"),
     },
+    "cpp": {
+        "return_statement": ("terminal", "return"),
+        "throw_statement": ("terminal", "throw"),
+        "break_statement": ("process", "break"),
+        "continue_statement": ("process", "continue"),
+    },
 }
 
 SEQUENCE_CONTAINERS = {
@@ -79,6 +100,7 @@ SEQUENCE_CONTAINERS = {
     "module",
     "program",
     "switch_block_statement_group",
+    "compound_statement",
 }
 
 
@@ -107,17 +129,45 @@ class CodeAnalysisError(ValueError):
     """The source could not be analysed because the request is invalid."""
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def _language(language: str) -> Language:
     if language == "java":
         return Language(tree_sitter_java.language())
     if language == "python":
         return Language(tree_sitter_python.language())
+    if language == "cpp":
+        return Language(tree_sitter_cpp.language())
     raise CodeAnalysisError(f"Unsupported language: {language}")
 
 
 def _source_text(node: Node, source: bytes) -> str:
     return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
+
+
+def _function_name_node(node: Node) -> Node | None:
+    """Find a function name through C++'s nested declarator nodes."""
+    direct = node.child_by_field_name("name")
+    if direct is not None:
+        return direct
+    declarator = node.child_by_field_name("declarator")
+    if declarator is None:
+        return None
+
+    def find(candidate: Node) -> Node | None:
+        if candidate.type in {
+            "identifier",
+            "field_identifier",
+            "operator_name",
+            "destructor_name",
+        }:
+            return candidate
+        for child in candidate.named_children:
+            result = find(child)
+            if result is not None:
+                return result
+        return None
+
+    return find(declarator)
 
 
 def _compact(text: str, limit: int = 500) -> str:
@@ -340,13 +390,13 @@ def _java_compile_issues(root: Node, source: bytes) -> list[dict[str, Any]]:
 
 
 def analyze_code(language: str, code: str) -> dict[str, Any]:
-    """Return source-backed structural facts for Java or Python code."""
+    """Return source-backed structural facts for Java, Python, or C++ code."""
     if not isinstance(language, str):
         raise CodeAnalysisError("Language must be a string.")
     normalized_language = language.strip().lower()
     if normalized_language not in CONTROL_TYPES:
         raise CodeAnalysisError(
-            f'Unsupported language "{language}". Expected "java" or "python".'
+            f'Unsupported language "{language}". Expected "java", "python", or "cpp".'
         )
     if not isinstance(code, str) or not code.strip():
         raise CodeAnalysisError("Code must be a non-empty string.")
@@ -417,7 +467,7 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
         node_type = node.type
 
         if node_type in FUNCTION_TYPES[normalized_language]:
-            name_node = node.child_by_field_name("name")
+            name_node = _function_name_node(node)
             name = (
                 _compact(_source_text(name_node, source))
                 if name_node is not None

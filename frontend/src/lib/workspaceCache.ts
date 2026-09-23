@@ -1,13 +1,14 @@
 import type { EvaluationState, FlowchartState } from './analysisRun';
 import type { TraceState } from './traceRun';
 import type { ProblemDetails } from './llmSchemas';
+import type { SupportedLanguage } from './codeAnalysis';
 
 const WORKSPACE_CACHE_KEY = 'codeflow.workspace.v1';
 
 export interface WorkspaceCache {
   version: 1;
   code?: string;
-  language?: 'java' | 'python';
+  language?: SupportedLanguage;
   problem?: string | null;
   problemDetails?: ProblemDetails | null;
   evaluationState?: EvaluationState;

@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
   feedbackSystemPromptFor,
+  systemPrompt_GenerateCppFeedback,
   systemPrompt_GenerateJavaFeedback,
   systemPrompt_GeneratePythonFeedback,
 } from '../src/config/systemPrompt_GenerateFeedback.ts';
@@ -38,8 +39,22 @@ test('Python feedback separates syntax errors from runtime exceptions', () => {
   assert.doesNotMatch(prompt, /use exactly\s+"❌ Compile Error"/);
 });
 
+test('C++ feedback uses compilation and undefined-behavior rules', () => {
+  const prompt = feedbackSystemPromptFor('cpp');
+  assert.equal(prompt, systemPrompt_GenerateCppFeedback);
+  assert.match(prompt, /C\+\+-SPECIFIC RULES/);
+  assert.match(prompt, /"❌ Compile Error"/);
+  assert.match(prompt, /valid translation unit/);
+  assert.match(prompt, /Runtime Error: Undefined Behavior/);
+  assert.match(prompt, /value versus\s+reference parameters/);
+});
+
 test('both prompts derive expected values independently and preserve the JSON contract', () => {
-  for (const prompt of [systemPrompt_GenerateJavaFeedback, systemPrompt_GeneratePythonFeedback]) {
+  for (const prompt of [
+    systemPrompt_GenerateJavaFeedback,
+    systemPrompt_GeneratePythonFeedback,
+    systemPrompt_GenerateCppFeedback,
+  ]) {
     assert.match(prompt, /from the practice before considering/);
     assert.match(prompt, /at least five distinct valid test cases/);
     assert.match(prompt, /"IsCorrect"/);

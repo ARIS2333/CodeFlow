@@ -4,7 +4,7 @@
 
 CodeFlow is a web-based learning tool for students in introductory programming courses. It helps students understand how their solution works by turning program logic into visual, step-by-step feedback.
 
-Instead of giving students a corrected answer immediately, CodeFlow encourages them to examine their own approach, find where it differs from a recommended approach, and revise the solution themselves. The current system supports introductory Java and Python exercises.
+Instead of giving students a corrected answer immediately, CodeFlow encourages them to examine their own approach, find where it differs from a recommended approach, and revise the solution themselves. The current system supports introductory Java, Python, and C++ exercises.
 
 ## The student experience
 

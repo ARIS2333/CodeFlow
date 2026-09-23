@@ -1,6 +1,6 @@
 # Flowchart generation workflow
 
-CodeFlow turns a student's Java or Python solution into two comparable flowcharts: the student's logic and a recommended solution. The workflow combines source parsing, LLM generation, local validation, and automatic diagram layout.
+CodeFlow turns a student's Java, Python, or C++ solution into two comparable flowcharts: the student's logic and a recommended solution. The workflow combines source parsing, LLM generation, local validation, and automatic diagram layout.
 
 ## Overview
 
@@ -27,7 +27,7 @@ The diagram shows the main path. Transport failures and exhausted generation att
 
 ## 1. Start a run
 
-**Input:** The structured practice problem (title, description, examples, and constraints), the student's exact Java or Python source, and the selected model configuration.
+**Input:** The structured practice problem (title, description, examples, and constraints), the student's exact Java, Python, or C++ source, and the selected model configuration.
 
 Clicking **Run Code** captures these inputs for the run and starts two independent tasks: solution evaluation and flowchart generation. Evaluation asks the model for a correctness verdict and test results; flowchart generation begins with source analysis. Model credentials travel in a separate request field, outside the prompt text.
 

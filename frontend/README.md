@@ -5,7 +5,7 @@ This is a React-based application designed to help developers practice coding pr
 ## Features
 
 - **Practice Problem Section**: View and upload coding practice problems with structured formatting
-- **Code Editor**: Built-in code editor with syntax highlighting for Java and Python solutions
+- **Code Editor**: Built-in code editor with syntax highlighting for Java, Python, and C++ solutions
 - **Upload Functionality**: Upload custom practice problems via popup interface with AI processing
 - **Code Evaluation**: Run and evaluate your code solutions against practice problems with automated feedback
 - **Flowchart Visualization**: Visualize code logic flows using interactive diagrams with error highlighting
@@ -55,7 +55,7 @@ src/
 ### Main Content Area
 The main content area ([MainContent.tsx](src/MainContent.tsx)) contains:
 - Practice problem display with examples
-- Code editor with support for Java and Python
+- Code editor with support for Java, Python, and C++
 - Run button to execute code and receive feedback
 - Output panel showing evaluation results
 
@@ -67,7 +67,7 @@ Evaluation selects a language-specific policy: Java distinguishes source-wide
 compilation errors from case-specific runtime exceptions, while Python reports
 parse failures as syntax errors and execution-time exceptions as runtime errors.
 Both policies share the same `IsCorrect`/`TestResults` JSON response contract.
-Flowchart token annotations also cover unresolved Java or Python identifiers
+Flowchart token annotations also cover unresolved Java, Python, or C++ identifiers
 that differ only by capitalization from one in-scope declaration, such as
 `OutsideMode` when the parameter is declared as `outsideMode`.
 Closing Code Analysis does not stop generation. Run Code stays disabled while
@@ -92,7 +92,7 @@ The flowchart functionality ([FlowchartDiagram.tsx](src/FlowchartDiagram.tsx)) p
 Flowchart generation selects its mode before the first model request:
 
 1. The backend uses error-tolerant Tree-sitter grammars to extract ordered,
-   source-positioned facts from the exact Java/Python submission.
+   source-positioned facts from the exact Java/Python/C++ submission.
 2. For a clean parse, the LLM must cover each required parser fact through
    validated source anchors while generating the student and reference graphs.
 3. If parsing reports recovery or syntax issues, the first LLM request instead
@@ -220,7 +220,7 @@ The config folder contains system prompts that define how the AI processes:
 
 1. **Upload a Problem**: Users can upload coding practice problems through the upload popup, which uses AI to parse and structure the problem.
 
-2. **Code Solutions**: Using the built-in code editor, users can write solutions in Java or Python with syntax highlighting and autocompletion.
+2. **Code Solutions**: Using the built-in code editor, users can write solutions in Java, Python, or C++ with syntax highlighting and autocompletion.
 
 3. **Run and Evaluate**: When users run their code, the application sends the problem description, language, and code to backend services for evaluation.
 

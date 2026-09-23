@@ -2,7 +2,7 @@ import { CODE_ANALYSIS_URL } from '../config/apiConfig.ts';
 import { isObject } from './llmJson.ts';
 import { makeApiRequestWithRetry } from './llmClient.ts';
 
-export type SupportedLanguage = 'java' | 'python';
+export type SupportedLanguage = 'java' | 'python' | 'cpp';
 
 export type CodeFactKind = 'condition' | 'process' | 'terminal';
 

@@ -7,7 +7,7 @@ on top of them: each step you emit lights up one node of one flowchart.
 
 The user message is JSON containing:
 - practice: the exercise title, description, examples, and constraints
-- language: java or python
+- language: java, python, or cpp
 - code: the student's exact source
 - testCase: the input to run, and the correct expected result when it is known
 - flowcharts.student: the flowchart of the student's code, as drawn

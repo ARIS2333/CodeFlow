@@ -37,12 +37,14 @@ const mockRequests = (t: TestContext, analysis: CodeAnalysis, replies: unknown[]
   return calls;
 };
 
-for (const language of ['java', 'python'] as const) {
+for (const language of ['java', 'python', 'cpp'] as const) {
   test(`${language}: clean code keeps facts, anchors, and one model request`, async (t) => {
     const analysis = analysisStub(language);
     const calls = mockRequests(t, analysis, [sampleGraph(true)]);
     const contexts: FlowchartGenerationContext[] = [];
-    const code = language === 'java' ? request.code : 'def f(n):\n    if n > 0: return 1\n    return 0\n';
+    const code = language === 'java' ? request.code
+      : language === 'python' ? 'def f(n):\n    if n > 0: return 1\n    return 0\n'
+        : 'int f(int n) { if (n > 0) return 1; return 0; }';
     const result = await requestReliableFlowchart({ ...request, language, code }, {
       modelConfig: TEST_MODEL_CONFIG,
       onGenerationReady: (context) => {
