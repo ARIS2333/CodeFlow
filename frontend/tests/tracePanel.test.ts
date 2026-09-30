@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import type { FlowchartState } from '../src/lib/analysisRun.ts';
+import type { FlowchartRegenerationState, FlowchartState } from '../src/lib/analysisRun.ts';
 import type { TraceState } from '../src/lib/traceRun.ts';
 import { createTraceValidator } from '../src/lib/executionTrace.ts';
 import { traceGraphs, traceReply } from './traceFixtures.ts';
@@ -32,6 +32,9 @@ const { default: RightContent } = await import(viewModule('RightContent.tsx', {
     flowchartState: FlowchartState;
     traceState: TraceState;
     onRetrace: () => void;
+    onRegenerateFlowchart: () => void;
+    canRegenerateFlowchart: boolean;
+    flowchartRegenerationState: FlowchartRegenerationState;
   }>;
 };
 
@@ -53,6 +56,9 @@ const render = (traceState: TraceState) =>
     flowchartState: { status: 'success', data: graphs },
     traceState,
     onRetrace: () => {},
+    onRegenerateFlowchart: () => {},
+    canRegenerateFlowchart: true,
+    flowchartRegenerationState: { status: 'idle' },
   }));
 
 // The trace area is a separate section, so each half can be asserted on its own.
@@ -74,6 +80,7 @@ test('the comparison charts above are left alone while the run is replayed below
   // Above: the original side-by-side comparison, with no step readout on it.
   assert.match(above, /Student&#x27;s Logic Flow/);
   assert.match(above, /Recommended Logic Flow/);
+  assert.match(above, /Regenerate Flowcharts/);
   assert.doesNotMatch(above, /at 1|Step 1 \/ 4|Re-trace/);
 
   // Below: the same two graphs again, under their own titles, carrying the run.
@@ -97,13 +104,17 @@ test('a trace still being generated says so, rather than showing a silent empty 
   assert.doesNotMatch(below, /Student&#x27;s Run/, 'no player until there are steps to play');
 });
 
-test('a finished trace offers the input it walked, the step counter, and the difference', () => {
+test('a finished trace offers the input it walked and manual step controls', () => {
   const html = render({ status: 'success', request: traceRequest, data: trace! });
   assert.match(html, /Execution Trace/);
   assert.match(html, /value="f\(3, 3\)"/, 'the traced input is editable and pre-filled');
   assert.match(html, /Step 1 \/ 4/);
-  // START matches on both sides; the comparison is the second step.
-  assert.match(html, /Go to first difference \(step 2\)/);
+  assert.match(html, /Prev/);
+  assert.match(html, /Next/);
+  assert.match(html, /Reset/);
+  assert.match(html, /Re-trace/);
+  assert.doesNotMatch(html, /Regenerate Trace/);
+  assert.doesNotMatch(html, /Go to first difference/);
 });
 
 test('the step readout carries that side\'s own variables', () => {
@@ -121,7 +132,6 @@ test('a streaming trace is usable from the moment the student side lands', () =>
   assert.match(below, /Tracing this input/);
   assert.match(below, /Step 1 \/ 4/);
   assert.match(below, /Student&#x27;s Run/);
-  assert.doesNotMatch(below, /Go to first difference/, 'no comparison until the other side exists');
 });
 
 test('a disagreement with the test run is shown next to the controls', () => {

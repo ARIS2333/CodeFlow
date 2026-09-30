@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import {
   MAX_TRACE_STEPS,
   createTraceValidator,
-  traceDivergenceIndex,
   validateTraceSideOnly,
 } from '../src/lib/executionTrace.ts';
 import { loopGraph, traceGraphs, traceReply } from './traceFixtures.ts';
@@ -115,31 +114,4 @@ test('one side can be validated on its own so it is displayable while the other 
   // The same walk read against a differently shaped graph is refused, not shown.
   assert.equal(validateTraceSideOnly('student', reply.student, loopGraph()).ok, false);
   assert.equal(validateTraceSideOnly('student', { steps: [{ nodeId: '404' }] }, graphs.student).ok, false);
-});
-
-test('divergence is the first step where the two runs stop doing the same thing', () => {
-  const reply = traceReply();
-  const result = validate(reply);
-  assert.equal(result.ok, true);
-  if (!result.ok) return;
-  // Step 1 is START on both sides; step 2 compares "a > b" against "a >= b".
-  assert.equal(traceDivergenceIndex(result.value, graphs), 1);
-});
-
-test('identical runs report no divergence, and a shorter run diverges where it ends', () => {
-  // Divergence is read off the labels each side actually shows, so "identical"
-  // means the same walk over the same drawing, not merely the same node ids.
-  const matching = { student: graphs.llm, llm: graphs.llm };
-  const same = createTraceValidator(matching)({ student: traceReply().llm, llm: traceReply().llm });
-  assert.equal(same.ok, true);
-  if (!same.ok) return;
-  assert.equal(traceDivergenceIndex(same.value, matching), null);
-
-  const shorter = createTraceValidator(matching)({
-    student: { ...traceReply().llm, steps: traceReply().llm.steps.slice(0, 3), truncated: true },
-    llm: traceReply().llm,
-  });
-  assert.equal(shorter.ok, true);
-  if (!shorter.ok) return;
-  assert.equal(traceDivergenceIndex(shorter.value, matching), 3);
 });

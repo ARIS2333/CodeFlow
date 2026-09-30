@@ -1,4 +1,6 @@
 import type { CodeEvaluationResponse, FlowchartData } from './llmSchemas';
+import type { CodeAnalysis } from './codeAnalysis';
+import type { FlowchartRequest } from './flowchartClient';
 import type { FlowchartGenerationContext, FlowchartProgress } from './flowchartGeneration';
 
 export type TaskState<T> =
@@ -8,11 +10,19 @@ export type TaskState<T> =
   | { status: 'error'; error: string };
 
 export type EvaluationState = TaskState<CodeEvaluationResponse>;
+export type FlowchartRegenerationState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; error: string };
 export type FlowchartState =
   | { status: 'idle' }
   | (Exclude<TaskState<FlowchartData>, { status: 'idle' }> & {
     generation?: FlowchartGenerationContext;
     progress?: FlowchartProgress;
+    /** Snapshot used for this generation, so retry never reads edited source. */
+    request?: FlowchartRequest;
+    /** Reuse the completed Tree-sitter pass instead of analyzing the code again. */
+    codeAnalysis?: CodeAnalysis;
   });
 
 interface AnalysisRunOptions {

@@ -234,31 +234,3 @@ export const validateTraceSideOnly = (
   if (!value || errors.length) return { ok: false, errors };
   return { ok: true, value, repairs };
 };
-
-const normalizeLabel = (text: string): string =>
-  text.replace(/\s+/g, ' ').trim().toLowerCase();
-
-/**
- * The first step at which the two traces stop doing the same thing.
- *
- * Node ids are per-graph, so the comparison is by label: the flowchart prompt
- * requires corresponding steps to share labels, which makes an honest label
- * difference exactly the divergence the student should look at. Returns null
- * when the two runs matched all the way through.
- */
-export const traceDivergenceIndex = (
-  trace: ExecutionTrace,
-  graphs: FlowchartData
-): number | null => {
-  const labelsOf = (side: TraceSide, graph: FlowchartSide) => {
-    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
-    return side.steps.map((step) => normalizeLabel(byId.get(step.nodeId)?.data.label ?? ''));
-  };
-  const student = labelsOf(trace.student, graphs.student);
-  const llm = labelsOf(trace.llm, graphs.llm);
-  const shared = Math.min(student.length, llm.length);
-  for (let index = 0; index < shared; index++) {
-    if (student[index] !== llm[index]) return index;
-  }
-  return student.length === llm.length ? null : shared;
-};

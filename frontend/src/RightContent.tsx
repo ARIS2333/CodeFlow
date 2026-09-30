@@ -2,8 +2,8 @@ import FlowchartDiagram from './FlowchartDiagram';
 import FlowchartDiagnostics from './FlowchartDiagnostics';
 import TracePanel from './TracePanel';
 import { useEffect, useMemo, useState } from 'react';
-import type { FlowchartState } from './lib/analysisRun';
-import { traceDivergenceIndex, type TraceSide } from './lib/executionTrace';
+import type { FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
+import type { TraceSide } from './lib/executionTrace';
 import type { TraceHighlight } from './lib/traceHighlight';
 import type { TraceRequest, TraceState } from './lib/traceRun';
 import type { FlowchartNode, FlowchartEdge, FlowchartSide } from './lib/llmSchemas';
@@ -13,6 +13,9 @@ interface RightContentProps {
   flowchartState: FlowchartState;
   traceState: TraceState;
   onRetrace: (request: TraceRequest) => void;
+  onRegenerateFlowchart?: () => void;
+  canRegenerateFlowchart?: boolean;
+  flowchartRegenerationState?: FlowchartRegenerationState;
 }
 
 // Convert API node format to React Flow node format
@@ -110,7 +113,14 @@ function FlowchartPane({ title, graph, loading, trace, step = 0 }: {
   );
 }
 
-function RightContent({ flowchartState, traceState, onRetrace }: RightContentProps) {
+function RightContent({
+  flowchartState,
+  traceState,
+  onRetrace,
+  onRegenerateFlowchart = () => {},
+  canRegenerateFlowchart = false,
+  flowchartRegenerationState = { status: 'idle' },
+}: RightContentProps) {
   const generation = flowchartState.status === 'idle' ? undefined : flowchartState.generation;
   const graphs = flowchartState.status === 'success' ? flowchartState.data
     : flowchartState.status === 'idle' ? undefined : flowchartState.progress;
@@ -129,17 +139,30 @@ function RightContent({ flowchartState, traceState, onRetrace }: RightContentPro
   const totalSteps = Math.max(traces?.student?.steps.length ?? 0, traces?.llm?.steps.length ?? 0);
   const safeStep = Math.min(step, Math.max(0, totalSteps - 1));
 
-  const divergence = useMemo(() => {
-    if (!traces?.student || !traces.llm || !graphs?.student || !graphs.llm) return null;
-    return traceDivergenceIndex(
-      { student: traces.student, llm: traces.llm },
-      { student: graphs.student, llm: graphs.llm },
-    );
-  }, [traces, graphs]);
-
   return (
     <div className="w-full p-4">
-      <h2 className="text-xl font-bold mb-4">Code Analysis</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl font-bold">Code Analysis</h2>
+        {flowchartState.status !== 'idle' && (
+          <button
+            type="button"
+            onClick={onRegenerateFlowchart}
+            disabled={!canRegenerateFlowchart || flowchartRegenerationState.status === 'loading'}
+            className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {flowchartRegenerationState.status === 'loading'
+              ? 'Regenerating Flowcharts...'
+              : 'Regenerate Flowcharts'}
+          </button>
+        )}
+      </div>
+      {flowchartRegenerationState.status === 'error' && (
+        <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-semibold">Could not regenerate the flowcharts</p>
+          <p className="mt-1">{flowchartRegenerationState.error}</p>
+          <p className="mt-1">The previous flowcharts and trace are still available.</p>
+        </div>
+      )}
       <FlowchartDiagnostics generation={generation} />
 
       {flowchartState.status === 'error' && (
@@ -171,11 +194,9 @@ function RightContent({ flowchartState, traceState, onRetrace }: RightContentPro
         <section aria-label="Execution trace" className="mt-10 border-t-2 border-gray-300 pt-6">
           <TracePanel
             traceState={traceState}
-            sides={{ student: traces?.student, llm: traces?.llm }}
             totalSteps={totalSteps}
             step={safeStep}
             onStepChange={setStep}
-            divergence={divergence}
             onRetrace={onRetrace}
           />
           {totalSteps > 0 && graphs?.student && graphs.llm ? (

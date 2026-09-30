@@ -18,11 +18,14 @@ import {
 } from './config/exampleWorkspace';
 import { feedbackSystemPromptFor } from './config/systemPrompt_GenerateFeedback';
 import { requestStructured } from './lib/llmClient';
-import { requestReliableFlowchart } from './lib/flowchartClient';
+import { requestReliableFlowchart, type FlowchartRequest } from './lib/flowchartClient';
+import { areFlowchartsTraceCompatible } from './lib/flowchartCompatibility';
+import type { FlowchartGenerationContext, FlowchartProgress } from './lib/flowchartGeneration';
 import {
   startAnalysisRun,
   type AnalysisRun,
   type EvaluationState,
+  type FlowchartRegenerationState,
   type FlowchartState,
 } from './lib/analysisRun';
 import {
@@ -50,10 +53,14 @@ import {
 
 interface MainContentProps {
   flowchartState: FlowchartState;
+  traceState: TraceState;
   onFlowchartStateChange: (state: FlowchartState) => void;
   onTraceStateChange: (state: TraceState) => void;
   onRunStart: () => void;
   onCancelRetrace: () => void;
+  onRegisterFlowchartRegenerator: (handler: (() => void) | null) => void;
+  onFlowchartRegenerateAvailabilityChange: (available: boolean) => void;
+  onFlowchartRegenerationStateChange: (state: FlowchartRegenerationState) => void;
   /** Null until a model is chosen; nothing that calls an LLM may run before then. */
   settings: ModelSettings | null;
   /** Opens the settings panel, with a reason to show the student. */
@@ -109,6 +116,8 @@ const STARTER_CODE: Record<SupportedLanguage, string> = {
 }`,
 };
 
+const DEFAULT_LANGUAGE: SupportedLanguage = 'python';
+
 // Autocompletion function for Java
 const javaCompletion = (context: CompletionContext): CompletionResult | null => {
   const word = context.matchBefore(/\w*/);
@@ -159,15 +168,19 @@ const cppCompletion = (context: CompletionContext): CompletionResult | null => {
 
 export const MainContent = ({
   flowchartState,
+  traceState,
   onFlowchartStateChange,
   onTraceStateChange,
   onRunStart,
   onCancelRetrace,
+  onRegisterFlowchartRegenerator,
+  onFlowchartRegenerateAvailabilityChange,
+  onFlowchartRegenerationStateChange,
   settings,
   onRequireSettings,
 }: MainContentProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache()).current;
-  const initialLanguage = cachedWorkspace?.language ?? 'java';
+  const initialLanguage = cachedWorkspace?.language ?? DEFAULT_LANGUAGE;
   const [code, setCode] = useState(
     cachedWorkspace?.code ?? STARTER_CODE[initialLanguage],
   );
@@ -177,13 +190,15 @@ export const MainContent = ({
   const [evaluationState, setEvaluationState] = useState<EvaluationState>(
     cachedWorkspace?.evaluationState ?? { status: 'idle' },
   );
+  const [isFlowchartRegenerating, setIsFlowchartRegenerating] = useState(false);
   const activeRun = useRef<AnalysisRun | null>(null);
   const uploadCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const regenerateFlowchartAction = useRef<() => void>(() => {});
   // CodeMirror keeps the extension instance it was given, so the shortcut reads
   // the handler through a ref rather than closing over a stale render's copy.
   const runShortcut = useRef<() => void>(() => {});
   const isCodeEvaluating = evaluationState.status === 'loading';
-  const isRunning = isCodeEvaluating || flowchartState.status === 'loading';
+  const isRunning = isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
 
@@ -195,6 +210,9 @@ export const MainContent = ({
   const clearResults = () => {
     activeRun.current?.cancel();
     activeRun.current = null;
+    flowchartRetryContext.current = null;
+    setIsFlowchartRegenerating(false);
+    onFlowchartRegenerationStateChange({ status: 'idle' });
     onCancelRetrace();
     setEvaluationState({ status: 'idle' });
     onFlowchartStateChange({ status: 'idle' });
@@ -229,6 +247,22 @@ export const MainContent = ({
   const [apiError, setApiError] = useState<string | null>(null);
   const [isApiProcessing, setIsApiProcessing] = useState(false);
   const [uploadPopupVersion, setUploadPopupVersion] = useState(0);
+  const flowchartRetryContext = useRef<{
+    request: FlowchartRequest;
+    codeAnalysis?: CodeAnalysis;
+  } | null>(
+    flowchartState.status !== 'idle' && flowchartState.request
+      ? { request: flowchartState.request, codeAnalysis: flowchartState.codeAnalysis }
+      : flowchartState.status !== 'idle' && problemDetails
+        ? {
+            request: {
+              practice: problemDetails,
+              language,
+              code,
+            },
+          }
+        : null,
+  );
   const isRunDisabled = isRunning || !problemDetails || isApiProcessing || isLoading;
 
   useEffect(() => {
@@ -268,6 +302,18 @@ export const MainContent = ({
     }, 500);
   };
 
+  const handleClearProblem = () => {
+    clearResults();
+    if (uploadCommitTimer.current) {
+      clearTimeout(uploadCommitTimer.current);
+      uploadCommitTimer.current = null;
+    }
+    setIsLoading(false);
+    setProblem(null);
+    setProblemDetails(null);
+    setApiError(null);
+  };
+
   const handleClearAll = () => {
     if (!window.confirm('Clear the problem, code, and all generated results?')) return;
 
@@ -285,8 +331,8 @@ export const MainContent = ({
     setProblem(null);
     setProblemDetails(null);
     setApiError(null);
-    setLanguage('java');
-    setCode(STARTER_CODE.java);
+    setLanguage(DEFAULT_LANGUAGE);
+    setCode(STARTER_CODE[DEFAULT_LANGUAGE]);
     setCursor({ line: 1, column: 1 });
     clearWorkspaceCache();
   };
@@ -319,6 +365,151 @@ export const MainContent = ({
     setCursor({ line: 1, column: 1 });
   };
 
+  const handleRegenerateFlowchart = () => {
+    const context = flowchartRetryContext.current;
+    if (
+      !context ||
+      isCodeEvaluating ||
+      isFlowchartRegenerating ||
+      flowchartState.status === 'loading' ||
+      traceState.status === 'loading' ||
+      activeRun.current?.isRunning()
+    ) return;
+    if (!settings) {
+      onRequireSettings('Choose a model before regenerating the flowcharts.');
+      return;
+    }
+
+    activeRun.current?.cancel();
+    onCancelRetrace();
+    const previousGraphs = flowchartState.status === 'success' ? flowchartState.data : undefined;
+    const previousTraceState = traceState;
+    const previousTraceRequest =
+      traceState.status === 'success' ||
+      traceState.status === 'error'
+        ? traceState.request
+        : undefined;
+
+    const controller = new AbortController();
+    let active = true;
+    let blocking = true;
+    let generation: FlowchartGenerationContext | undefined;
+    let progress: FlowchartProgress | undefined;
+    const metadata = () => ({
+      request: context.request,
+      ...(context.codeAnalysis ? { codeAnalysis: context.codeAnalysis } : {}),
+      ...(generation ? { generation } : {}),
+      ...(progress ? { progress } : {}),
+    });
+    const regeneration: AnalysisRun = {
+      isRunning: () => active && blocking && !controller.signal.aborted,
+      cancel: () => {
+        active = false;
+        blocking = false;
+        controller.abort();
+      },
+    };
+    activeRun.current = regeneration;
+    setIsFlowchartRegenerating(true);
+    onFlowchartRegenerationStateChange({ status: 'loading' });
+
+    const codeAnalysis = context.codeAnalysis
+      ? Promise.resolve(context.codeAnalysis)
+      : requestCodeAnalysis(
+          context.request.language,
+          context.request.code,
+          controller.signal,
+        ).then((analysis) => {
+          context.codeAnalysis = analysis;
+          return analysis;
+        });
+
+    void (async () => {
+      try {
+        const graphs = await requestReliableFlowchart(context.request, {
+          modelConfig: toModelConfig(settings),
+          codeAnalysis,
+          signal: controller.signal,
+          onGenerationReady: (nextGeneration) => {
+            if (controller.signal.aborted) return;
+            generation = nextGeneration;
+          },
+          onProgress: (nextProgress) => {
+            if (controller.signal.aborted) return;
+            progress = nextProgress;
+          },
+        });
+        if (controller.signal.aborted) return;
+
+        onFlowchartStateChange({ status: 'success', data: graphs, ...metadata() });
+        blocking = false;
+        setIsFlowchartRegenerating(false);
+        onFlowchartRegenerationStateChange({ status: 'idle' });
+
+        const compatible = previousGraphs
+          ? areFlowchartsTraceCompatible(previousGraphs, graphs)
+          : false;
+        if (compatible && previousTraceState.status === 'success') {
+          // Keep the exact trace state object so the student's current step is
+          // not reset. Compatibility guarantees its node ids and paths remain
+          // valid on the newly committed flowcharts.
+          return;
+        }
+
+        const testCase = previousTraceRequest?.testCase ?? (
+          evaluationState.status === 'success'
+            ? selectTraceCase(evaluationState.data.TestResults)
+            : null
+        );
+        if (testCase) {
+          await runTrace(
+            { ...context.request, graphs, testCase },
+            onTraceStateChange,
+            toModelConfig(settings),
+            controller.signal,
+          );
+        } else if (evaluationState.status === 'success') {
+          onTraceStateChange({ status: 'skipped', reason: noTraceableCaseReason });
+        }
+      } catch (error: unknown) {
+        if (controller.signal.aborted) return;
+        onFlowchartRegenerationStateChange({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Failed to build the flowchart',
+        });
+      } finally {
+        active = false;
+        blocking = false;
+        setIsFlowchartRegenerating(false);
+        if (activeRun.current === regeneration) activeRun.current = null;
+      }
+    })();
+  };
+
+  useEffect(() => { regenerateFlowchartAction.current = handleRegenerateFlowchart; });
+
+  useEffect(() => {
+    const invoke = () => regenerateFlowchartAction.current();
+    onRegisterFlowchartRegenerator(invoke);
+    return () => onRegisterFlowchartRegenerator(null);
+  }, [onRegisterFlowchartRegenerator]);
+
+  useEffect(() => {
+    const available = Boolean(flowchartRetryContext.current)
+      && !isCodeEvaluating
+      && !isFlowchartRegenerating
+      && traceState.status !== 'loading'
+      && (flowchartState.status === 'success' || flowchartState.status === 'error');
+    onFlowchartRegenerateAvailabilityChange(available);
+    return () => onFlowchartRegenerateAvailabilityChange(false);
+  }, [
+    flowchartState.status,
+    isCodeEvaluating,
+    isFlowchartRegenerating,
+    traceState.status,
+    onFlowchartRegenerateAvailabilityChange,
+  ]);
+
   const handleRunCode = () => {
     // Keep the run button locked until both tasks settle, but display each
     // task's result as soon as it is ready. The ref also guards double clicks.
@@ -330,6 +521,8 @@ export const MainContent = ({
     const modelConfig = toModelConfig(settings);
 
     activeRun.current?.cancel();
+    setIsFlowchartRegenerating(false);
+    onFlowchartRegenerationStateChange({ status: 'idle' });
     onRunStart();
 
     // Evaluation remains independent. Flowcharts use parser grounding for clean
@@ -344,10 +537,29 @@ export const MainContent = ({
       language: language,
       code: code
     };
+    const retryContext: {
+      request: FlowchartRequest;
+      codeAnalysis?: CodeAnalysis;
+    } = { request: requestPayload };
+    flowchartRetryContext.current = retryContext;
     let codeAnalysisPromise: Promise<CodeAnalysis> | null = null;
     const getCodeAnalysis = (signal: AbortSignal) => {
-      codeAnalysisPromise ??= requestCodeAnalysis(language, code, signal);
+      codeAnalysisPromise ??= requestCodeAnalysis(language, code, signal).then((analysis) => {
+        retryContext.codeAnalysis = analysis;
+        return analysis;
+      });
       return codeAnalysisPromise;
+    };
+    const publishFlowchartState = (state: FlowchartState) => {
+      if (state.status === 'idle') {
+        onFlowchartStateChange(state);
+        return;
+      }
+      onFlowchartStateChange({
+        ...state,
+        request: retryContext.request,
+        ...(retryContext.codeAnalysis ? { codeAnalysis: retryContext.codeAnalysis } : {}),
+      });
     };
 
     activeRun.current = startAnalysisRun({
@@ -387,7 +599,7 @@ export const MainContent = ({
         );
       },
       onFeedbackChange: setEvaluationState,
-      onFlowchartChange: onFlowchartStateChange,
+      onFlowchartChange: publishFlowchartState,
     });
   };
 
@@ -461,26 +673,40 @@ export const MainContent = ({
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
           <div className="mb-4 flex items-center gap-2">
-            <select
-              aria-label="Load example language"
-              value=""
-              onChange={(event) => {
-                if (event.target.value) {
-                  handleLoadExample(event.target.value as SupportedLanguage);
-                }
-              }}
-              disabled={isRunning || isApiProcessing || isLoading}
-              className={`rounded-md border px-4 py-2 transition-colors ${
-                isRunning || isApiProcessing || isLoading
-                  ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
-                  : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
-              }`}
-            >
-              <option value="" disabled>Load Example</option>
-              <option value="java">Java example</option>
-              <option value="python">Python example</option>
-              <option value="cpp">C++ example</option>
-            </select>
+            <div className="relative w-40">
+              <select
+                aria-label="Load example language"
+                value=""
+                onChange={(event) => {
+                  if (event.target.value) {
+                    handleLoadExample(event.target.value as SupportedLanguage);
+                  }
+                }}
+                disabled={isRunning || isApiProcessing || isLoading}
+                className={`w-full appearance-none rounded-md border py-2 pl-4 pr-9 transition-colors ${
+                  isRunning || isApiProcessing || isLoading
+                    ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                    : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                <option value="" disabled>Load Example</option>
+                <option value="java">Java example</option>
+                <option value="python">Python example</option>
+                <option value="cpp">C++ example</option>
+              </select>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
+                  isRunning || isApiProcessing || isLoading ? 'text-gray-400' : 'text-blue-700'
+                }`}
+              >
+                <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <button
               type="button"
               onClick={handleClearAll}
@@ -601,6 +827,8 @@ export const MainContent = ({
             isOpen={isUploadPopupOpen}
             onClose={() => setIsUploadPopupOpen(false)}
             onUpload={handleUpload}
+            onClearProblem={handleClearProblem}
+            hasProblem={problem !== null}
             onApiProcessingChange={setIsApiProcessing}
             modelConfig={toModelConfig(settings)}
           />

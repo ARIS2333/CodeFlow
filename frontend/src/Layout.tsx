@@ -4,7 +4,7 @@ import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { panelConfig } from './config/panelConfig';
-import type { FlowchartState } from './lib/analysisRun';
+import type { FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import { runTrace, type TraceRequest, type TraceState } from './lib/traceRun';
 import {
   describeSettings,
@@ -39,6 +39,8 @@ export const Layout = ({
   const [flowchartState, setFlowchartState] = useState<FlowchartState>(
     cachedWorkspace?.flowchartState ?? { status: 'idle' },
   );
+  const [flowchartRegenerationState, setFlowchartRegenerationState] =
+    useState<FlowchartRegenerationState>({ status: 'idle' });
 
   // The trace lives here rather than in the panel so that a re-trace survives
   // the panel being closed, and so a new run can cancel one the student left
@@ -47,6 +49,8 @@ export const Layout = ({
     cachedWorkspace?.traceState ?? { status: 'idle' },
   );
   const retraceAbort = useRef<AbortController | null>(null);
+  const flowchartRegenerator = useRef<(() => void) | null>(null);
+  const [canRegenerateFlowchart, setCanRegenerateFlowchart] = useState(false);
 
   /*
    * The model settings live here because every LLM request in the app needs
@@ -70,6 +74,10 @@ export const Layout = ({
   const cancelRetrace = useCallback(() => {
     retraceAbort.current?.abort();
     retraceAbort.current = null;
+  }, []);
+
+  const registerFlowchartRegenerator = useCallback((handler: (() => void) | null) => {
+    flowchartRegenerator.current = handler;
   }, []);
 
   useEffect(() => cancelRetrace, [cancelRetrace]);
@@ -121,9 +129,13 @@ export const Layout = ({
           settings={settings}
           onRequireSettings={openSettings}
           flowchartState={flowchartState}
+          traceState={traceState}
           onFlowchartStateChange={setFlowchartState}
           onTraceStateChange={setTraceState}
           onCancelRetrace={cancelRetrace}
+          onRegisterFlowchartRegenerator={registerFlowchartRegenerator}
+          onFlowchartRegenerateAvailabilityChange={setCanRegenerateFlowchart}
+          onFlowchartRegenerationStateChange={setFlowchartRegenerationState}
           onRunStart={() => {
             cancelRetrace();
             setTraceState({ status: 'idle' });
@@ -140,6 +152,9 @@ export const Layout = ({
         flowchartState={flowchartState}
         traceState={traceState}
         onRetrace={startRetrace}
+        onRegenerateFlowchart={() => flowchartRegenerator.current?.()}
+        canRegenerateFlowchart={canRegenerateFlowchart}
+        flowchartRegenerationState={flowchartRegenerationState}
       />
 
       <SettingsPanel

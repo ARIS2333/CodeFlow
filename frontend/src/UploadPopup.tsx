@@ -8,12 +8,22 @@ interface UploadPopupProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (content: string, problemDetails: ProblemDetails | null, error: string | null) => void;
+  onClearProblem: () => void;
+  hasProblem: boolean;
   onApiProcessingChange: (isProcessing: boolean) => void;
   /** Reformatting the problem is an LLM call, so it needs a model too. */
   modelConfig: ModelConfigPayload;
 }
 
-const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, onApiProcessingChange, modelConfig }) => {
+const UploadPopup: React.FC<UploadPopupProps> = ({
+  isOpen,
+  onClose,
+  onUpload,
+  onClearProblem,
+  hasProblem,
+  onApiProcessingChange,
+  modelConfig,
+}) => {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false); // Local state to track submission
   const activeRequest = useRef<AbortController | null>(null);
@@ -24,6 +34,12 @@ const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, on
     // Closing only hides the dialog. If an upload is already being processed,
     // it continues and publishes its result to the main page when finished.
     onClose();
+  };
+
+  const handleClearProblem = () => {
+    if (isSubmitting || !hasProblem) return;
+    onClearProblem();
+    setContent('');
   };
 
   if (!isOpen) return null;
@@ -66,16 +82,18 @@ const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, on
   };
 
   return (
-    <div 
+    <div
+      role="presentation"
       className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
-      onClick={handleClose}
     >
-      <div 
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-problem-title"
         className="bg-white rounded-lg shadow-xl w-full max-w-md"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center border-b p-4">
-          <h3 className="text-lg font-semibold text-gray-900">Upload Practice Problem</h3>
+          <h3 id="upload-problem-title" className="text-lg font-semibold text-gray-900">Upload Practice Problem</h3>
           <button 
             onClick={handleClose}
             className="text-gray-500 hover:text-gray-700"
@@ -97,25 +115,37 @@ const UploadPopup: React.FC<UploadPopupProps> = ({ isOpen, onClose, onUpload, on
           />
         </div>
         
-        <div className="flex justify-end space-x-2 p-4 border-t">
+        <div className="flex items-center justify-between gap-3 p-4 border-t">
           <button
-            onClick={handleClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            disabled={isSubmitting}
+            type="button"
+            onClick={handleClearProblem}
+            disabled={isSubmitting || !hasProblem}
+            className="rounded-md border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Cancel
+            Clear Problem
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting || !content.trim()}
-            className={`px-4 py-2 rounded-md text-white ${
-              isSubmitting || !content.trim() 
-                ? 'bg-blue-400 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {isSubmitting ? 'Processing...' : 'Upload'}
-          </button>
+          <div className="flex space-x-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || !content.trim()}
+              className={`px-4 py-2 rounded-md text-white ${
+                isSubmitting || !content.trim()
+                  ? 'bg-blue-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              {isSubmitting ? 'Processing...' : 'Upload'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

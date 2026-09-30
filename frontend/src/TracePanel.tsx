@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { TraceSide } from './lib/executionTrace';
 import type { TraceRequest, TraceState } from './lib/traceRun';
 
 interface TracePanelProps {
   traceState: TraceState;
-  /** Whatever is displayable now: a finished trace, or one side of a streaming one. */
-  sides: { student?: TraceSide; llm?: TraceSide };
   totalSteps: number;
   step: number;
   onStepChange: (step: number) => void;
-  /** First step where the two runs stop matching, or null while they agree. */
-  divergence: number | null;
   onRetrace: (request: TraceRequest) => void;
 }
 
@@ -20,11 +15,9 @@ const controlClasses =
 
 export default function TracePanel({
   traceState,
-  sides,
   totalSteps,
   step,
   onStepChange,
-  divergence,
   onRetrace,
 }: TracePanelProps) {
   const request = traceState.status === 'idle' || traceState.status === 'skipped'
@@ -79,7 +72,7 @@ export default function TracePanel({
         <button
           type="button"
           onClick={submit}
-          disabled={loading || !draft.trim() || draft.trim() === request?.testCase.input}
+          disabled={loading || !draft.trim()}
           className="rounded-md bg-blue-600 px-3 py-1 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Re-trace
@@ -105,22 +98,7 @@ export default function TracePanel({
           <button type="button" className={controlClasses} onClick={() => onStepChange(0)} disabled={step === 0}>
             Reset
           </button>
-          {divergence !== null && (
-            <button
-              type="button"
-              className={`${controlClasses} border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100`}
-              onClick={() => onStepChange(divergence)}
-            >
-              Go to first difference (step {divergence + 1})
-            </button>
-          )}
         </div>
-      )}
-
-      {divergence === null && sides.student && sides.llm && !loading && (
-        <p className="mt-3 text-sm text-gray-600">
-          Both runs took the same path on this input. Try another input to look for a difference.
-        </p>
       )}
 
       {traceState.status === 'success' && traceState.warning && (
