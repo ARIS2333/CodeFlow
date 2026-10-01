@@ -2,7 +2,7 @@ import { requestExecutionTrace, type TraceCase, type TraceProgress, type TraceRe
 import type { ExecutionTrace } from './executionTrace';
 import type { TestResult } from './llmSchemas';
 import type { ModelConfigPayload } from './modelSettings.ts';
-import { syntaxDiagnosticFor, type CodeAnalysis } from './codeAnalysis.ts';
+import { compileDiagnosticFor, syntaxDiagnosticFor, type CodeAnalysis } from './codeAnalysis.ts';
 
 export type { TraceCase, TraceProgress, TraceRequest };
 
@@ -51,6 +51,16 @@ export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
 };
 
 export const noTraceableCaseReason = (analysis?: CodeAnalysis): string => {
+  const compile = compileDiagnosticFor(analysis);
+  if (compile) {
+    const detail = /[.!?]$/.test(compile.message)
+      ? compile.message
+      : `${compile.message}.`;
+    return (
+      `Trace cannot start because of a compile error on line ${compile.line}: ` +
+      `${detail} Fix the source and run the code again.`
+    );
+  }
   const syntax = syntaxDiagnosticFor(analysis);
   if (syntax) {
     const detail = /[.!?]$/.test(syntax.message)

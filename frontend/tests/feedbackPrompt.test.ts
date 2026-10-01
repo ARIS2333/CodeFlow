@@ -46,6 +46,8 @@ test('C++ feedback uses compilation and undefined-behavior rules', () => {
   assert.match(prompt, /C\+\+-SPECIFIC RULES/);
   assert.match(prompt, /"❌ Compile Error"/);
   assert.match(prompt, /valid translation unit/);
+  assert.match(prompt, /compilerStatus records the real C\+\+ compiler gate/);
+  assert.match(prompt, /"passed".*never report a Compile Error/s);
   assert.match(prompt, /Runtime Error: Undefined Behavior/);
   assert.match(prompt, /value versus\s+reference parameters/);
 });
@@ -166,6 +168,42 @@ test('source-backed Python syntax issues still block every test case', () => {
     assert.deepEqual(
       result.value.TestResults.map(({ yourOutput }) => yourOutput),
       ['❌ Syntax Error', '❌ Syntax Error'],
+    );
+  }
+});
+
+test('a passed real C++ compile rejects a model-invented compile error', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compilerStatus = 'passed';
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'findMode({5})', expected: '5', yourOutput: '❌ Compile Error' },
+      { input: 'findMode({1, 2})', expected: '1', yourOutput: '❌ Compile Error' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.errors.join(' '), /passed the real compiler check/);
+});
+
+test('a failed real C++ compile overrides simulated test outputs', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compilerStatus = 'failed';
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: true,
+    TestResults: [
+      { input: 'f(1)', expected: '1', yourOutput: '✅ 1' },
+      { input: 'f(2)', expected: '2', yourOutput: '✅ 2' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.IsCorrect, false);
+    assert.deepEqual(
+      result.value.TestResults.map(({ yourOutput }) => yourOutput),
+      ['❌ Compile Error', '❌ Compile Error'],
     );
   }
 });

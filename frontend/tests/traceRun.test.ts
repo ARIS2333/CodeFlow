@@ -86,6 +86,23 @@ test('an unavailable trace names a source-backed syntax error', () => {
   );
 });
 
+test('an unavailable trace prefers a real compiler diagnostic', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compileIssues = [{
+    id: 'compile-1', kind: 'cpp-compiler-error', text: "use of undeclared identifier 'value'",
+    startLine: 4, startColumn: 10, endLine: 4, endColumn: 10, startByte: 40, endByte: 40,
+  }];
+  analysis.syntaxIssues = [{
+    id: 'syntax-1', kind: 'missing-token', text: '', expected: '}',
+    startLine: 10, startColumn: 1, endLine: 10, endColumn: 1, startByte: 100, endByte: 100,
+  }];
+
+  assert.equal(
+    noTraceableCaseReason(analysis),
+    "Trace cannot start because of a compile error on line 4: use of undeclared identifier 'value'. Fix the source and run the code again.",
+  );
+});
+
 test('runtime failures and non-terminating cases are not automatically traced', () => {
   assert.equal(selectTraceCase([
     result('f(1, 0)', '❌ Runtime Error: ZeroDivisionError'),

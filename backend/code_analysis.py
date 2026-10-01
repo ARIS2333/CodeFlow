@@ -10,6 +10,13 @@ instead of reconstructing the student's control flow from memory alone.
 from __future__ import annotations
 
 from functools import lru_cache
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import threading
 from typing import Any
 
 from tree_sitter import Language, Node, Parser
@@ -21,6 +28,15 @@ import tree_sitter_cpp
 MAX_SOURCE_BYTES = 100_000
 MAX_FACTS = 300
 MAX_SYNTAX_ISSUES = 100
+MAX_CPP_COMPILE_ISSUES = 10
+CPP_COMPILE_TIMEOUT_SECONDS = float(os.getenv("CPP_COMPILE_TIMEOUT_SECONDS", "5"))
+CPP_COMPILE_QUEUE_SECONDS = float(os.getenv("CPP_COMPILE_QUEUE_SECONDS", "10"))
+CPP_COMPILE_CONCURRENCY = max(1, int(os.getenv("CPP_COMPILE_CONCURRENCY", "1")))
+_cpp_compile_slots = threading.BoundedSemaphore(CPP_COMPILE_CONCURRENCY)
+_CPP_DIAGNOSTIC = re.compile(
+    r"^(?P<file>.*?):(?P<line>\d+):(?P<column>\d+):\s+"
+    r"(?P<severity>fatal error|error):\s+(?P<message>.*)$"
+)
 
 
 CONTROL_TYPES: dict[str, dict[str, str]] = {
@@ -319,6 +335,86 @@ def _python_compile_issue(code: str) -> dict[str, Any] | None:
             "startByte": start_byte,
             "endByte": end_byte,
         }
+
+
+def _source_position(code: str, line: int, column: int) -> dict[str, int]:
+    """Map a one-based compiler location back to UTF-8 source offsets."""
+    lines = code.splitlines(keepends=True) or [""]
+    source_line = min(max(line, 1), len(lines))
+    source_column = min(max(column, 1), len(lines[source_line - 1]) + 1)
+    before = "".join(lines[: source_line - 1])
+    prefix = lines[source_line - 1][: source_column - 1]
+    byte_offset = len((before + prefix).encode("utf-8"))
+    return {
+        "startLine": source_line,
+        "startColumn": source_column,
+        "endLine": source_line,
+        "endColumn": source_column,
+        "startByte": byte_offset,
+        "endByte": byte_offset,
+    }
+
+
+def _cpp_compile_issues(code: str) -> tuple[str, list[dict[str, Any]]]:
+    """Ask the host C++ compiler to check the source without executing it.
+
+    Infrastructure failures are not student compile errors. They are therefore
+    ignored here, leaving the existing parser/model fallback available.
+    """
+    compiler = shutil.which(os.getenv("CXX", "g++"))
+    if compiler is None:
+        return "unavailable", []
+    if not _cpp_compile_slots.acquire(timeout=CPP_COMPILE_QUEUE_SECONDS):
+        return "unavailable", []
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="codeflow-cpp-") as directory:
+            source_path = Path(directory) / "student.cpp"
+            source_path.write_text(code, encoding="utf-8")
+            try:
+                result = subprocess.run(
+                    [
+                        compiler,
+                        "-std=c++17",
+                        "-fsyntax-only",
+                        "-fdiagnostics-color=never",
+                        str(source_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=CPP_COMPILE_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return "unavailable", []
+    finally:
+        _cpp_compile_slots.release()
+
+    if result.returncode == 0:
+        return "passed", []
+
+    issues: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str]] = set()
+    for diagnostic_line in result.stderr.splitlines():
+        match = _CPP_DIAGNOSTIC.match(diagnostic_line.strip())
+        if not match:
+            continue
+        line = int(match.group("line"))
+        column = int(match.group("column"))
+        message = match.group("message").strip()
+        key = (line, column, message)
+        if key in seen:
+            continue
+        seen.add(key)
+        issues.append({
+            "id": f"compile-{len(issues) + 1}",
+            "kind": "cpp-compiler-error",
+            "text": message,
+            **_source_position(code, line, column),
+        })
+        if len(issues) >= MAX_CPP_COMPILE_ISSUES:
+            break
+    return "failed", issues
 
 
 def _java_can_complete_normally(node: Node) -> bool | None:
@@ -638,11 +734,14 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
             for index, issue in enumerate(syntax_issues, start=1):
                 issue["id"] = f"syntax-{index}"
 
-    compile_issues = (
-        _java_compile_issues(tree.root_node, source)
-        if normalized_language == "java" and not syntax_issues
-        else []
-    )
+    if normalized_language == "cpp":
+        compiler_status, compile_issues = _cpp_compile_issues(code)
+    elif normalized_language == "java" and not syntax_issues:
+        compiler_status = "not-run"
+        compile_issues = _java_compile_issues(tree.root_node, source)
+    else:
+        compiler_status = "not-run"
+        compile_issues = []
 
     return {
         "analysisVersion": 1,
@@ -657,5 +756,6 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
         "facts": facts,
         "syntaxIssues": syntax_issues,
         "compileIssues": compile_issues,
+        "compilerStatus": compiler_status,
         "factsTruncated": facts_truncated,
     }

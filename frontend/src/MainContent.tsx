@@ -42,6 +42,7 @@ import {
 } from './lib/llmSchemas';
 import {
   requestCodeAnalysis,
+  compileDiagnosticFor,
   syntaxDiagnosticFor,
   type CodeAnalysis,
   type SupportedLanguage,
@@ -209,6 +210,12 @@ export const MainContent = ({
   const syntaxDiagnostic = flowchartState.status !== 'idle'
     ? syntaxDiagnosticFor(flowchartState.codeAnalysis)
     : undefined;
+  const compileDiagnostic = flowchartState.status !== 'idle'
+    ? compileDiagnosticFor(flowchartState.codeAnalysis)
+    : undefined;
+  // A real compiler location is more authoritative than Tree-sitter's
+  // recovery point, which can be the end of the file for a missing brace.
+  const languageDiagnostic = compileDiagnostic ?? syntaxDiagnostic;
 
   useEffect(() => {
     onEvaluationStateChange(evaluationState);
@@ -982,10 +989,12 @@ export const MainContent = ({
                 <div className={`font-bold ${codeEvaluation.IsCorrect ? 'text-green-400' : 'text-red-400'}`}>
                   Code Status: {codeEvaluation.IsCorrect ? 'CORRECT' : 'INCORRECT'}
                 </div>
-                {syntaxDiagnostic ? (
+                {languageDiagnostic ? (
                   <div role="alert" className="rounded border border-red-900 bg-red-950/40 p-2 text-red-300">
-                    <div className="font-bold">Syntax error · Line {syntaxDiagnostic.line}</div>
-                    <div>{syntaxDiagnostic.message}</div>
+                    <div className="font-bold">
+                      {compileDiagnostic ? 'Compile error' : 'Syntax error'} · Line {languageDiagnostic.line}
+                    </div>
+                    <div>{languageDiagnostic.message}</div>
                   </div>
                 ) : (
                   <div>

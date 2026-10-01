@@ -197,6 +197,10 @@ messages, stack traces, timings, or other evidence of real execution.
 ${sharedEvaluationRules}
 
 C++-SPECIFIC RULES:
+- codeAnalysis.compilerStatus records the real C++ compiler gate. When it is
+  "passed", never report a Compile Error. When it is "failed", report exactly
+  "❌ Compile Error" for every test case. When it is "unavailable", use the
+  static reasoning rules below without claiming that a compiler ran.
 - Infer the required submission form from the practice. For a function-based
   exercise, assume the function is compiled in a valid translation unit and
   called by a valid test harness. Do not require main, includes, namespace

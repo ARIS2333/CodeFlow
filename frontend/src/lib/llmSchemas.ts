@@ -668,8 +668,25 @@ export const validateCodeEvaluationForAnalysis = (
     };
   }
 
+  if (
+    codeAnalysis.language === 'cpp'
+    && codeAnalysis.compilerStatus === 'passed'
+    && result.value.TestResults.some(
+      ({ yourOutput }) => /^❌\s*(?:Compile|Compilation) Error$/i.test(yourOutput.trim()),
+    )
+  ) {
+    return {
+      ok: false,
+      errors: [
+        'the C++ source passed the real compiler check; do not report a compile error and evaluate each test case',
+      ],
+    };
+  }
+
   const blockingVerdict = codeAnalysis.language === 'java' || codeAnalysis.language === 'cpp'
-    ? codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0
+    ? codeAnalysis.syntaxIssues.length > 0
+      || codeAnalysis.compileIssues.length > 0
+      || (codeAnalysis.language === 'cpp' && codeAnalysis.compilerStatus === 'failed')
       ? '❌ Compile Error'
       : undefined
     : codeAnalysis.syntaxIssues.length > 0

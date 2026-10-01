@@ -26,6 +26,13 @@ services:
         value: "2"
       - key: GUNICORN_THREADS
         value: "50"
+      # One compiler process per Gunicorn worker (two total with WEB_CONCURRENCY=2).
+      - key: CPP_COMPILE_CONCURRENCY
+        value: "1"
+      - key: CPP_COMPILE_TIMEOUT_SECONDS
+        value: "5"
+      - key: CPP_COMPILE_QUEUE_SECONDS
+        value: "10"
 
   - type: web
     name: codeflow-frontend

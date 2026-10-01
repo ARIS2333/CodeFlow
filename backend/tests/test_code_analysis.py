@@ -116,6 +116,7 @@ class CodeAnalysisTests(unittest.TestCase):
         )
 
         self.assertEqual(result["compileIssues"], [])
+        self.assertEqual(result["compilerStatus"], "not-run")
 
     def test_python_preserves_elif_and_else_branch_context(self):
         result = analyze_code(
@@ -180,7 +181,8 @@ class CodeAnalysisTests(unittest.TestCase):
     def test_cpp_extracts_functions_loops_conditions_and_returns(self):
         result = analyze_code(
             "cpp",
-            """int sumPositive(const std::vector<int>& values) {
+            """#include <vector>
+int sumPositive(const std::vector<int>& values) {
   int total = 0;
   for (int value : values) {
     if (value > 0) total += value;
@@ -201,6 +203,30 @@ class CodeAnalysisTests(unittest.TestCase):
         self.assertEqual(condition["parentAnchor"], loop["anchor"])
         self.assertEqual(condition["branch"], "body")
         self.assertEqual(result["compileIssues"], [])
+        self.assertEqual(result["compilerStatus"], "passed")
+
+    def test_cpp_uses_the_host_compiler_for_real_compile_errors(self):
+        result = analyze_code(
+            "cpp",
+            """int value(int n) {
+  return missingName + n;
+}
+""",
+        )
+
+        self.assertEqual(result["parseStatus"], "clean")
+        self.assertEqual(len(result["compileIssues"]), 1)
+        self.assertEqual(result["compilerStatus"], "failed")
+        issue = result["compileIssues"][0]
+        self.assertEqual(issue["kind"], "cpp-compiler-error")
+        self.assertEqual(issue["startLine"], 2)
+        self.assertIn("missingName", issue["text"])
+
+    def test_cpp_valid_function_does_not_require_main(self):
+        result = analyze_code("cpp", "int twice(int n) { return n * 2; }")
+
+        self.assertEqual(result["compileIssues"], [])
+        self.assertEqual(result["compilerStatus"], "passed")
 
     def test_cpp_recovers_a_missing_parenthesis(self):
         result = analyze_code(

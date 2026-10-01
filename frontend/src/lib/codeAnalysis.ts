@@ -56,6 +56,8 @@ export interface CodeAnalysis {
   facts: CodeFact[];
   syntaxIssues: SyntaxIssue[];
   compileIssues: CompileIssue[];
+  /** Result of the real C++ compiler gate; other languages use `not-run`. */
+  compilerStatus?: 'not-run' | 'passed' | 'failed' | 'unavailable';
   factsTruncated: boolean;
 }
 
@@ -63,6 +65,20 @@ export interface SyntaxDiagnostic {
   line: number;
   message: string;
 }
+
+export type CompileDiagnostic = SyntaxDiagnostic;
+
+/** Pick the first source-backed compiler diagnostic for the student UI. */
+export const compileDiagnosticFor = (
+  analysis?: CodeAnalysis,
+): CompileDiagnostic | undefined => {
+  const issue = analysis?.compileIssues[0];
+  if (!issue) return undefined;
+  return {
+    line: issue.startLine,
+    message: issue.text.trim() || 'The code did not compile.',
+  };
+};
 
 /** Pick a concise, source-backed syntax message suitable for student UI. */
 export const syntaxDiagnosticFor = (
@@ -237,6 +253,14 @@ const validateAnalysis = (
     return issue;
   });
 
+  const compilerStatus = input.compilerStatus;
+  if (
+    compilerStatus !== undefined
+    && !['not-run', 'passed', 'failed', 'unavailable'].includes(String(compilerStatus))
+  ) {
+    throw new Error('code analysis: compilerStatus is invalid');
+  }
+
   return {
     analysisVersion: 1,
     language: expectedLanguage,
@@ -247,6 +271,9 @@ const validateAnalysis = (
     facts,
     syntaxIssues,
     compileIssues,
+    ...(compilerStatus !== undefined
+      ? { compilerStatus: compilerStatus as CodeAnalysis['compilerStatus'] }
+      : {}),
     factsTruncated: input.factsTruncated,
   };
 };
