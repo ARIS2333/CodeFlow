@@ -4,6 +4,15 @@
 
 - Python 3.10 or later
 - Python 3.12.7 is recommended and matches the project's `.python-version`
+- `g++` with C++17 support for authoritative C++ compile diagnostics
+
+The compiler must be available on `PATH`. Verify it before starting the backend:
+
+```bash
+g++ --version
+```
+
+Set `CXX` if the compiler is installed under another command or path. When no compiler is available, Java and Python continue to work, while C++ falls back to the parser and model without authoritative compile results.
 
 Create a dedicated virtual environment for the backend. Do not copy a `venv` created on another computer or with another Python installation.
 
@@ -89,6 +98,10 @@ The development server also supports these optional environment variables:
 | `FLASK_HOST` | `127.0.0.1` | Address on which the backend listens |
 | `PORT` | `5001` | Port on which the backend listens |
 | `FLASK_DEBUG` | Disabled | Set to `1` to enable Flask debug mode |
+| `CXX` | `g++` | C++ compiler command or absolute path |
+| `CPP_COMPILE_CONCURRENCY` | `1` | Maximum simultaneous C++ syntax checks in each backend process |
+| `CPP_COMPILE_TIMEOUT_SECONDS` | `5` | Maximum time allowed for one C++ syntax check |
+| `CPP_COMPILE_QUEUE_SECONDS` | `10` | Maximum time a request waits for an available compiler slot |
 
 ## Start the development server
 
@@ -101,7 +114,7 @@ python app.py
 The default service address is `http://127.0.0.1:5001`. Check its health with:
 
 ```bash
-curl http://127.0.0.1:5001/api/health
+curl http://127.0.0.1:5001/health
 ```
 
 ## Run tests
@@ -118,6 +131,6 @@ After installing the dependencies, start the backend with Gunicorn:
 gunicorn app:app
 ```
 
-The Gunicorn configuration reads the platform-provided `PORT` and supports optional settings such as `WEB_CONCURRENCY`, `GUNICORN_THREADS`, and `GUNICORN_TIMEOUT`.
+The Gunicorn configuration reads the platform-provided `PORT` and supports `WEB_CONCURRENCY` and `GUNICORN_THREADS`. Its request timeout is configured in `gunicorn.conf.py`.
 
 For Render deployment and complete frontend and backend production configuration, see [../Docs/DEPLOYMENT.md](../Docs/DEPLOYMENT.md).
