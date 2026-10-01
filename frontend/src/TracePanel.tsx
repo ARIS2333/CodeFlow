@@ -3,9 +3,6 @@ import type { TraceRequest, TraceState } from './lib/traceRun';
 
 interface TracePanelProps {
   traceState: TraceState;
-  totalSteps: number;
-  step: number;
-  onStepChange: (step: number) => void;
   onRetrace: (request: TraceRequest) => void;
 }
 
@@ -13,11 +10,44 @@ const controlClasses =
   'rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-700 ' +
   'transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40';
 
+export function TraceControls({ totalSteps, step, onStepChange }: {
+  totalSteps: number;
+  step: number;
+  onStepChange: (step: number) => void;
+}) {
+  if (totalSteps <= 0) return null;
+
+  return (
+    <nav aria-label="Trace navigation" className="my-4 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+      <button type="button" className={controlClasses} onClick={() => onStepChange(0)} disabled={step === 0}>
+        ⏮ Start
+      </button>
+      <button type="button" className={controlClasses} onClick={() => onStepChange(step - 1)} disabled={step === 0}>
+        ◀ Prev
+      </button>
+      <span aria-live="polite" className="min-w-[7rem] text-center text-sm font-medium text-gray-700">
+        Step {step + 1} / {totalSteps}
+      </span>
+      <button
+        type="button"
+        className={controlClasses}
+        onClick={() => onStepChange(step + 1)}
+        disabled={step >= totalSteps - 1}
+      >
+        Next ▶
+      </button>
+      <button type="button" className={controlClasses} onClick={() => onStepChange(totalSteps - 1)} disabled={step >= totalSteps - 1}>
+        End ⏭
+      </button>
+      <button type="button" className={controlClasses} onClick={() => onStepChange(0)} disabled={step === 0}>
+        Reset
+      </button>
+    </nav>
+  );
+}
+
 export default function TracePanel({
   traceState,
-  totalSteps,
-  step,
-  onStepChange,
   onRetrace,
 }: TracePanelProps) {
   const request = traceState.status === 'idle' || traceState.status === 'skipped'
@@ -78,34 +108,6 @@ export default function TracePanel({
           Re-trace
         </button>
       </div>
-
-      {totalSteps > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" className={controlClasses} onClick={() => onStepChange(step - 1)} disabled={step === 0}>
-            ◀ Prev
-          </button>
-          <span aria-live="polite" className="min-w-[7rem] text-center text-sm text-gray-700">
-            Step {step + 1} / {totalSteps}
-          </span>
-          <button
-            type="button"
-            className={controlClasses}
-            onClick={() => onStepChange(step + 1)}
-            disabled={step >= totalSteps - 1}
-          >
-            Next ▶
-          </button>
-          <button type="button" className={controlClasses} onClick={() => onStepChange(0)} disabled={step === 0}>
-            Reset
-          </button>
-        </div>
-      )}
-
-      {traceState.status === 'success' && traceState.warning && (
-        <p role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900">
-          {traceState.warning}
-        </p>
-      )}
 
       {traceState.status === 'error' && (
         <div role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">

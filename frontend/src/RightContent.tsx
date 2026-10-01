@@ -1,6 +1,6 @@
 import FlowchartDiagram from './FlowchartDiagram';
 import FlowchartDiagnostics from './FlowchartDiagnostics';
-import TracePanel from './TracePanel';
+import TracePanel, { TraceControls } from './TracePanel';
 import { useEffect, useMemo, useState } from 'react';
 import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import type { TraceSide } from './lib/executionTrace';
@@ -8,8 +8,7 @@ import type { TraceHighlight } from './lib/traceHighlight';
 import type { TraceRequest, TraceState } from './lib/traceRun';
 import type { FlowchartNode, FlowchartEdge, FlowchartSide } from './lib/llmSchemas';
 import type { DiagramNode, DiagramEdge } from './lib/flowchartLayout';
-import type { CodeAnalysis } from './lib/codeAnalysis';
-import { traceSourceReference, traceVariableChanges } from './lib/tracePresentation';
+import { traceVariableChanges } from './lib/tracePresentation';
 
 interface RightContentProps {
   flowchartState: FlowchartState;
@@ -47,14 +46,13 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): DiagramEdge[] => {
   }));
 };
 
-function FlowchartPane({ title, graph, loading, trace, step = 0, sourceContext }: {
+function FlowchartPane({ title, graph, loading, trace, step = 0 }: {
   title: string;
   graph?: FlowchartSide;
   loading: boolean;
   /** Omitted by the static pair above, which is never marked up by a trace. */
   trace?: TraceSide;
   step?: number;
-  sourceContext?: { analysis: CodeAnalysis; code: string };
 }) {
   // Memoize each side separately: the next side or diagnostic must not move
   // nodes that the student is already reading/dragging.
@@ -66,21 +64,6 @@ function FlowchartPane({ title, graph, loading, trace, step = 0, sourceContext }
   // A shorter run stays parked on its last step while the other side walks on,
   // so the student can see which side stopped first and where.
   const reached = trace?.steps.length ? Math.min(step, trace.steps.length - 1) : -1;
-  const finished = trace ? step >= trace.steps.length - 1 : false;
-  const current = reached >= 0 ? trace!.steps[reached] : undefined;
-  const currentNode = current && graph
-    ? graph.nodes.find((node) => node.id === current.nodeId)
-    : undefined;
-  const source = current && graph
-    ? traceSourceReference(
-        graph,
-        current.nodeId,
-        sourceContext?.analysis,
-        sourceContext?.code,
-      )
-    : undefined;
-  const changes = trace && reached >= 0 ? traceVariableChanges(trace, reached) : [];
-
   const highlight = useMemo((): TraceHighlight | undefined => {
     if (!trace || reached < 0) return undefined;
     return {
@@ -103,35 +86,28 @@ function FlowchartPane({ title, graph, loading, trace, step = 0, sourceContext }
         </div>
       ) : <p className="rounded-lg border p-4 text-sm text-gray-600">Flowchart unavailable</p>}
 
+    </section>
+  );
+}
+
+function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: number }) {
+  const reached = trace?.steps.length ? Math.min(step, trace.steps.length - 1) : -1;
+  const current = reached >= 0 ? trace!.steps[reached] : undefined;
+  const changes = trace && reached >= 0 ? traceVariableChanges(trace, reached) : [];
+
+  return (
+    <section className="min-w-0 flex-1">
       {current && (
-        <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold text-gray-900">
               Step {reached + 1} of {trace?.steps.length}
-              {currentNode ? ` · ${currentNode.kind === 'condition' ? 'Condition'
-                : currentNode.kind === 'process' ? 'Operation'
-                  : currentNode.kind === 'terminal' ? 'Return'
-                    : currentNode.kind === 'start' ? 'Start'
-                      : 'End'}` : ''}
             </p>
             {current.branch && (
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
                 Path: {current.branch}
               </span>
             )}
-          </div>
-
-          <div className="mt-2 rounded-md bg-gray-50 p-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              {source
-                ? `Source · ${source.startLine === source.endLine
-                    ? `line ${source.startLine}`
-                    : `lines ${source.startLine}–${source.endLine}`}`
-                : 'Current operation'}
-            </p>
-            <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-gray-900">
-              {source?.text ?? currentNode?.data.label ?? 'Current flowchart step'}
-            </pre>
           </div>
 
           <div className="mt-3 border-t border-gray-100 pt-2">
@@ -158,29 +134,23 @@ function FlowchartPane({ title, graph, loading, trace, step = 0, sourceContext }
             )}
 
             {current.variables.length > 0 && (
-              <details className="mt-2 text-xs text-gray-600">
-                <summary className="cursor-pointer select-none font-medium text-gray-600">
-                  All variables ({current.variables.length})
-                </summary>
-                <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono">
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-gray-700">
+                <p className="font-semibold text-gray-700">All variables</p>
+                <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2 font-mono">
                   {current.variables.map((variable) => (
-                    <div key={variable.name} className="flex gap-1">
-                      <dt className="font-semibold">{variable.name}</dt>
-                      <dd>= {variable.value}</dd>
+                    <div key={variable.name} className="min-w-0 rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
+                      <dt className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {variable.name}
+                      </dt>
+                      <dd className="mt-0.5 break-words text-sm font-semibold text-slate-900">
+                        {variable.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
-              </details>
+              </div>
             )}
           </div>
-
-          {finished && trace && (
-            <p className="mt-2 border-t border-gray-100 pt-2 text-gray-700">
-              {trace.truncated
-                ? 'This run was cut off before it reached an exit.'
-                : <><span className="font-semibold">Result:</span> <span className="font-mono">{trace.finalOutput || 'none reported'}</span></>}
-            </p>
-          )}
         </div>
       )}
     </section>
@@ -223,12 +193,6 @@ function RightContent({
 
   const totalSteps = Math.max(traces?.student?.steps.length ?? 0, traces?.llm?.steps.length ?? 0);
   const safeStep = Math.min(step, Math.max(0, totalSteps - 1));
-  const studentSourceContext = flowchartState.status !== 'idle'
-    && flowchartState.codeAnalysis
-    && flowchartState.request
-    ? { analysis: flowchartState.codeAnalysis, code: flowchartState.request.code }
-    : undefined;
-
   return (
     <div className="w-full p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -289,23 +253,26 @@ function RightContent({
         <section aria-label="Execution trace" className="mt-10 border-t-2 border-gray-300 pt-6">
           <TracePanel
             traceState={traceState}
-            totalSteps={totalSteps}
-            step={safeStep}
-            onStepChange={setStep}
             onRetrace={onRetrace}
           />
           {totalSteps > 0 && graphs?.student && graphs.llm ? (
-            <div className="flex flex-col md:flex-row gap-6">
-              <FlowchartPane
-                title="Student's Run"
-                graph={graphs.student}
-                loading={false}
-                trace={traces?.student}
-                step={safeStep}
-                sourceContext={studentSourceContext}
-              />
-              <FlowchartPane title="Recommended Run" graph={graphs.llm} loading={false} trace={traces?.llm} step={safeStep} />
-            </div>
+            <>
+              <div className="flex flex-col gap-6 md:flex-row">
+                <FlowchartPane
+                  title="Student's Run"
+                  graph={graphs.student}
+                  loading={false}
+                  trace={traces?.student}
+                  step={safeStep}
+                />
+                <FlowchartPane title="Recommended Run" graph={graphs.llm} loading={false} trace={traces?.llm} step={safeStep} />
+              </div>
+              <TraceControls totalSteps={totalSteps} step={safeStep} onStepChange={setStep} />
+              <div className="flex flex-col gap-6 md:flex-row">
+                <TraceStepDetails trace={traces?.student} step={safeStep} />
+                <TraceStepDetails trace={traces?.llm} step={safeStep} />
+              </div>
+            </>
           ) : traceState.status === 'loading' ? (
             <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
               <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />

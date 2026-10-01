@@ -112,16 +112,28 @@ test('a finished trace offers the input it walked and manual step controls', () 
   assert.match(html, /Step 1 \/ 4/);
   assert.match(html, /Prev/);
   assert.match(html, /Next/);
+  assert.match(html, /Start/);
+  assert.match(html, /End/);
   assert.match(html, /Reset/);
   assert.match(html, /Re-trace/);
   assert.doesNotMatch(html, /Regenerate Trace/);
   assert.doesNotMatch(html, /Go to first difference/);
 });
 
+test('trace navigation sits between the run diagrams and their state cards', () => {
+  const { below } = split(render({ status: 'success', request: traceRequest, data: trace! }));
+  const diagrams = below.indexOf('Recommended Run');
+  const controls = below.indexOf('aria-label="Trace navigation"');
+  const details = below.indexOf('Step 1 of 4');
+  assert.ok(diagrams >= 0 && controls > diagrams && details > controls);
+});
+
 test('the step readout carries that side\'s own variables', () => {
   const { below } = split(render({ status: 'success', request: traceRequest, data: trace! }));
+  assert.match(below, /All variables/);
   assert.match(below, /a<\/dt>/);
-  assert.match(below, /= 3/);
+  assert.match(below, />3<\/dd>/);
+  assert.doesNotMatch(below, /<details|<summary|Current operation|Source ·| · Operation|Result:|cut off before/);
 });
 
 test('a streaming trace is usable from the moment the student side lands', () => {
@@ -135,12 +147,12 @@ test('a streaming trace is usable from the moment the student side lands', () =>
   assert.match(below, /Student&#x27;s Run/);
 });
 
-test('a disagreement with the test run is shown next to the controls', () => {
+test('a disagreement warning is not displayed in the trace controls', () => {
   const html = render({
     status: 'success', request: traceRequest, data: trace!,
     warning: 'This trace ends with 3, but running the code reported 5.',
   });
-  assert.match(html, /running the code reported 5/);
+  assert.doesNotMatch(html, /running the code reported 5|read the steps as a suggestion/);
 });
 
 test('a failed trace reports why and leaves the comparison charts standing', () => {
