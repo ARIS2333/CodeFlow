@@ -19,7 +19,7 @@ export const FlowchartRoutedEdge = (props: EdgeProps<DiagramEdge>) => {
     labelY = route.label?.y ?? labelY;
   } else if (route?.back) {
     // Dragging keeps connections live, without snapping the moved node back.
-    // Re-Layout restores globally optimized routes for the complete graph.
+    // A fresh automatic layout restores globally optimized routes for the complete graph.
     const bounds = nodes.map((node) => {
       const width = node.measured?.width ?? NODE_WIDTH;
       const height = node.measured?.height ?? NODE_HEIGHT;

@@ -82,13 +82,23 @@ test('the comparison charts above are left alone while the run is replayed below
   assert.match(above, /Student&#x27;s Logic Flow/);
   assert.match(above, /Recommended Logic Flow/);
   assert.match(above, /Regenerate Flowcharts/);
+  assert.match(above, /Full screen/);
   assert.doesNotMatch(above, /at 1|Step 1 \/ 4|Re-trace/);
 
   // Below: the same two graphs again, under their own titles, carrying the run.
   assert.match(below, /Student&#x27;s Run/);
   assert.match(below, /Recommended Run/);
-  assert.equal((below.match(/Step 1 of 4/g) ?? []).length, 2, 'each replayed side reports its own step');
+  assert.match(below, /aria-label="Execution trace viewer"/);
+  assert.match(below, /Full screen/);
+  assert.doesNotMatch(below, /Step 1 of 4|Path:/, 'state cards do not repeat navigation or branch information');
   assert.doesNotMatch(below, /at 1/, 'model-written step explanations are not displayed');
+});
+
+test('flowcharts allow very small zoom levels for unusually large graphs', () => {
+  const source = readFileSync(new URL('../src/FlowchartDiagram.tsx', import.meta.url), 'utf8');
+  assert.match(source, /minZoom=\{0\.01\}/);
+  assert.match(source, /fitViewOptions=\{\{ minZoom: 0\.01 \}\}/);
+  assert.match(source, /<Controls showInteractive=\{false\}/);
 });
 
 test('an untraceable run explains itself in its own area, without redrawing the charts', () => {
@@ -124,7 +134,7 @@ test('trace navigation sits between the run diagrams and their state cards', () 
   const { below } = split(render({ status: 'success', request: traceRequest, data: trace! }));
   const diagrams = below.indexOf('Recommended Run');
   const controls = below.indexOf('aria-label="Trace navigation"');
-  const details = below.indexOf('Step 1 of 4');
+  const details = below.indexOf('Initial state');
   assert.ok(diagrams >= 0 && controls > diagrams && details > controls);
 });
 

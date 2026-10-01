@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useRef, memo, useState } from 'reac
 import {
   ReactFlow,
   ReactFlowProvider,
+  Controls,
   Panel,
   useNodesState,
   useEdgesState,
@@ -100,6 +101,7 @@ interface FlowchartDiagramProps {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   highlight?: TraceHighlight;
+  heightClassName?: string;
 }
 
 // Custom Node Component following the pattern you provided
@@ -177,6 +179,8 @@ const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'hi
   const [layoutWarning, setLayoutWarning] = useState<string | null>(null);
   const requestVersion = useRef({ value: 0 });
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizeFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Mount unchanged node contents first so ELK can read their existing sizes.
   // This does not resize nodes or alter the viewport's fit policy.
@@ -213,7 +217,7 @@ const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'hi
       if (ticket !== requestVersion.current.value) return;
       console.warn('ELK layout unavailable; using the basic layout:', error);
       result = layoutFlowchart(currentNodes, edges);
-      setLayoutWarning('Using basic layout. Re-Layout to retry automatic routing.');
+      setLayoutWarning('Using basic layout because automatic routing is unavailable.');
     }
     // A slow layout must not overwrite a newly generated graph or a closed panel.
     if (ticket !== requestVersion.current.value) return;
@@ -233,8 +237,23 @@ const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'hi
     return () => cancelAnimationFrame(frame);
   }, [nodesInitialized, phase, onLayout]);
 
+  // A full-screen or window-size change alters the available canvas. Re-fit
+  // the already-laid-out graph so the whole path remains visible immediately.
+  useEffect(() => {
+    if (!hasLayout || !containerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (resizeFitTimer.current) clearTimeout(resizeFitTimer.current);
+      resizeFitTimer.current = setTimeout(() => { void fitView(); }, 80);
+    });
+    observer.observe(containerRef.current);
+    return () => {
+      observer.disconnect();
+      if (resizeFitTimer.current) clearTimeout(resizeFitTimer.current);
+    };
+  }, [fitView, hasLayout]);
+
   return (
-    <div className="relative h-full">
+    <div ref={containerRef} className="relative h-full">
     <ReactFlow
       nodes={flowNodes}
       edges={flowEdges}
@@ -245,18 +264,12 @@ const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'hi
       nodesDraggable={phase === 'ready'}
       style={{ opacity: hasLayout ? 1 : 0 }}
       fitView
+      minZoom={0.01}
+      fitViewOptions={{ minZoom: 0.01 }}
       proOptions={{ hideAttribution: true }}
       className="bg-teal-50"
     >
-      <Panel position="top-right">
-        <button 
-          onClick={() => { void onLayout(); }}
-          disabled={phase !== 'ready'}
-          className="px-3 py-1 bg-gray-800 text-white rounded text-sm hover:bg-gray-700 transition-colors disabled:opacity-50"
-        >
-          {phase === 'ready' ? 'Re-Layout' : 'Arranging...'}
-        </button>
-      </Panel>
+      <Controls showInteractive={false} />
       {layoutWarning && <Panel position="bottom-left">
         <p role="status" className="rounded bg-amber-50 p-2 text-xs text-amber-800">{layoutWarning}</p>
       </Panel>}
@@ -272,9 +285,9 @@ const FlowchartDiagramInner = ({ nodes, edges }: Omit<FlowchartDiagramProps, 'hi
 const EMPTY_HIGHLIGHT: TraceHighlight = {};
 
 // Main component that provides the React Flow context
-const FlowchartDiagram = ({ nodes, edges, highlight }: FlowchartDiagramProps) => {
+const FlowchartDiagram = ({ nodes, edges, highlight, heightClassName = 'h-[500px]' }: FlowchartDiagramProps) => {
   return (
-    <div className="w-full h-[500px]">
+    <div className={`w-full ${heightClassName}`}>
       <TraceHighlightContext.Provider value={highlight ?? EMPTY_HIGHLIGHT}>
         <ReactFlowProvider>
           <FlowchartDiagramInner nodes={nodes} edges={edges} />

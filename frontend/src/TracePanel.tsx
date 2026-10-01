@@ -4,21 +4,26 @@ import type { TraceRequest, TraceState } from './lib/traceRun';
 interface TracePanelProps {
   traceState: TraceState;
   onRetrace: (request: TraceRequest) => void;
+  compact?: boolean;
 }
 
 const controlClasses =
   'rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-700 ' +
   'transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40';
 
-export function TraceControls({ totalSteps, step, onStepChange }: {
+export function TraceControls({ totalSteps, step, onStepChange, compact = false }: {
   totalSteps: number;
   step: number;
   onStepChange: (step: number) => void;
+  compact?: boolean;
 }) {
   if (totalSteps <= 0) return null;
 
   return (
-    <nav aria-label="Trace navigation" className="my-4 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+    <nav
+      aria-label="Trace navigation"
+      className={`${compact ? 'mb-3 shrink-0' : 'my-4'} flex flex-wrap items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3`}
+    >
       <button type="button" className={controlClasses} onClick={() => onStepChange(0)} disabled={step === 0}>
         ⏮ Start
       </button>
@@ -49,6 +54,7 @@ export function TraceControls({ totalSteps, step, onStepChange }: {
 export default function TracePanel({
   traceState,
   onRetrace,
+  compact = false,
 }: TracePanelProps) {
   const request = traceState.status === 'idle' || traceState.status === 'skipped'
     ? undefined
@@ -78,8 +84,8 @@ export default function TracePanel({
   };
 
   return (
-    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50/60 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={`${compact ? 'mb-3 flex flex-wrap items-center gap-3 p-3' : 'mb-4 p-4'} rounded-lg border border-blue-200 bg-blue-50/60`}>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold text-gray-800">Execution Trace</h3>
         {loading && (
           <span role="status" className="flex items-center gap-2 text-sm text-blue-700">
@@ -89,7 +95,7 @@ export default function TracePanel({
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className={`${compact ? 'min-w-[20rem] flex-1' : 'mt-3'} flex flex-wrap items-center gap-2`}>
         <label htmlFor="trace-input" className="text-sm font-medium text-gray-700">Input</label>
         <input
           id="trace-input"

@@ -1,7 +1,8 @@
 import FlowchartDiagram from './FlowchartDiagram';
 import FlowchartDiagnostics from './FlowchartDiagnostics';
 import TracePanel, { TraceControls } from './TracePanel';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import type { TraceSide } from './lib/executionTrace';
 import type { TraceHighlight } from './lib/traceHighlight';
@@ -18,6 +19,54 @@ interface RightContentProps {
   onRegenerateFlowchart?: () => void;
   canRegenerateFlowchart?: boolean;
   flowchartRegenerationState?: FlowchartRegenerationState;
+}
+
+function FullscreenFrame({ label, children }: {
+  label: string;
+  children: ReactNode | ((expanded: boolean) => ReactNode);
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    if (expanded) frameRef.current?.scrollTo({ top: 0 });
+  }, [expanded]);
+
+  return (
+    <div
+      ref={frameRef}
+      aria-label={label}
+      className={expanded
+        ? 'fixed inset-0 z-50 overflow-auto bg-white p-4 md:p-6'
+        : 'relative'}
+    >
+      <div className={expanded ? 'sticky top-0 z-30 mb-3 flex justify-end' : 'mb-3 flex justify-end'}>
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-100"
+          aria-expanded={expanded}
+        >
+          {expanded ? 'Exit full screen' : 'Full screen'}
+        </button>
+      </div>
+      {typeof children === 'function' ? children(expanded) : children}
+    </div>
+  );
 }
 
 // Convert API node format to React Flow node format
@@ -46,13 +95,14 @@ const convertToReactFlowEdges = (edges: FlowchartEdge[]): DiagramEdge[] => {
   }));
 };
 
-function FlowchartPane({ title, graph, loading, trace, step = 0 }: {
+function FlowchartPane({ title, graph, loading, trace, step = 0, diagramHeightClassName }: {
   title: string;
   graph?: FlowchartSide;
   loading: boolean;
   /** Omitted by the static pair above, which is never marked up by a trace. */
   trace?: TraceSide;
   step?: number;
+  diagramHeightClassName?: string;
 }) {
   // Memoize each side separately: the next side or diagnostic must not move
   // nodes that the student is already reading/dragging.
@@ -77,7 +127,12 @@ function FlowchartPane({ title, graph, loading, trace, step = 0 }: {
       <h3 className="text-lg font-semibold mb-2">{title}</h3>
       {diagram ? (
         <div className="border rounded-lg overflow-hidden">
-          <FlowchartDiagram nodes={diagram.nodes} edges={diagram.edges} highlight={highlight} />
+          <FlowchartDiagram
+            nodes={diagram.nodes}
+            edges={diagram.edges}
+            highlight={highlight}
+            heightClassName={diagramHeightClassName}
+          />
         </div>
       ) : loading ? (
         <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
@@ -99,18 +154,7 @@ function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: numbe
     <section className="min-w-0 flex-1">
       {current && (
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold text-gray-900">
-              Step {reached + 1} of {trace?.steps.length}
-            </p>
-            {current.branch && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
-                Path: {current.branch}
-              </span>
-            )}
-          </div>
-
-          <div className="mt-3 border-t border-gray-100 pt-2">
+          <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
               {reached === 0 ? 'Initial state' : 'State changes'}
             </p>
@@ -139,7 +183,7 @@ function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: numbe
                 <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2 font-mono">
                   {current.variables.map((variable) => (
                     <div key={variable.name} className="min-w-0 rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
-                      <dt className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      <dt className="truncate text-[10px] font-semibold tracking-wide text-slate-500">
                         {variable.name}
                       </dt>
                       <dd className="mt-0.5 break-words text-sm font-semibold text-slate-900">
@@ -234,10 +278,12 @@ function RightContent({
         // The structural comparison. These two are never marked up by a trace:
         // the student reads and rearranges them, and a replay must not disturb
         // whatever they have arranged here.
-        <div className="flex flex-col md:flex-row gap-6">
-          <FlowchartPane title="Student's Logic Flow" graph={graphs?.student} loading={flowchartState.status === 'loading'} />
-          <FlowchartPane title="Recommended Logic Flow" graph={graphs?.llm} loading={flowchartState.status === 'loading'} />
-        </div>
+        <FullscreenFrame label="Flowchart comparison">
+          <div className="flex flex-col gap-6 md:flex-row">
+            <FlowchartPane title="Student's Logic Flow" graph={graphs?.student} loading={flowchartState.status === 'loading'} />
+            <FlowchartPane title="Recommended Logic Flow" graph={graphs?.llm} loading={flowchartState.status === 'loading'} />
+          </div>
+        </FullscreenFrame>
       ) : (
         <div className="bg-gray-50 p-4 rounded-lg">
           <p className="text-gray-600">
@@ -251,34 +297,63 @@ function RightContent({
         // rendered again here, on their own React Flow instances, so that
         // stepping through a run cannot move or recolour the charts above.
         <section aria-label="Execution trace" className="mt-10 border-t-2 border-gray-300 pt-6">
-          <TracePanel
-            traceState={traceState}
-            onRetrace={onRetrace}
-          />
-          {totalSteps > 0 && graphs?.student && graphs.llm ? (
-            <>
-              <div className="flex flex-col gap-6 md:flex-row">
-                <FlowchartPane
-                  title="Student's Run"
-                  graph={graphs.student}
-                  loading={false}
-                  trace={traces?.student}
-                  step={safeStep}
-                />
-                <FlowchartPane title="Recommended Run" graph={graphs.llm} loading={false} trace={traces?.llm} step={safeStep} />
+          <FullscreenFrame label="Execution trace viewer">
+            {(expanded) => <>
+              <div className={expanded ? 'flex flex-wrap items-stretch gap-3' : undefined}>
+                <div className={expanded ? 'min-w-0 flex-1' : undefined}>
+                  <TracePanel
+                    traceState={traceState}
+                    onRetrace={onRetrace}
+                    compact={expanded}
+                  />
+                </div>
+                {expanded && totalSteps > 0 && (
+                  <TraceControls
+                    totalSteps={totalSteps}
+                    step={safeStep}
+                    onStepChange={setStep}
+                    compact
+                  />
+                )}
               </div>
-              <TraceControls totalSteps={totalSteps} step={safeStep} onStepChange={setStep} />
-              <div className="flex flex-col gap-6 md:flex-row">
-                <TraceStepDetails trace={traces?.student} step={safeStep} />
-                <TraceStepDetails trace={traces?.llm} step={safeStep} />
-              </div>
-            </>
-          ) : traceState.status === 'loading' ? (
-            <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
-              <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-              The AI is working through this input step by step...
-            </div>
-          ) : null}
+              {totalSteps > 0 && graphs?.student && graphs.llm ? (
+                <>
+                <div className="flex flex-col gap-6 md:flex-row">
+                  <FlowchartPane
+                    title="Student's Run"
+                    graph={graphs.student}
+                    loading={false}
+                    trace={traces?.student}
+                    step={safeStep}
+                    diagramHeightClassName={expanded ? 'h-[clamp(260px,42vh,520px)]' : undefined}
+                  />
+                  <FlowchartPane
+                    title="Recommended Run"
+                    graph={graphs.llm}
+                    loading={false}
+                    trace={traces?.llm}
+                    step={safeStep}
+                    diagramHeightClassName={expanded ? 'h-[clamp(260px,42vh,520px)]' : undefined}
+                  />
+                </div>
+                {!expanded && (
+                  <TraceControls totalSteps={totalSteps} step={safeStep} onStepChange={setStep} />
+                )}
+                <div className={expanded
+                  ? 'flex max-h-[24vh] flex-col gap-6 overflow-auto md:flex-row'
+                  : 'flex flex-col gap-6 md:flex-row'}>
+                  <TraceStepDetails trace={traces?.student} step={safeStep} />
+                  <TraceStepDetails trace={traces?.llm} step={safeStep} />
+                </div>
+                </>
+              ) : traceState.status === 'loading' ? (
+                <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
+                  <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                  The AI is working through this input step by step...
+                </div>
+              ) : null}
+            </>}
+          </FullscreenFrame>
         </section>
       )}
     </div>
