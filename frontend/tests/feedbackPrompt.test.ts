@@ -36,6 +36,7 @@ test('Python feedback separates syntax errors from runtime exceptions', () => {
   assert.match(prompt, /first condition executed.*every call fails/s);
   assert.match(prompt, /UnboundLocalError only for paths that reach it/);
   assert.match(prompt, /Once a case raises an exception, it has no return value/);
+  assert.match(prompt, /syntaxIssues is empty.*Do not report "❌ Syntax Error"/s);
   assert.doesNotMatch(prompt, /use exactly\s+"❌ Compile Error"/);
 });
 
@@ -118,6 +119,53 @@ test('source-backed Java compile issues override invented runtime outputs', () =
     assert.deepEqual(
       result.value.TestResults.map(({ yourOutput }) => yourOutput),
       ['❌ Compile Error', '❌ Compile Error'],
+    );
+  }
+});
+
+test('clean Python analysis rejects a model-invented syntax error', () => {
+  const analysis = analysisStub('python');
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'in1To10(5, False)', expected: 'True', yourOutput: '❌ Syntax Error' },
+      { input: 'in1To10(11, False)', expected: 'False', yourOutput: '❌ Syntax Error' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.errors.join(' '), /passed syntax analysis/);
+  }
+});
+
+test('source-backed Python syntax issues still block every test case', () => {
+  const analysis = analysisStub('python');
+  analysis.syntaxIssues = [{
+    id: 'syntax-1',
+    kind: 'python-syntax-error',
+    text: "'return' outside function",
+    startLine: 1,
+    startColumn: 1,
+    endLine: 1,
+    endColumn: 12,
+    startByte: 0,
+    endByte: 11,
+  }];
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: true,
+    TestResults: [
+      { input: 'f()', expected: 'True', yourOutput: '✅ True' },
+      { input: 'f()', expected: 'False', yourOutput: '❌ True' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.IsCorrect, false);
+    assert.deepEqual(
+      result.value.TestResults.map(({ yourOutput }) => yourOutput),
+      ['❌ Syntax Error', '❌ Syntax Error'],
     );
   }
 });

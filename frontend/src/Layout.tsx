@@ -4,7 +4,7 @@ import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { panelConfig } from './config/panelConfig';
-import type { FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
+import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import { runTrace, type TraceRequest, type TraceState } from './lib/traceRun';
 import {
   describeSettings,
@@ -41,6 +41,9 @@ export const Layout = ({
   );
   const [flowchartRegenerationState, setFlowchartRegenerationState] =
     useState<FlowchartRegenerationState>({ status: 'idle' });
+  const [evaluationState, setEvaluationState] = useState<EvaluationState>(
+    cachedWorkspace?.evaluationState ?? { status: 'idle' },
+  );
 
   // The trace lives here rather than in the panel so that a re-trace survives
   // the panel being closed, and so a new run can cancel one the student left
@@ -136,6 +139,7 @@ export const Layout = ({
           onRegisterFlowchartRegenerator={registerFlowchartRegenerator}
           onFlowchartRegenerateAvailabilityChange={setCanRegenerateFlowchart}
           onFlowchartRegenerationStateChange={setFlowchartRegenerationState}
+          onEvaluationStateChange={setEvaluationState}
           onRunStart={() => {
             cancelRetrace();
             setTraceState({ status: 'idle' });
@@ -150,6 +154,7 @@ export const Layout = ({
         onClose={onTogglePanel}
         onWidthChange={handleWidthChange}
         flowchartState={flowchartState}
+        evaluationState={evaluationState}
         traceState={traceState}
         onRetrace={startRetrace}
         onRegenerateFlowchart={() => flowchartRegenerator.current?.()}

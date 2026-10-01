@@ -1,9 +1,15 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { runTrace, selectTraceCase, type TraceState } from '../src/lib/traceRun.ts';
+import {
+  noTraceableCaseReason,
+  runTrace,
+  selectTraceCase,
+  type TraceState,
+} from '../src/lib/traceRun.ts';
 import type { TestResult } from '../src/lib/llmSchemas.ts';
 import { traceGraphs, traceReply } from './traceFixtures.ts';
 import { controlledStream, streamResponse } from './streamFixtures.ts';
+import { analysisStub } from './flowchartFixtures.ts';
 
 /** These tests never reach a provider; the backend contract just requires a
  * model to be named on every LLM request. */
@@ -58,6 +64,26 @@ test('code with a blocking Java or Python language error is never traced', () =>
   assert.equal(selectTraceCase([
     result('f(1, 2)', '❌ Compilation Error'),
   ]), null);
+});
+
+test('an unavailable trace names a source-backed syntax error', () => {
+  const analysis = analysisStub('python');
+  analysis.syntaxIssues = [{
+    id: 'syntax-1',
+    kind: 'python-syntax-error',
+    text: 'inconsistent use of tabs and spaces in indentation',
+    startLine: 4,
+    startColumn: 1,
+    endLine: 4,
+    endColumn: 9,
+    startByte: 72,
+    endByte: 80,
+  }];
+
+  assert.equal(
+    noTraceableCaseReason(analysis),
+    'Trace cannot start because of a syntax error on line 4: inconsistent use of tabs and spaces in indentation. Fix the source and run the code again.',
+  );
 });
 
 test('runtime failures and non-terminating cases are not automatically traced', () => {

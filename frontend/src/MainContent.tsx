@@ -6,7 +6,8 @@ import { cpp } from '@codemirror/lang-cpp';
 import { autocompletion, CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { keymap, type ViewUpdate } from '@codemirror/view';
 import { acceptCompletion, completionKeymap } from '@codemirror/autocomplete';
-import { indentLess, insertTab } from '@codemirror/commands';
+import { indentLess, indentMore } from '@codemirror/commands';
+import { indentUnit } from '@codemirror/language';
 import { Prec } from '@codemirror/state';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import ReactMarkdown from 'react-markdown';
@@ -41,6 +42,7 @@ import {
 } from './lib/llmSchemas';
 import {
   requestCodeAnalysis,
+  syntaxDiagnosticFor,
   type CodeAnalysis,
   type SupportedLanguage,
 } from './lib/codeAnalysis';
@@ -61,6 +63,8 @@ interface MainContentProps {
   onRegisterFlowchartRegenerator: (handler: (() => void) | null) => void;
   onFlowchartRegenerateAvailabilityChange: (available: boolean) => void;
   onFlowchartRegenerationStateChange: (state: FlowchartRegenerationState) => void;
+  /** Shares the terminal result with the analysis panel so both describe the same run. */
+  onEvaluationStateChange: (state: EvaluationState) => void;
   /** Null until a model is chosen; nothing that calls an LLM may run before then. */
   settings: ModelSettings | null;
   /** Opens the settings panel, with a reason to show the student. */
@@ -176,6 +180,7 @@ export const MainContent = ({
   onRegisterFlowchartRegenerator,
   onFlowchartRegenerateAvailabilityChange,
   onFlowchartRegenerationStateChange,
+  onEvaluationStateChange,
   settings,
   onRequireSettings,
 }: MainContentProps) => {
@@ -201,6 +206,13 @@ export const MainContent = ({
   const isRunning = isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
+  const syntaxDiagnostic = flowchartState.status !== 'idle'
+    ? syntaxDiagnosticFor(flowchartState.codeAnalysis)
+    : undefined;
+
+  useEffect(() => {
+    onEvaluationStateChange(evaluationState);
+  }, [evaluationState, onEvaluationStateChange]);
 
   useEffect(() => () => {
     activeRun.current?.cancel();
@@ -469,7 +481,10 @@ export const MainContent = ({
             controller.signal,
           );
         } else if (evaluationState.status === 'success') {
-          onTraceStateChange({ status: 'skipped', reason: noTraceableCaseReason });
+          onTraceStateChange({
+            status: 'skipped',
+            reason: noTraceableCaseReason(await codeAnalysis),
+          });
         }
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
@@ -588,7 +603,10 @@ export const MainContent = ({
         const testCase = selectTraceCase(evaluation.TestResults);
         if (signal.aborted) return Promise.resolve();
         if (!testCase) {
-          onTraceStateChange({ status: 'skipped', reason: noTraceableCaseReason });
+          onTraceStateChange({
+            status: 'skipped',
+            reason: noTraceableCaseReason(retryContext.codeAnalysis),
+          });
           return Promise.resolve();
         }
         return runTrace(
@@ -628,6 +646,10 @@ export const MainContent = ({
   // Create extensions with autocompletion enabled for all languages
   const getExtensions = () => {
     const baseExtensions = [
+      // Keep indentation deterministic across pasted/typed Python. Inserting a
+      // literal tab beside CodeMirror's space indentation creates an invisible
+      // TabError even though the lines look aligned.
+      indentUnit.of('    '),
       autocompletion({override: [
         language === 'java' ? javaCompletion :
         language === 'python' ? pythonCompletion :
@@ -647,7 +669,7 @@ export const MainContent = ({
         // acceptCompletion returns false with no popup showing, so the next
         // Tab binding takes over.
         { key: 'Tab', run: acceptCompletion },
-        { key: 'Tab', run: insertTab, shift: indentLess },
+        { key: 'Tab', run: indentMore, shift: indentLess },
       ])),
       keymap.of([
         // Enter also accepts a suggestion, which is what the starter comment
@@ -960,7 +982,13 @@ export const MainContent = ({
                 <div className={`font-bold ${codeEvaluation.IsCorrect ? 'text-green-400' : 'text-red-400'}`}>
                   Code Status: {codeEvaluation.IsCorrect ? 'CORRECT' : 'INCORRECT'}
                 </div>
-                <div>
+                {syntaxDiagnostic ? (
+                  <div role="alert" className="rounded border border-red-900 bg-red-950/40 p-2 text-red-300">
+                    <div className="font-bold">Syntax error · Line {syntaxDiagnostic.line}</div>
+                    <div>{syntaxDiagnostic.message}</div>
+                  </div>
+                ) : (
+                  <div>
                   <div className="font-bold text-gray-300 mb-1">Test Results:</div>
                   <div className="space-y-1">
                     {codeEvaluation.TestResults.map((test: TestResult, index: number) => (
@@ -977,7 +1005,8 @@ export const MainContent = ({
                       </div>
                     ))}
                   </div>
-                </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-gray-500">// Click "Run Code" to see output</div>

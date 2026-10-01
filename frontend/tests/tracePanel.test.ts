@@ -27,6 +27,7 @@ const { default: RightContent } = await import(viewModule('RightContent.tsx', {
   './FlowchartDiagram': 'data:text/javascript,export default function Diagram(){return null}',
   './TracePanel': viewModule('TracePanel.tsx'),
   './lib/executionTrace': import.meta.resolve('../src/lib/executionTrace.ts'),
+  './lib/tracePresentation': import.meta.resolve('../src/lib/tracePresentation.ts'),
 })) as {
   default: ComponentType<{
     flowchartState: FlowchartState;
@@ -86,8 +87,8 @@ test('the comparison charts above are left alone while the run is replayed below
   // Below: the same two graphs again, under their own titles, carrying the run.
   assert.match(below, /Student&#x27;s Run/);
   assert.match(below, /Recommended Run/);
-  assert.match(below, /at 1/);
-  assert.equal((below.match(/at 1/g) ?? []).length, 2, 'each replayed side reports its own step');
+  assert.equal((below.match(/Step 1 of 4/g) ?? []).length, 2, 'each replayed side reports its own step');
+  assert.doesNotMatch(below, /at 1/, 'model-written step explanations are not displayed');
 });
 
 test('an untraceable run explains itself in its own area, without redrawing the charts', () => {

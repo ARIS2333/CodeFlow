@@ -142,6 +142,41 @@ class CodeAnalysisTests(unittest.TestCase):
         self.assertEqual(returns[-1]["parentAnchor"], elif_fact["anchor"])
         self.assertEqual(returns[-1]["branch"], "false")
 
+    def test_python_accepts_valid_in1to10_submission(self):
+        result = analyze_code(
+            "python",
+            """def in1To10(n, outsideMode):
+    if n >= 1 and n <= 10:
+        n = n+1
+        return True
+    elif outsideMode == True:
+        if n <= 1 or n >= 10:
+            return True
+    return False
+""",
+        )
+
+        self.assertEqual(result["parseStatus"], "clean")
+        self.assertEqual(result["syntaxIssues"], [])
+
+    def test_python_compile_gate_finds_context_sensitive_syntax_errors(self):
+        result = analyze_code("python", "return True")
+
+        self.assertEqual(result["parseStatus"], "recovered")
+        self.assertEqual(len(result["syntaxIssues"]), 1)
+        self.assertEqual(result["syntaxIssues"][0]["kind"], "python-syntax-error")
+        self.assertIn("outside function", result["syntaxIssues"][0]["text"])
+
+    def test_python_compile_error_precedes_broad_tree_sitter_recovery(self):
+        result = analyze_code(
+            "python",
+            "def f():\n    if True:\n    \treturn True\n        return False",
+        )
+
+        self.assertEqual(result["parseStatus"], "recovered")
+        self.assertEqual(result["syntaxIssues"][0]["kind"], "python-syntax-error")
+        self.assertIn("tabs and spaces", result["syntaxIssues"][0]["text"])
+
     def test_cpp_extracts_functions_loops_conditions_and_returns(self):
         result = analyze_code(
             "cpp",

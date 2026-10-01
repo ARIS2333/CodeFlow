@@ -280,6 +280,47 @@ def _syntax_issues(root: Node, source: bytes) -> list[dict[str, Any]]:
     return issues
 
 
+def _python_compile_issue(code: str) -> dict[str, Any] | None:
+    """Return Python's own source-backed syntax failure without executing code.
+
+    Tree-sitter is intentionally error tolerant and does not reject every
+    context-sensitive Python syntax failure (for example, a top-level return).
+    Python's compile step closes that gap and makes an empty syntaxIssues list
+    authoritative for feedback validation.
+    """
+    try:
+        compile(code, "<student-submission>", "exec")
+        return None
+    except SyntaxError as error:
+        lines = code.splitlines(keepends=True) or [""]
+        start_line = min(max(error.lineno or 1, 1), len(lines))
+        end_line = min(max(error.end_lineno or start_line, start_line), len(lines))
+        start_column = max(error.offset or 1, 1)
+        end_column = max(error.end_offset or start_column, start_column)
+
+        def byte_offset(line_number: int, column: int) -> int:
+            before_line = "".join(lines[: line_number - 1])
+            line = lines[line_number - 1]
+            before_column = line[: max(column - 1, 0)]
+            return len((before_line + before_column).encode("utf-8"))
+
+        start_byte = byte_offset(start_line, start_column)
+        end_byte = byte_offset(end_line, end_column)
+        if end_byte < start_byte:
+            end_byte = start_byte
+
+        return {
+            "kind": "python-syntax-error",
+            "text": error.msg,
+            "startLine": start_line,
+            "startColumn": start_column,
+            "endLine": end_line,
+            "endColumn": end_column,
+            "startByte": start_byte,
+            "endByte": end_byte,
+        }
+
+
 def _java_can_complete_normally(node: Node) -> bool | None:
     """Conservatively model Java's normal-completion rule.
 
@@ -587,6 +628,15 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
                 **_position(tree.root_node),
             }
         )
+    if normalized_language == "python":
+        python_issue = _python_compile_issue(code)
+        if python_issue is not None:
+            # Keep Tree-sitter's recovery diagnostics for grounding, but put
+            # Python's precise error first so the student sees a useful line
+            # and message instead of a recovered node spanning the whole file.
+            syntax_issues.insert(0, python_issue)
+            for index, issue in enumerate(syntax_issues, start=1):
+                issue["id"] = f"syntax-{index}"
 
     compile_issues = (
         _java_compile_issues(tree.root_node, source)

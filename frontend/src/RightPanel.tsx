@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import RightContent from './RightContent';
 import { panelConfig } from './config/panelConfig';
-import type { FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
+import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import type { TraceRequest, TraceState } from './lib/traceRun';
 
 interface RightPanelProps {
@@ -10,6 +10,7 @@ interface RightPanelProps {
   onClose: () => void;
   onWidthChange?: (width: number) => void;
   flowchartState: FlowchartState;
+  evaluationState: EvaluationState;
   traceState: TraceState;
   onRetrace: (request: TraceRequest) => void;
   onRegenerateFlowchart: () => void;
@@ -22,6 +23,7 @@ export const RightPanel = ({
   onClose,
   onWidthChange,
   flowchartState,
+  evaluationState,
   traceState,
   onRetrace,
   onRegenerateFlowchart,
@@ -150,6 +152,7 @@ export const RightPanel = ({
           {/* Render the RightContent component inside the panel */}
           <RightContent
             flowchartState={flowchartState}
+            evaluationState={evaluationState}
             traceState={traceState}
             onRetrace={onRetrace}
             onRegenerateFlowchart={onRegenerateFlowchart}

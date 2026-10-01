@@ -154,6 +154,9 @@ PYTHON-SPECIFIC RULES:
   a loop, and duplicate parameter names all block every test case.
 - If codeAnalysis.syntaxIssues is non-empty, set IsCorrect to false and use
   exactly "❌ Syntax Error" for every test case without simulating it.
+- If codeAnalysis.syntaxIssues is empty, the source passed Python syntax
+  validation. Do not report "❌ Syntax Error"; evaluate every test case using
+  normal Python semantics instead.
 - Never use the Java verdict "❌ Compile Error" for Python.
 - Python identifiers are case-sensitive. Resolve every identifier exactly before
   evaluating the operation or deciding which branch runs. Never substitute a

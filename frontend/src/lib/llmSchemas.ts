@@ -653,6 +653,21 @@ export const validateCodeEvaluationForAnalysis = (
   const result = validateCodeEvaluation(input);
   if (!result.ok) return result;
 
+  if (
+    codeAnalysis.language === 'python'
+    && codeAnalysis.syntaxIssues.length === 0
+    && result.value.TestResults.some(
+      ({ yourOutput }) => yourOutput.trim() === '❌ Syntax Error',
+    )
+  ) {
+    return {
+      ok: false,
+      errors: [
+        'the Python source passed syntax analysis; do not report "❌ Syntax Error" and evaluate each test case',
+      ],
+    };
+  }
+
   const blockingVerdict = codeAnalysis.language === 'java' || codeAnalysis.language === 'cpp'
     ? codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0
       ? '❌ Compile Error'

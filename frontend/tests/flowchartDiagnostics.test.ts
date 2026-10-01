@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import type { FlowchartState } from '../src/lib/analysisRun.ts';
+import type { EvaluationState, FlowchartState } from '../src/lib/analysisRun.ts';
 import type { FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
 import type { TraceState } from '../src/lib/traceRun.ts';
 import { missingTokenIssue, sampleGraph } from './flowchartFixtures.ts';
@@ -30,10 +30,12 @@ const panelUrl = viewModule('RightContent.tsx', {
   './FlowchartDiagram': 'data:text/javascript,export default function Diagram(){return null}',
   './TracePanel': viewModule('TracePanel.tsx'),
   './lib/executionTrace': import.meta.resolve('../src/lib/executionTrace.ts'),
+  './lib/tracePresentation': import.meta.resolve('../src/lib/tracePresentation.ts'),
 });
 const { default: RightContent } = await import(panelUrl) as {
   default: ComponentType<{
     flowchartState: FlowchartState;
+    evaluationState?: EvaluationState;
     traceState: TraceState;
     onRetrace: () => void;
   }>;
@@ -42,9 +44,13 @@ const { default: RightContent } = await import(panelUrl) as {
 const generation: FlowchartGenerationContext = {
   mode: 'inferred', syntaxIssues: [{ ...missingTokenIssue }],
 };
-const render = (flowchartState: FlowchartState, traceState: TraceState = { status: 'idle' }) =>
+const render = (
+  flowchartState: FlowchartState,
+  traceState: TraceState = { status: 'idle' },
+  evaluationState?: EvaluationState,
+) =>
   renderToStaticMarkup(createElement(RightContent, {
-    flowchartState, traceState, onRetrace: () => {},
+    flowchartState, traceState, evaluationState, onRetrace: () => {},
   }));
 
 for (const state of [
@@ -52,34 +58,64 @@ for (const state of [
   { status: 'success', data: sampleGraph(), generation },
   { status: 'error', error: 'Model response failed', generation },
 ] satisfies FlowchartState[]) {
-  test(`panel does not show a diagnostic card without model suggestions on ${state.status}`, () => {
+  test(`inferred-mode notice does not invent missing symbols on ${state.status}`, () => {
     const html = render(state);
     assert.doesNotMatch(html, /Possible missing symbols|Parser diagnostics|Tree-sitter|model-inferred/);
+    assert.match(html, /Flowchart inferred from incomplete code/);
+    assert.match(html, /may not represent an executable program/);
     if (state.status === 'loading') assert.match(html, /Generating flowchart/);
     if (state.status === 'success') {
       assert.match(html, /Student&#x27;s Logic Flow/);
       assert.match(html, /Recommended Logic Flow/);
     }
     if (state.status === 'error') {
-      assert.match(html, /Flowchart unavailable/);
-      assert.match(html, /Model response failed/);
+      assert.match(html, /Flowchart generation failed/);
+      assert.match(html, /try Regenerate Flowcharts/);
+      assert.doesNotMatch(html, /Model response failed/);
     }
   });
 }
 
-test('idle, parsing, and grounded panels do not show missing-symbol cards', () => {
+test('idle, parsing, and grounded panels do not show inferred-mode cards', () => {
   for (const state of [
     { status: 'idle' },
     { status: 'loading' },
     { status: 'success', data: sampleGraph(true), generation: { mode: 'grounded', syntaxIssues: [] } },
   ] satisfies FlowchartState[]) {
-    assert.doesNotMatch(render(state), /Possible missing symbols|Parser diagnostics/);
+    assert.doesNotMatch(render(state), /Flowchart inferred|Possible missing symbols|Parser diagnostics/);
   }
 });
 
-test('recovered code without a model suggestion does not show filler text', () => {
+test('a terminal compile error warns beside an otherwise grounded flowchart', () => {
+  const html = render(
+    { status: 'success', data: sampleGraph(true), generation: { mode: 'grounded', syntaxIssues: [] } },
+    { status: 'idle' },
+    { status: 'success', data: {
+      IsCorrect: false,
+      TestResults: [{ input: 'f(1)', expected: 'true', yourOutput: '❌ Compile Error' }],
+    } },
+  );
+  assert.match(html, /Flowchart generated from code with an error/);
+  assert.match(html, /simulated run reported a compile error/);
+  assert.match(html, /program cannot run as written/);
+});
+
+test('ordinary wrong answers do not create a compile warning', () => {
+  const html = render(
+    { status: 'success', data: sampleGraph(true), generation: { mode: 'grounded', syntaxIssues: [] } },
+    { status: 'idle' },
+    { status: 'success', data: {
+      IsCorrect: false,
+      TestResults: [{ input: 'f(1)', expected: 'true', yourOutput: '❌ false' }],
+    } },
+  );
+  assert.doesNotMatch(html, /Flowchart generated from code with an error|simulated run reported/);
+});
+
+test('recovered code without a model suggestion still explains the inferred graph', () => {
   const html = render({ status: 'loading', generation: { mode: 'inferred', syntaxIssues: [] } });
-  assert.doesNotMatch(html, /Possible missing symbols|Parser diagnostics|syntax problems|ambiguous structure/);
+  assert.match(html, /Flowchart inferred from incomplete code/);
+  assert.doesNotMatch(html, /Possible missing symbols|Parser diagnostics/);
 });
 
 test('parser recovery text is not displayed as model missing-symbol feedback', () => {
@@ -102,24 +138,22 @@ for (const state of [
   { status: 'success', data: sampleGraph(), generation: withSuggestion },
   { status: 'error', error: 'Invalid graph', generation: withSuggestion },
 ] satisfies FlowchartState[]) {
-  test(`model missing-symbol location is directly visible on ${state.status}`, () => {
+  test(`model missing-symbol guesses stay out of the summary on ${state.status}`, () => {
     const html = render(state);
-    assert.match(html, /Possible missing symbols detected/);
-    assert.match(html, /<code[^>]*>}<\/code> — Line 10/);
-    assert.match(html, /Line 10, after <code>return false;<\/code>/);
-    assert.doesNotMatch(html, /<pre|<details|Parser diagnostics|The inner if block|confirmed fixes|code has not been changed/);
+    assert.match(html, /Flowchart inferred from incomplete code/);
+    assert.doesNotMatch(html, /Possible missing symbols|Line 10|return false|The inner if block/);
   });
 }
 
-test('unlocated suggestions are short; empty reports show no card', () => {
+test('located and unlocated suggestions are both omitted from the summary', () => {
   const unlocated = render({ status: 'success', data: sampleGraph(), generation: {
     ...generation, missingSymbols: [{ symbol: '}', explanation: 'Several closing positions may be possible.' }],
   } });
-  assert.match(unlocated, /<code[^>]*>}<\/code> — Location unknown/);
-  assert.doesNotMatch(unlocated, /Line 10, after/);
-  assert.doesNotMatch(unlocated, /Several closing positions/);
+  assert.doesNotMatch(unlocated, /Possible missing symbols|Location unknown|Several closing positions/);
+  assert.match(unlocated, /Flowchart inferred from incomplete code/);
   const empty = render({ status: 'success', data: sampleGraph(), generation: { ...generation, missingSymbols: [] } });
   assert.doesNotMatch(empty, /Possible missing symbols|did not identify|code is valid/);
+  assert.match(empty, /Flowchart inferred from incomplete code/);
 });
 
 test('source references are escaped and model explanations are not displayed', () => {
@@ -129,10 +163,10 @@ test('source references are escaped and model explanations are not displayed', (
   }] } });
   assert.doesNotMatch(html, /<script>|<img>/);
   assert.doesNotMatch(html, /&lt;script&gt;|bad\(\)/);
-  assert.match(html, /&lt;img&gt;/);
+  assert.doesNotMatch(html, /&lt;img&gt;/);
 });
 
-test('multiple missing symbols share one title and use one compact item each', () => {
+test('multiple missing symbols do not add a second diagnostic section', () => {
   const html = render({ status: 'success', data: sampleGraph(), generation: {
     ...withSuggestion,
     missingSymbols: [...withSuggestion.missingSymbols!, {
@@ -140,10 +174,8 @@ test('multiple missing symbols share one title and use one compact item each', (
       location: { line: 4, anchor: '{', placement: 'before', sourceLine: 'if (n > 0 {' },
     }],
   } });
-  assert.equal(html.match(/Possible missing symbols detected/g)?.length, 1);
-  assert.equal(html.match(/<li\b/g)?.length, 2);
-  assert.match(html, /Line 4, before <code>{<\/code>/);
-  assert.doesNotMatch(html, /closing parenthesis|closing brace|Parser diagnostics/);
+  assert.doesNotMatch(html, /Possible missing symbols|<li\b|Line 4|closing parenthesis|closing brace|Parser diagnostics/);
+  assert.match(html, /Flowchart inferred from incomplete code/);
 });
 
 test('student graph replaces only its own loader while the reference is pending', () => {
@@ -155,8 +187,10 @@ test('student graph replaces only its own loader while the reference is pending'
 
 test('a stream failure retains its completed graph and stops the other loader', () => {
   const html = render({ status: 'error', error: 'Connection closed', progress: { attempt: 1, student: sampleGraph().student } });
-  assert.match(html, /Generation incomplete/);
-  assert.match(html, /Connection closed/);
+  assert.match(html, /Flowchart generation failed/);
+  assert.match(html, /syntax or compile error/);
+  assert.match(html, /temporary generation issue/);
+  assert.doesNotMatch(html, /Connection closed/);
   assert.doesNotMatch(html, /Generating flowchart/);
   assert.equal(html.match(/Flowchart unavailable/g)?.length, 1);
 });

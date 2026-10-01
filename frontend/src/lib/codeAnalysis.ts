@@ -59,6 +59,29 @@ export interface CodeAnalysis {
   factsTruncated: boolean;
 }
 
+export interface SyntaxDiagnostic {
+  line: number;
+  message: string;
+}
+
+/** Pick a concise, source-backed syntax message suitable for student UI. */
+export const syntaxDiagnosticFor = (
+  analysis?: CodeAnalysis,
+): SyntaxDiagnostic | undefined => {
+  if (!analysis?.syntaxIssues.length) return undefined;
+  const issue = analysis.syntaxIssues.find(
+    ({ kind }) => kind === 'python-syntax-error',
+  ) ?? analysis.syntaxIssues[0];
+
+  if (issue.kind === 'python-syntax-error' && issue.text.trim()) {
+    return { line: issue.startLine, message: issue.text.trim() };
+  }
+  if (issue.kind === 'missing-token' && issue.expected) {
+    return { line: issue.startLine, message: `Expected ${issue.expected}.` };
+  }
+  return { line: issue.startLine, message: 'Invalid or incomplete syntax.' };
+};
+
 const asFiniteNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
