@@ -216,6 +216,9 @@ export const MainContent = ({
   // A real compiler location is more authoritative than Tree-sitter's
   // recovery point, which can be the end of the file for a missing brace.
   const languageDiagnostic = compileDiagnostic ?? syntaxDiagnostic;
+  const cppCompilerUnavailable = flowchartState.status !== 'idle'
+    && flowchartState.codeAnalysis?.language === 'cpp'
+    && flowchartState.codeAnalysis.compilerStatus === 'unavailable';
 
   useEffect(() => {
     onEvaluationStateChange(evaluationState);
@@ -998,6 +1001,11 @@ export const MainContent = ({
                   </div>
                 ) : (
                   <div>
+                  {cppCompilerUnavailable && (
+                    <div role="status" className="mb-2 rounded border border-amber-700 bg-amber-950/30 p-2 text-amber-300">
+                      C++ compiler check unavailable. The AI did not infer a compile result.
+                    </div>
+                  )}
                   <div className="font-bold text-gray-300 mb-1">Test Results:</div>
                   <div className="space-y-1">
                     {codeEvaluation.TestResults.map((test: TestResult, index: number) => (

@@ -48,6 +48,9 @@ test('C++ feedback uses compilation and undefined-behavior rules', () => {
   assert.match(prompt, /valid translation unit/);
   assert.match(prompt, /compilerStatus records the real C\+\+ compiler gate/);
   assert.match(prompt, /"passed".*never report a Compile Error/s);
+  assert.match(prompt, /Do not independently decide whether the C\+\+ source compiles/);
+  assert.match(prompt, /compilerStatus is the only authority/);
+  assert.doesNotMatch(prompt, /definite syntax,\s+declaration, name-resolution/);
   assert.match(prompt, /Runtime Error: Undefined Behavior/);
   assert.match(prompt, /value versus\s+reference parameters/);
 });
@@ -187,6 +190,25 @@ test('a passed real C++ compile rejects a model-invented compile error', () => {
   if (!result.ok) assert.match(result.errors.join(' '), /passed the real compiler check/);
 });
 
+test('a passed C++ compiler outranks Tree-sitter recovery diagnostics', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compilerStatus = 'passed';
+  analysis.syntaxIssues = [{
+    id: 'syntax-1', kind: 'missing-token', text: '', expected: '}',
+    startLine: 5, startColumn: 1, endLine: 5, endColumn: 1, startByte: 40, endByte: 40,
+  }];
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: true,
+    TestResults: [
+      { input: 'f(1)', expected: '1', yourOutput: '✅ 1' },
+      { input: 'f(2)', expected: '2', yourOutput: '✅ 2' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.value.IsCorrect, true);
+});
+
 test('a failed real C++ compile overrides simulated test outputs', () => {
   const analysis = analysisStub('cpp');
   analysis.compilerStatus = 'failed';
@@ -206,4 +228,19 @@ test('a failed real C++ compile overrides simulated test outputs', () => {
       ['❌ Compile Error', '❌ Compile Error'],
     );
   }
+});
+
+test('an unavailable C++ compiler does not let the model guess compile failure', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compilerStatus = 'unavailable';
+  const result = validateCodeEvaluationForAnalysis({
+    IsCorrect: false,
+    TestResults: [
+      { input: 'f(1)', expected: '1', yourOutput: '❌ Compile Error' },
+      { input: 'f(2)', expected: '2', yourOutput: '❌ Compile Error' },
+    ],
+  }, analysis);
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.errors.join(' '), /do not guess a compile error/);
 });

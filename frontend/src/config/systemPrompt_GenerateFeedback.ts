@@ -199,20 +199,18 @@ ${sharedEvaluationRules}
 C++-SPECIFIC RULES:
 - codeAnalysis.compilerStatus records the real C++ compiler gate. When it is
   "passed", never report a Compile Error. When it is "failed", report exactly
-  "❌ Compile Error" for every test case. When it is "unavailable", use the
-  static reasoning rules below without claiming that a compiler ran.
+  "❌ Compile Error" for every test case. When it is "unavailable", never infer
+  or report a Compile Error; continue with logic simulation only.
 - Infer the required submission form from the practice. For a function-based
   exercise, assume the function is compiled in a valid translation unit and
   called by a valid test harness. Do not require main, includes, namespace
   directives, or a complete source file unless the practice requires them.
 - Enforce a function name, parameter list, and return type only when the practice
   or its examples make that interface explicit.
-- Apply a whole-submission compilation gate before simulating any test. If
-  codeAnalysis.syntaxIssues is non-empty, or there is a definite syntax,
-  declaration, name-resolution, type, control-flow, or return error, set
-  IsCorrect to false and use exactly "❌ Compile Error" for every test case.
-- Never repair a missing token, substitute a similarly named identifier, add an
-  implicit conversion that C++ does not permit, or invent a missing return.
+- Do not independently decide whether the C++ source compiles. In particular,
+  do not infer compilation failure from missing includes, declarations, names,
+  types, braces, control flow, or returns. compilerStatus is the only authority.
+- Never repair or reinterpret the code while simulating its logic.
 - Distinguish compilation failures from case-specific runtime failures. For a
   thrown standard exception, use "❌ Runtime Error: <exception type>". For
   undefined behavior, use "❌ Runtime Error: Undefined Behavior" and do not

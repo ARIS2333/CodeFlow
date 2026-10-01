@@ -670,7 +670,7 @@ export const validateCodeEvaluationForAnalysis = (
 
   if (
     codeAnalysis.language === 'cpp'
-    && codeAnalysis.compilerStatus === 'passed'
+    && (codeAnalysis.compilerStatus === 'passed' || codeAnalysis.compilerStatus === 'unavailable')
     && result.value.TestResults.some(
       ({ yourOutput }) => /^❌\s*(?:Compile|Compilation) Error$/i.test(yourOutput.trim()),
     )
@@ -678,20 +678,29 @@ export const validateCodeEvaluationForAnalysis = (
     return {
       ok: false,
       errors: [
-        'the C++ source passed the real compiler check; do not report a compile error and evaluate each test case',
+        codeAnalysis.compilerStatus === 'passed'
+          ? 'the C++ source passed the real compiler check; do not report a compile error and evaluate each test case'
+          : 'the real C++ compiler was unavailable; do not guess a compile error and evaluate the code logic only',
       ],
     };
   }
 
-  const blockingVerdict = codeAnalysis.language === 'java' || codeAnalysis.language === 'cpp'
-    ? codeAnalysis.syntaxIssues.length > 0
-      || codeAnalysis.compileIssues.length > 0
-      || (codeAnalysis.language === 'cpp' && codeAnalysis.compilerStatus === 'failed')
+  const blockingVerdict = codeAnalysis.language === 'java'
+    ? codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0
       ? '❌ Compile Error'
       : undefined
-    : codeAnalysis.syntaxIssues.length > 0
-      ? '❌ Syntax Error'
-      : undefined;
+    : codeAnalysis.language === 'cpp'
+      ? codeAnalysis.compilerStatus === 'failed'
+        ? '❌ Compile Error'
+        // Older cached/API responses predate compilerStatus; retain their
+        // source-backed behavior without overruling a completed real check.
+        : codeAnalysis.compilerStatus === undefined
+          && (codeAnalysis.syntaxIssues.length > 0 || codeAnalysis.compileIssues.length > 0)
+          ? '❌ Compile Error'
+          : undefined
+      : codeAnalysis.syntaxIssues.length > 0
+        ? '❌ Syntax Error'
+        : undefined;
 
   if (!blockingVerdict) return result;
 
