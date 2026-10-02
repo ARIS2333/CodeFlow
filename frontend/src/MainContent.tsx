@@ -36,6 +36,7 @@ import {
   type TraceState,
 } from './lib/traceRun';
 import {
+  conciseCodeEvaluationOutput,
   validateCodeEvaluationForAnalysis,
   type ProblemDetails,
   type TestResult,
@@ -1138,19 +1139,20 @@ export const MainContent = ({
                   )}
                   <div className="font-bold text-gray-300 mb-1">Test Results:</div>
                   <div className="space-y-1">
-                    {codeEvaluation.TestResults.map((test: TestResult, index: number) => (
-                      <div key={index} className="flex items-start">
+                    {codeEvaluation.TestResults.map((test: TestResult, index: number) => {
+                      const output = conciseCodeEvaluationOutput(test.yourOutput, test.expected);
+                      return <div key={index} className="flex items-start">
                         <span className="mr-2">
-                          {test.yourOutput.includes('✅') ? '✅' :
-                           /❌ (?:Compil(?:e|ation)|Syntax)\s*Error/i.test(test.yourOutput) ? '🔧' : '❌'}
+                          {output.includes('✅') ? '✅' :
+                           /❌ (?:Compil(?:e|ation)|Syntax)\s*Error/i.test(output) ? '🔧' : '❌'}
                         </span>
                         <span className="flex-1">
                           <span className="text-gray-300">Input:</span> {test.input} →
                           <span className="text-gray-300"> Expected:</span> {test.expected} →
-                          <span className="text-gray-300"> Output:</span> {test.yourOutput}
+                          <span className="text-gray-300"> Output:</span> {output}
                         </span>
-                      </div>
-                    ))}
+                      </div>;
+                    })}
                   </div>
                   </div>
                 )}

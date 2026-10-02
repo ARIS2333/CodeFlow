@@ -95,7 +95,7 @@ export const Header: FC<HeaderProps> = ({
             onClick={onTogglePanel}
             className="rounded-md bg-violet-600 px-4 py-2 text-white transition-colors hover:bg-violet-700"
           >
-            Textual Feedback
+            Code Analysis
           </button>}
         </div>
       </div>

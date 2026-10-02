@@ -178,6 +178,7 @@ export const Layout = ({
         onClose={onTogglePanel}
         state={textualFeedbackState}
         width={panelWidth}
+        onWidthChange={handleWidthChange}
         defaultInput={task.problem.examples[0]?.input ?? ''}
         onRegenerate={(input) => textualRegenerator.current?.(input)}
       />}

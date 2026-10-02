@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   mergeTextualExecutionRegeneration,
   previousTextualLogicFrom,
+  textualFeedbackSectionsFrom,
 } from '../src/lib/textualFeedback.ts';
 
 const original = `## Input used
@@ -61,4 +62,23 @@ test('partial retrace Markdown can be displayed while the response streams', () 
   assert.match(merged, /`f\(3\)`/);
   assert.match(merged, /1\. Start/);
   assert.match(merged, /Recommended logic stays fixed\./);
+});
+
+test('textual feedback sections can be independently arranged by the UI', () => {
+  assert.deepEqual(textualFeedbackSectionsFrom(original), {
+    inputUsed: '`f(1)`',
+    studentLogic: 'Student logic stays fixed.',
+    studentExecution: 'Old student execution.',
+    recommendedLogic: 'Recommended logic stays fixed.',
+    recommendedExecution: 'Old recommended execution.',
+  });
+});
+
+test('section extraction tolerates a partially streamed response', () => {
+  const partial = textualFeedbackSectionsFrom(
+    "## Input used\n\n`f(1)`\n\n## Student's logic\n\n1. Begin",
+  );
+  assert.equal(partial.inputUsed, '`f(1)`');
+  assert.equal(partial.studentLogic, '1. Begin');
+  assert.equal(partial.recommendedLogic, null);
 });

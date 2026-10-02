@@ -96,6 +96,32 @@ test('a compilation failure is accepted only when every case is blocked', () => 
   assert.equal(result.ok, true);
 });
 
+test('explanatory model output is reduced to a terminal-style verdict', () => {
+  const result = validateCodeEvaluation({
+    IsCorrect: false,
+    TestResults: [
+      {
+        input: 'findMode({4, 6, 4, 6})',
+        expected: '4',
+        yourOutput: '❌ Depends on unordered_map iteration order; likely returns 6 or 4.',
+      },
+      {
+        input: 'findMode({2, 2, 1, 1})',
+        expected: '1',
+        yourOutput: '❌ Logic defect: returns 2 instead of 1 because the condition uses >=.',
+      },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(
+      result.value.TestResults.map(({ yourOutput }) => yourOutput),
+      ['❌ Non-deterministic', '❌ Incorrect result'],
+    );
+  }
+});
+
 test('source-backed Java compile issues override invented runtime outputs', () => {
   const analysis = analysisStub('java');
   analysis.compileIssues = [{

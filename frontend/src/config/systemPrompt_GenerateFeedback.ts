@@ -49,6 +49,12 @@ Return one raw JSON object with exactly this shape:
 Result rules:
 - A matching result is "✅ <actual result>".
 - A non-matching result is "❌ <actual result>".
+- The yourOutput field is a terminal-style result, not a feedback or explanation
+  field. Never include reasoning, diagnosis, cause, branch analysis, suggested
+  fixes, or sentences explaining the result.
+- If the exact result cannot be determined because the language leaves the
+  relevant ordering unspecified, use exactly "❌ Non-deterministic". Do not
+  explain the source of the non-determinism or list likely behaviors.
 - Keep expected and actual values short and unambiguous. Preserve meaningful
   distinctions such as strings versus numbers, and use the language's spelling
   for values such as null/None and true/True.
@@ -60,6 +66,8 @@ Result rules:
 - The input field must show a concrete invocation (or concrete standard input
   when the practice explicitly asks for console input), not a prose description.
 - Return JSON only: no Markdown fence, declarations, comments, or explanation.
+- Examples of invalid yourOutput values include "❌ Logic defect: ...",
+  "❌ Depends on iteration order...", and any result followed by "because...".
 `;
 
 /**

@@ -18,6 +18,22 @@ const section = (markdown: string, heading: string): string | null => {
   return (nextHeading < 0 ? rest : rest.slice(0, nextHeading)).trim();
 };
 
+export interface TextualFeedbackSections {
+  inputUsed: string | null;
+  studentLogic: string | null;
+  studentExecution: string | null;
+  recommendedLogic: string | null;
+  recommendedExecution: string | null;
+}
+
+export const textualFeedbackSectionsFrom = (markdown: string): TextualFeedbackSections => ({
+  inputUsed: section(markdown, 'Input used'),
+  studentLogic: section(markdown, "Student's logic"),
+  studentExecution: section(markdown, "Student's execution"),
+  recommendedLogic: section(markdown, 'Recommended logic'),
+  recommendedExecution: section(markdown, 'Recommended execution'),
+});
+
 export const previousTextualLogicFrom = (markdown?: string) => {
   if (!markdown) return null;
   const student = section(markdown, "Student's logic");

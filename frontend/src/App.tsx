@@ -56,7 +56,55 @@ export default function App() {
     { screen: 'q4', label: 'Q4' }, { screen: 'mid2', label: 'S2' },
     { screen: 'post', label: 'S3' },
   ];
-  const studyHeader = progress.participant ? <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-2 border-t border-gray-100 pt-3"><div className="flex flex-wrap justify-center gap-1.5" aria-label="Study navigation">{navigationItems.map((entry) => { const index = STUDY_SEQUENCE.indexOf(entry.screen); const enabled = index <= progress.furthestIndex; return <button key={entry.screen} disabled={!enabled} onClick={() => moveTo(entry.screen)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${entry.screen === progress.currentScreen ? 'bg-blue-600 text-white' : enabled ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-gray-50 text-gray-300'}`}>{entry.label}</button>; })}</div>{feedbackMode && <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">{feedbackMode === 'codeflow' ? 'Flowchart feedback' : 'Textual feedback'}</span>}<button onClick={() => setShowProfile(true)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Participant information</button>{task && currentIndex === progress.furthestIndex && <button onClick={continueStudy} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Continue</button>}</div> : null;
+  const canContinueFromNavigation = Boolean(task && currentIndex === progress.furthestIndex);
+  const studyHeader = progress.participant ? (
+    <div className="mt-3 flex w-full flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+      <div className="flex flex-wrap justify-start gap-1.5" aria-label="Study navigation">
+        {navigationItems.map((entry) => {
+          const index = STUDY_SEQUENCE.indexOf(entry.screen);
+          const enabled = index <= progress.furthestIndex;
+          return (
+            <button
+              key={entry.screen}
+              disabled={!enabled}
+              onClick={() => moveTo(entry.screen)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                entry.screen === progress.currentScreen
+                  ? 'bg-blue-600 text-white'
+                  : enabled
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-gray-50 text-gray-300'
+              }`}
+            >
+              {entry.label}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={continueStudy}
+          disabled={!canContinueFromNavigation}
+          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+        >
+          Continue
+        </button>
+      </div>
+
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {feedbackMode && (
+          <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+            {feedbackMode === 'codeflow' ? 'Flowchart feedback' : 'Textual feedback'}
+          </span>
+        )}
+        <button
+          onClick={() => setShowProfile(true)}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Participant information
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   let content;
   if (!progress.participant) content = <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">CodeFlow study</p><h1 className="mt-2 text-3xl font-bold">Welcome</h1><p className="mt-4 text-gray-600">Enter your participant information to begin Question 1.</p></section></main>;
