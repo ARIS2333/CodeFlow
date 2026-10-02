@@ -20,15 +20,17 @@ not exposed publicly.
    Set the password in the dashboard
    only — this repository is public, so a value committed to `render.yaml` or
    the source would be permanently searchable and could not be rotated without
-   a commit. Leaving it unset is a supported configuration: research mode
-   disappears from the settings panel and the deployment becomes
-   bring-your-own-key only.
+   a commit. The human-study interface requires this value because participants
+   enter the shared password in **Participant information**.
 4. Let Render create the backend and copy its public HTTPS URL.
 5. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
    slash (for example, `https://codeflow-backend.onrender.com`). Redeploy the
    frontend so Vite includes the value in its static build.
-6. Open the frontend URL and verify upload, Run, flowchart streaming, trace, and
-   Clear. The backend health check is available at `/health`.
+6. Replace the placeholder Google Forms links in
+   `frontend/src/config/studyConfig.ts` with the study's real survey URLs.
+7. Open the frontend URL and verify both Group A and Group B from Q1 through
+   the final survey, including refresh recovery, flowcharts, traces, and textual
+   feedback. The backend health check is available at `/health`.
 
 Render supplies HTTPS for both public URLs. The backend intentionally keeps its
 current public CORS behavior until the planned login/BYOK work is requested.
@@ -49,10 +51,9 @@ or the two Gunicorn settings if requests queue or memory usage becomes high.
 
 ## Who may spend the study's quota
 
-The intended behaviour is now in place: students who enter the study password
-use the server-funded model, and everyone else supplies their own provider
-credentials. The password is checked on the server, so the public API cannot be
-called directly to bypass the panel in the browser.
+Students enter the study password in **Participant information** and use the
+server-funded model. The password is checked on the server, so the public API
+cannot be called directly to bypass the browser interface.
 
 The password is a shared secret. Once handed to a cohort it can be forwarded,
 and nothing here prevents that — no rate limiting or per-participant quota was
@@ -60,9 +61,12 @@ requested, so a study-wide spending cap still has to be set at the provider,
 not in this application. Rotating the password means changing
 `RESEARCH_PASSWORD` in the Render dashboard; students then re-enter it once.
 
-A student's own API key passes through the backend to their provider. It is
-never logged or stored server-side, and the browser holds it only in memory
-until the tab is reloaded.
+Participant name, email, assigned group, research password, question code, and
+generated feedback are stored only in that browser's local storage so the page
+can recover after a refresh. Name and email are not sent to the model as part
+of textual or flowchart generation. Clearing site data, changing browsers, or
+using private browsing removes that recovery. This application does not collect
+study responses or behavior telemetry on the server.
 
 ## Future work deliberately not enabled
 

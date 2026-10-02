@@ -2,7 +2,7 @@
 
 ## About CodeFlow
 
-CodeFlow is a web-based programming feedback tool built around **flowchart comparison** and **execution tracing**. Instead of returning only a pass-or-fail result, it converts a student's solution into a flowchart and places it next to a flowchart of a correct solution. Students can compare the two structures visually to see differences in decisions, loops, execution order, and missing or incorrect steps.
+CodeFlow is a web-based programming feedback platform for a counterbalanced human study. Every participant completes the same four C++ questions: two solution-writing tasks and two debugging tasks. Depending on the participant's preassigned group, each stage uses either **flowchart-based feedback** or **textual step-by-step AI feedback**.
 
 The comparison continues beyond the static diagrams. CodeFlow can run the same test input through both flowcharts at the same time and replay their execution one step at a time. At each step, students can see the active block and current variable values, allowing them to observe where the two executions begin to behave differently.
 
@@ -11,7 +11,7 @@ This combination provides two complementary views of a mistake:
 - **Flowchart comparison** shows how the student's overall logic differs from a correct approach.
 - **Execution tracing** shows when and why those differences affect the program for a specific input.
 
-CodeFlow currently supports Java, Python, and C++.
+Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4. Group B receives the same questions in the same order with the feedback conditions reversed. Mid-study surveys separate the two stages, followed by a post-study survey.
 
 ## Core features
 
@@ -22,18 +22,20 @@ CodeFlow currently supports Java, Python, and C++.
 - **Runtime state inspection** — shows variable changes and the complete current variable state at each trace step.
 - **Custom trace inputs** — allows students to try another input and explore different branches or edge cases.
 - **Flexible chart viewing** — supports deep zooming, automatic viewport fitting, and full-screen comparison and trace views for large flowcharts or smaller screens.
-- **Problem and code workspace** — supports preparing a programming problem, writing Java, Python, or C++ code, running it against tests, and reviewing the resulting feedback in one place.
+- **Fixed C++ task workspace** — presents the assigned problem, editor, simulated test results, and assigned feedback condition in one place.
+- **Textual feedback condition** — streams five Markdown sections covering the selected input, both logic descriptions, and both step-by-step executions, without a chat interface or corrected solution.
+- **Study workflow** — includes participant information, four fixed C++ tasks, two mid-study survey transitions, and a final survey.
+- **Per-question recovery** — restores each question's code and generated feedback after navigation or a browser refresh on the same browser and site.
 
 ## Typical workflow
 
-1. Enter a programming problem.
-2. Write a solution in Java, Python, or C++.
-3. Run the solution and review the test results.
-4. Generate the student flowchart and a correct reference flowchart.
-5. Compare the two charts side by side and inspect any highlighted source issues.
-6. Trace the same test input through both charts simultaneously.
-7. Inspect the active blocks and variable values at each step.
-8. Step manually or jump to the beginning or end to identify where the student's behavior becomes incorrect.
+1. Enter participant information and the preassigned group.
+2. Complete Q1 and Q2 using the assigned first feedback condition.
+3. Open and confirm completion of the first mid-study survey.
+4. Complete Q3 and Q4 using the other feedback condition.
+5. Complete the second mid-study survey and the post-study survey.
+
+The study uses fixed questions; students do not upload their own problems. Earlier questions remain editable throughout the session.
 
 ## Requirements
 

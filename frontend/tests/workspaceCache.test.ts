@@ -88,3 +88,14 @@ test('clear removes the workspace without touching unrelated browser data', () =
   assert.equal(loadWorkspaceCache(), null);
   assert.equal(window.localStorage.getItem('codeflow.researchPassword'), 'study-secret');
 });
+
+test('study questions use independent workspace snapshots', () => {
+  updateWorkspaceCache({ code: 'q1 answer' }, 'q1');
+  updateWorkspaceCache({ code: 'q2 answer' }, 'q2');
+
+  assert.equal(loadWorkspaceCache('q1')?.code, 'q1 answer');
+  assert.equal(loadWorkspaceCache('q2')?.code, 'q2 answer');
+  clearWorkspaceCache('q1');
+  assert.equal(loadWorkspaceCache('q1'), null);
+  assert.equal(loadWorkspaceCache('q2')?.code, 'q2 answer');
+});

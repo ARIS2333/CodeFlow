@@ -53,8 +53,18 @@ import {
   loadWorkspaceCache,
   updateWorkspaceCache,
 } from './lib/workspaceCache';
+import type { FeedbackMode, StudyTask } from './config/studyConfig';
+import {
+  requestTextualFeedback,
+  type TextualFeedbackState,
+} from './lib/textualFeedback';
 
 interface MainContentProps {
+  workspaceId: string;
+  task: StudyTask;
+  feedbackMode: FeedbackMode;
+  textualFeedbackState: TextualFeedbackState;
+  onTextualFeedbackStateChange: (state: TextualFeedbackState) => void;
   flowchartState: FlowchartState;
   traceState: TraceState;
   onFlowchartStateChange: (state: FlowchartState) => void;
@@ -62,13 +72,14 @@ interface MainContentProps {
   onRunStart: () => void;
   onCancelRetrace: () => void;
   onRegisterFlowchartRegenerator: (handler: (() => void) | null) => void;
+  onRegisterTextualRegenerator: (handler: ((input: string) => void) | null) => void;
   onFlowchartRegenerateAvailabilityChange: (available: boolean) => void;
   onFlowchartRegenerationStateChange: (state: FlowchartRegenerationState) => void;
   /** Shares the terminal result with the analysis panel so both describe the same run. */
   onEvaluationStateChange: (state: EvaluationState) => void;
   /** Null until a model is chosen; nothing that calls an LLM may run before then. */
   settings: ModelSettings | null;
-  /** Opens the settings panel, with a reason to show the student. */
+  /** Handles a missing model configuration; retained for the reusable runner. */
   onRequireSettings: (notice?: string) => void;
 }
 
@@ -121,7 +132,7 @@ const STARTER_CODE: Record<SupportedLanguage, string> = {
 }`,
 };
 
-const DEFAULT_LANGUAGE: SupportedLanguage = 'python';
+const DEFAULT_LANGUAGE: SupportedLanguage = 'cpp';
 
 // Autocompletion function for Java
 const javaCompletion = (context: CompletionContext): CompletionResult | null => {
@@ -172,6 +183,11 @@ const cppCompletion = (context: CompletionContext): CompletionResult | null => {
 };
 
 export const MainContent = ({
+  workspaceId,
+  task,
+  feedbackMode,
+  textualFeedbackState,
+  onTextualFeedbackStateChange,
   flowchartState,
   traceState,
   onFlowchartStateChange,
@@ -179,16 +195,17 @@ export const MainContent = ({
   onRunStart,
   onCancelRetrace,
   onRegisterFlowchartRegenerator,
+  onRegisterTextualRegenerator,
   onFlowchartRegenerateAvailabilityChange,
   onFlowchartRegenerationStateChange,
   onEvaluationStateChange,
   settings,
   onRequireSettings,
 }: MainContentProps) => {
-  const cachedWorkspace = useRef(loadWorkspaceCache()).current;
-  const initialLanguage = cachedWorkspace?.language ?? DEFAULT_LANGUAGE;
+  const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
+  const initialLanguage: SupportedLanguage = 'cpp';
   const [code, setCode] = useState(
-    cachedWorkspace?.code ?? STARTER_CODE[initialLanguage],
+    cachedWorkspace?.code ?? task.starterCode,
   );
   const [language, setLanguage] = useState<SupportedLanguage>(initialLanguage);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
@@ -200,6 +217,7 @@ export const MainContent = ({
   const activeRun = useRef<AnalysisRun | null>(null);
   const uploadCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const regenerateFlowchartAction = useRef<() => void>(() => {});
+  const regenerateTextualAction = useRef<(input: string) => void>(() => {});
   // CodeMirror keeps the extension instance it was given, so the shortcut reads
   // the handler through a ref rather than closing over a stale render's copy.
   const runShortcut = useRef<() => void>(() => {});
@@ -239,6 +257,7 @@ export const MainContent = ({
     setEvaluationState({ status: 'idle' });
     onFlowchartStateChange({ status: 'idle' });
     onTraceStateChange({ status: 'idle' });
+    onTextualFeedbackStateChange({ status: 'idle' });
   };
 
   /**
@@ -261,10 +280,10 @@ export const MainContent = ({
     clearResults();
   };
   const [isUploadPopupOpen, setIsUploadPopupOpen] = useState(false);
-  const [problem, setProblem] = useState<string | null>(cachedWorkspace?.problem ?? null);
+  const [problem, setProblem] = useState<string | null>(cachedWorkspace?.problem ?? task.problem.description);
   const [isLoading, setIsLoading] = useState(false);
   const [problemDetails, setProblemDetails] = useState<ProblemDetails | null>(
-    cachedWorkspace?.problemDetails ?? null,
+    cachedWorkspace?.problemDetails ?? task.problem,
   );
   const [apiError, setApiError] = useState<string | null>(null);
   const [isApiProcessing, setIsApiProcessing] = useState(false);
@@ -294,8 +313,9 @@ export const MainContent = ({
       problem,
       problemDetails,
       evaluationState,
-    });
-  }, [code, language, problem, problemDetails, evaluationState]);
+      textualFeedbackState,
+    }, workspaceId);
+  }, [code, language, problem, problemDetails, evaluationState, textualFeedbackState, workspaceId]);
 
   /*
    * The footer's indicator used to be a hardcoded green dot reading "Ready",
@@ -519,6 +539,59 @@ export const MainContent = ({
     return () => onRegisterFlowchartRegenerator(null);
   }, [onRegisterFlowchartRegenerator]);
 
+  const handleRegenerateTextual = (executionInput: string) => {
+    const input = executionInput.trim();
+    if (
+      feedbackMode !== 'textual' || !input || !problemDetails || !settings
+      || activeRun.current?.isRunning()
+    ) return;
+
+    const controller = new AbortController();
+    let running = true;
+    let streamedMarkdown = '';
+    const textualRun: AnalysisRun = {
+      isRunning: () => running && !controller.signal.aborted,
+      cancel: () => { running = false; controller.abort(); },
+    };
+    activeRun.current = textualRun;
+    onTextualFeedbackStateChange({ status: 'loading', markdown: '', requestedInput: input });
+    void requestTextualFeedback(
+      problemDetails,
+      code,
+      toModelConfig(settings),
+      (markdown) => {
+        streamedMarkdown = markdown;
+        if (!controller.signal.aborted) {
+          onTextualFeedbackStateChange({ status: 'loading', markdown, requestedInput: input });
+        }
+      },
+      input,
+      textualFeedbackState.status === 'idle' ? undefined : textualFeedbackState.markdown,
+      controller.signal,
+    ).then((markdown) => {
+      if (!controller.signal.aborted) {
+        onTextualFeedbackStateChange({ status: 'success', markdown, requestedInput: input });
+      }
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) onTextualFeedbackStateChange({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Textual feedback failed',
+        requestedInput: input,
+        ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
+      });
+    }).finally(() => {
+      running = false;
+      if (activeRun.current === textualRun) activeRun.current = null;
+    });
+  };
+
+  useEffect(() => { regenerateTextualAction.current = handleRegenerateTextual; });
+  useEffect(() => {
+    const invoke = (input: string) => regenerateTextualAction.current(input);
+    onRegisterTextualRegenerator(invoke);
+    return () => onRegisterTextualRegenerator(null);
+  }, [onRegisterTextualRegenerator]);
+
   useEffect(() => {
     const available = Boolean(flowchartRetryContext.current)
       && !isCodeEvaluating
@@ -586,6 +659,57 @@ export const MainContent = ({
         ...(retryContext.codeAnalysis ? { codeAnalysis: retryContext.codeAnalysis } : {}),
       });
     };
+
+    if (feedbackMode === 'textual') {
+      const controller = new AbortController();
+      let running = true;
+      const textualRun: AnalysisRun = {
+        isRunning: () => running && !controller.signal.aborted,
+        cancel: () => { running = false; controller.abort(); },
+      };
+      activeRun.current = textualRun;
+      onTextualFeedbackStateChange({ status: 'loading', markdown: '' });
+      setEvaluationState({ status: 'loading' });
+      void Promise.allSettled([
+        getCodeAnalysis(controller.signal).then((codeAnalysis) => requestStructured({
+          systemPrompt: feedbackSystemPromptFor(language),
+          message: JSON.stringify({ ...requestPayload, codeAnalysis }),
+          validate: (input) => validateCodeEvaluationForAnalysis(input, codeAnalysis),
+          label: 'feedback',
+          signal: controller.signal,
+          modelConfig,
+        })).then((result) => {
+          if (!controller.signal.aborted) setEvaluationState({ status: 'success', data: result });
+        }).catch((error: unknown) => {
+          if (!controller.signal.aborted) setEvaluationState({
+            status: 'error', error: error instanceof Error ? error.message : 'Evaluation failed',
+          });
+        }),
+        (() => {
+          let streamedMarkdown = '';
+          return requestTextualFeedback(problemDetails, code, modelConfig, (markdown) => {
+            streamedMarkdown = markdown;
+            if (!controller.signal.aborted) {
+              onTextualFeedbackStateChange({ status: 'loading', markdown });
+            }
+          }, undefined, undefined, controller.signal)
+          .then((result) => {
+            if (!controller.signal.aborted) onTextualFeedbackStateChange({ status: 'success', markdown: result });
+          })
+          .catch((error: unknown) => {
+            if (!controller.signal.aborted) onTextualFeedbackStateChange({
+              status: 'error',
+              error: error instanceof Error ? error.message : 'Textual feedback failed',
+              ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
+            });
+          });
+        })(),
+      ]).finally(() => {
+        running = false;
+        if (activeRun.current === textualRun) activeRun.current = null;
+      });
+      return;
+    }
 
     activeRun.current = startAnalysisRun({
       requestFeedback: async (signal) => {
@@ -703,8 +827,13 @@ export const MainContent = ({
       <div className="max-w-6xl mx-auto">
         {/* Combined Practice Problem and Analysis Section */}
         <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Practice Problem</h2>
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4">
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
+              Question {task.number} · {task.kind === 'write' ? 'Write a solution' : 'Debug the supplied solution'}
+            </p>
+            <h2 className="text-2xl font-bold text-gray-900">Practice Problem</h2>
+          </div>
+          {!task && <div className="mb-4 flex items-center gap-2">
             <div className="relative w-40">
               <select
                 aria-label="Load example language"
@@ -763,7 +892,7 @@ export const MainContent = ({
             >
               {isApiProcessing ? 'Processing...' : 'Upload'}
             </button>
-          </div>
+          </div>}
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
@@ -853,7 +982,7 @@ export const MainContent = ({
 
         {/* Upload Popup */}
         {/* Only mounted once a model is chosen, so modelConfig is always defined. */}
-        {settings && (
+        {settings && !task && (
           <UploadPopup
             key={uploadPopupVersion}
             isOpen={isUploadPopupOpen}
@@ -896,7 +1025,8 @@ export const MainContent = ({
                   : copyState === 'failed' ? 'Use \u2318C'
                     : 'Copy'}
               </button>
-              <select
+              <span className="rounded bg-gray-700 px-3 py-1 text-sm text-white">C++</span>
+              {!task && <select
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
                 className="bg-gray-700 text-white text-sm rounded px-2 py-1"
@@ -904,7 +1034,7 @@ export const MainContent = ({
                 <option value="java">Java</option>
                 <option value="python">Python</option>
                 <option value="cpp">C++</option>
-              </select>
+              </select>}
               <button
                 onClick={handleRunCode}
                 disabled={isRunDisabled}
@@ -1030,6 +1160,7 @@ export const MainContent = ({
             )}
           </div>
         </div>
+
       </div>
     </main>
     </>

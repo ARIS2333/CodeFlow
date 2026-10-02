@@ -5,7 +5,7 @@ from dataclasses import asdict
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from flask import Flask, g, jsonify, request
+from flask import Flask, Response, g, jsonify, request
 from flask_cors import CORS
 from pydantic import SecretStr
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
@@ -21,7 +21,8 @@ from model_config import (
     public_providers,
     resolve_model_spec,
 )
-from model_stream import create_stream_blueprint
+from model_stream import create_stream_blueprint, stream_model_response
+from textual_feedback import render_textual_feedback_prompt
 
 load_dotenv()
 
@@ -246,6 +247,67 @@ def resource():
     except Exception:
         app.logger.exception("Unexpected request failure (request %s)", g.request_id)
         return envelope_error("Internal server error", 500)
+
+
+@app.route("/api/textual-feedback/stream", methods=["POST"])
+def textual_feedback_stream_resource():
+    """Stream Markdown feedback using the researcher-authored study prompt."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        if body.get("language") != "cpp":
+            return public_error("Textual study feedback currently requires C++", 400)
+        code = body.get("code")
+        problem = body.get("problem")
+        execution_input = body.get("executionInput")
+        previous_logic = body.get("previousLogic")
+        if not isinstance(code, str) or not code.strip() or not isinstance(problem, dict):
+            return public_error("Problem and code are required", 400)
+        if execution_input is not None and (
+            not isinstance(execution_input, str)
+            or not execution_input.strip()
+            or len(execution_input) > 2_000
+        ):
+            return public_error("Execution input must be non-empty text under 2,000 characters", 400)
+        if previous_logic is not None and (
+            not isinstance(previous_logic, dict)
+            or set(previous_logic) != {"student", "recommended"}
+            or any(
+                not isinstance(previous_logic.get(key), str)
+                or not previous_logic[key].strip()
+                or len(previous_logic[key]) > 20_000
+                for key in ("student", "recommended")
+            )
+        ):
+            return public_error("Previous textual logic is invalid", 400)
+        try:
+            spec = resolve_model_spec(body.get("modelConfig"))
+        except AuthenticationError as error:
+            return public_error(str(error), 401)
+        except ModelConfigError as error:
+            return public_error(str(error), 400)
+
+        prompt = render_textual_feedback_prompt(
+            problem,
+            code,
+            execution_input.strip() if execution_input else None,
+            previous_logic,
+        )
+        messages = [UserMsg(name="user", content=prompt)]
+        request_factory = lambda: build_model(spec, stream=True)
+        return Response(
+            stream_model_response(request_factory, messages),
+            content_type="application/x-ndjson; charset=utf-8",
+            headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+        )
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception as error:
+        app.logger.exception("Textual feedback failed (request %s)", g.request_id)
+        return model_failure(error)
 
 
 if __name__ == "__main__":

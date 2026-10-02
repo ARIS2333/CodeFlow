@@ -1,22 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
-import { SettingsPanel } from './SettingsPanel';
+import { TextualPanel } from './TextualPanel';
 import { panelConfig } from './config/panelConfig';
 import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
 import { runTrace, type TraceRequest, type TraceState } from './lib/traceRun';
 import {
-  describeSettings,
-  loadRememberedPassword,
   toModelConfig,
   type ModelSettings,
 } from './lib/modelSettings';
 import { loadWorkspaceCache, updateWorkspaceCache } from './lib/workspaceCache';
+import type { FeedbackMode, StudyTask } from './config/studyConfig';
+import type { TextualFeedbackState } from './lib/textualFeedback';
 
 interface LayoutProps {
   showRightPanel: boolean;
   onTogglePanel: () => void;
+  workspaceId: string;
+  task: StudyTask;
+  feedbackMode: FeedbackMode;
+  studyHeader: ReactNode;
+  researchPassword: string;
 }
 
 /*
@@ -27,9 +33,14 @@ interface LayoutProps {
  */
 export const Layout = ({
   showRightPanel,
-  onTogglePanel
+  onTogglePanel,
+  workspaceId,
+  task,
+  feedbackMode,
+  studyHeader,
+  researchPassword,
 }: LayoutProps) => {
-  const cachedWorkspace = useRef(loadWorkspaceCache()).current;
+  const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
   // State to manage the width of the right panel, initialized with default width from config
   const [panelWidth, setPanelWidth] = useState(() =>
     panelConfig.defaultWidth()
@@ -44,6 +55,9 @@ export const Layout = ({
   const [evaluationState, setEvaluationState] = useState<EvaluationState>(
     cachedWorkspace?.evaluationState ?? { status: 'idle' },
   );
+  const [textualFeedbackState, setTextualFeedbackState] = useState<TextualFeedbackState>(
+    cachedWorkspace?.textualFeedbackState ?? { status: 'idle' },
+  );
 
   // The trace lives here rather than in the panel so that a re-trace survives
   // the panel being closed, and so a new run can cancel one the student left
@@ -53,26 +67,16 @@ export const Layout = ({
   );
   const retraceAbort = useRef<AbortController | null>(null);
   const flowchartRegenerator = useRef<(() => void) | null>(null);
+  const textualRegenerator = useRef<((input: string) => void) | null>(null);
   const [canRegenerateFlowchart, setCanRegenerateFlowchart] = useState(false);
 
-  /*
-   * The model settings live here because every LLM request in the app needs
-   * them: the run in MainContent, the problem upload, and the re-trace below.
-   *
-   * A remembered research password is restored, but a student's own API key
-   * never is — it is held in this state only until the tab is closed.
-   */
-  const [settings, setSettings] = useState<ModelSettings | null>(() => {
-    const remembered = loadRememberedPassword();
-    return remembered ? { mode: 'research', password: remembered } : null;
-  });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsNotice, setSettingsNotice] = useState<string | undefined>();
-
-  const openSettings = useCallback((notice?: string) => {
-    setSettingsNotice(notice);
-    setIsSettingsOpen(true);
-  }, []);
+  // Study participants enter the shared password with their participant data.
+  // Every model request uses that research configuration; there is no separate
+  // provider/settings workflow in the study UI.
+  const settings = useMemo<ModelSettings>(
+    () => ({ mode: 'research', password: researchPassword }),
+    [researchPassword],
+  );
 
   const cancelRetrace = useCallback(() => {
     retraceAbort.current?.abort();
@@ -82,18 +86,17 @@ export const Layout = ({
   const registerFlowchartRegenerator = useCallback((handler: (() => void) | null) => {
     flowchartRegenerator.current = handler;
   }, []);
+  const registerTextualRegenerator = useCallback((handler: ((input: string) => void) | null) => {
+    textualRegenerator.current = handler;
+  }, []);
 
   useEffect(() => cancelRetrace, [cancelRetrace]);
 
   useEffect(() => {
-    updateWorkspaceCache({ flowchartState, traceState });
-  }, [flowchartState, traceState]);
+    updateWorkspaceCache({ flowchartState, traceState, textualFeedbackState }, workspaceId);
+  }, [flowchartState, traceState, textualFeedbackState, workspaceId]);
 
   const startRetrace = useCallback((request: TraceRequest) => {
-    if (!settings) {
-      openSettings('Choose a model before tracing an input.');
-      return;
-    }
     cancelRetrace();
     const controller = new AbortController();
     retraceAbort.current = controller;
@@ -101,7 +104,7 @@ export const Layout = ({
       .finally(() => {
         if (retraceAbort.current === controller) retraceAbort.current = null;
       });
-  }, [cancelRetrace, settings, openSettings]);
+  }, [cancelRetrace, settings]);
 
   /**
    * Handler function to update the panel width
@@ -124,19 +127,28 @@ export const Layout = ({
       >
         <Header
           onTogglePanel={onTogglePanel}
-          onOpenSettings={() => openSettings()}
-          modelLabel={describeSettings(settings)}
-          isConfigured={settings !== null}
+          onOpenSettings={() => {}}
+          modelLabel=""
+          isConfigured
+          showModelSettings={false}
+          studyHeader={studyHeader}
+          feedbackMode={feedbackMode}
         />
         <MainContent 
+          workspaceId={workspaceId}
+          task={task}
+          feedbackMode={feedbackMode}
+          textualFeedbackState={textualFeedbackState}
+          onTextualFeedbackStateChange={setTextualFeedbackState}
           settings={settings}
-          onRequireSettings={openSettings}
+          onRequireSettings={() => {}}
           flowchartState={flowchartState}
           traceState={traceState}
           onFlowchartStateChange={setFlowchartState}
           onTraceStateChange={setTraceState}
           onCancelRetrace={cancelRetrace}
           onRegisterFlowchartRegenerator={registerFlowchartRegenerator}
+          onRegisterTextualRegenerator={registerTextualRegenerator}
           onFlowchartRegenerateAvailabilityChange={setCanRegenerateFlowchart}
           onFlowchartRegenerationStateChange={setFlowchartRegenerationState}
           onEvaluationStateChange={setEvaluationState}
@@ -149,7 +161,7 @@ export const Layout = ({
       </div>
 
       {/* Right Panel - Conditionally rendered based on isVisible prop */}
-      <RightPanel
+      {feedbackMode === 'codeflow' && <RightPanel
         isVisible={showRightPanel}
         onClose={onTogglePanel}
         onWidthChange={handleWidthChange}
@@ -160,15 +172,16 @@ export const Layout = ({
         onRegenerateFlowchart={() => flowchartRegenerator.current?.()}
         canRegenerateFlowchart={canRegenerateFlowchart}
         flowchartRegenerationState={flowchartRegenerationState}
-      />
+      />}
+      {feedbackMode === 'textual' && <TextualPanel
+        isVisible={showRightPanel}
+        onClose={onTogglePanel}
+        state={textualFeedbackState}
+        width={panelWidth}
+        defaultInput={task.problem.examples[0]?.input ?? ''}
+        onRegenerate={(input) => textualRegenerator.current?.(input)}
+      />}
 
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onSave={setSettings}
-        notice={settingsNotice}
-      />
     </div>
   );
 };

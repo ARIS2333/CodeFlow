@@ -1,4 +1,5 @@
 import type { FC } from 'react';
+import type { ReactNode } from 'react';
 import {
   ExternalLink,
   FileText,
@@ -8,6 +9,7 @@ import {
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
+import type { FeedbackMode } from './config/studyConfig';
 
 interface ProjectLink {
   label: string;
@@ -45,10 +47,14 @@ interface HeaderProps {
   modelLabel: string;
   /** Dimmed until a model is configured, since nothing can run without one. */
   isConfigured: boolean;
+  studyHeader?: ReactNode;
+  feedbackMode?: FeedbackMode;
+  showModelSettings?: boolean;
 }
 
 export const Header: FC<HeaderProps> = ({
-  onTogglePanel, onOpenSettings, modelLabel, isConfigured,
+  onTogglePanel, onOpenSettings, modelLabel, isConfigured, studyHeader, feedbackMode,
+  showModelSettings = true,
 }) => {
   return (
     <header className="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6">
@@ -67,7 +73,7 @@ export const Header: FC<HeaderProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-3 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2">
-          <button
+          {showModelSettings && <button
             onClick={onOpenSettings}
             title="Model settings"
             className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
@@ -78,17 +84,24 @@ export const Header: FC<HeaderProps> = ({
           >
             <span aria-hidden="true">⚙</span>
             <span>{modelLabel}</span>
-          </button>
-          <button
+          </button>}
+          {feedbackMode === 'codeflow' && <button
             onClick={onTogglePanel}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
             Code Analysis
-          </button>
+          </button>}
+          {feedbackMode === 'textual' && <button
+            onClick={onTogglePanel}
+            className="rounded-md bg-violet-600 px-4 py-2 text-white transition-colors hover:bg-violet-700"
+          >
+            Textual Feedback
+          </button>}
         </div>
       </div>
 
-      <nav aria-label="Project and research links" className="mt-3 flex flex-wrap items-center justify-center gap-2 border-t border-gray-100 pt-3">
+      {studyHeader}
+      {!studyHeader && <nav aria-label="Project and research links" className="mt-3 flex flex-wrap items-center justify-center gap-2 border-t border-gray-100 pt-3">
         {projectLinks.map(({ label, href, icon: Icon }) => (
           <a
             key={label}
@@ -106,7 +119,7 @@ export const Header: FC<HeaderProps> = ({
             />
           </a>
         ))}
-      </nav>
+      </nav>}
     </header>
   );
 };

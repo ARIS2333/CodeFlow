@@ -2,28 +2,33 @@
 
 ## What is CodeFlow?
 
-CodeFlow is a web-based learning tool for students in introductory programming courses. It helps students understand how their solution works by turning program logic into visual, step-by-step feedback.
+CodeFlow is a web-based learning tool and human-study platform for students in introductory programming courses. It compares two independent AI-generated debugging feedback approaches: visual flowchart feedback and textual step-by-step feedback.
 
-Instead of giving students a corrected answer immediately, CodeFlow encourages them to examine their own approach, find where it differs from a recommended approach, and revise the solution themselves. The current system supports introductory Java, Python, and C++ exercises.
+Instead of giving students corrected code immediately, both conditions encourage them to examine their own approach and revise it themselves. The study contains four fixed C++ exercises: a solution-writing task and a debugging task in each stage.
+
+Participants are assigned to a group before opening the platform. Group A uses CodeFlow for Q1–Q2 and textual feedback for Q3–Q4. Group B uses textual feedback for Q1–Q2 and CodeFlow for Q3–Q4. This keeps the question order fixed while counterbalancing feedback order and ensures that both question sets are evaluated under both conditions.
 
 ## The student experience
 
 ```mermaid
 flowchart LR
-    A[Read a practice problem] --> B[Write a solution]
-    B --> C[Submit for feedback]
-    C --> D[Review the results]
-    D --> E[Compare the two visual flows]
-    E --> F[Step through an example]
-    F --> G[Revise the solution]
-    G --> C
+    A[Enter participant information] --> B[Complete Q1 and Q2]
+    B --> C[Mid survey 1]
+    C --> D[Switch feedback condition]
+    D --> E[Complete Q3 and Q4]
+    E --> F[Mid survey 2]
+    F --> G[Post survey]
 ```
 
-A student begins with a programming problem and writes a solution in the CodeFlow editor. After selecting **Run Code**, the student receives three connected views of the solution:
+A student enters their name, contact email, and preassigned group, then works through the four questions in order. The browser saves each question independently, including its code and generated feedback, so switching questions or refreshing the page does not replace earlier work. Participant information remains editable, and earlier questions remain accessible.
+
+In the CodeFlow condition, selecting **Run Code** provides three connected views:
 
 1. **Results:** The student sees whether the solution produces the expected results for several example inputs.
 2. **Visual comparison:** CodeFlow places a visual map of the student's approach beside a recommended approach. This helps the student notice where the two approaches make different decisions.
 3. **Step-by-step view:** The student can follow one example through both visual maps and see where their paths first separate.
+
+In the textual condition, the model analyzes the problem and submission independently, without receiving flowchart or trace data. It presents comparable feedback scope without diagrams or a chat interface: one input, a neutral overview of the submitted logic, its step-by-step execution with state, a neutral overview of a recommended approach, and that approach's execution on the same input. It does not provide corrected code, explain why one approach is preferable, or explicitly identify the bug.
 
 ## Example of the visual comparison
 
