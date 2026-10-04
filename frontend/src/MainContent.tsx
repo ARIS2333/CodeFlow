@@ -942,6 +942,27 @@ export const MainContent = ({
                 </div>
               </div>
 
+              {problemDetails.constraints.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-base font-semibold text-gray-800">Requirements</h4>
+                  <ul className="space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 px-5 py-3 text-sm text-gray-700">
+                    {problemDetails.constraints.map((constraint, index) => (
+                      <li key={index} className="flex gap-2 leading-6">
+                        <span aria-hidden="true" className="text-gray-400">•</span>
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => <span>{children}</span>,
+                            code: ({ children }) => <code className="rounded bg-gray-200/70 px-1 py-0.5 font-mono text-[0.9em] text-gray-900">{children}</code>,
+                          }}
+                        >
+                          {constraint}
+                        </ReactMarkdown>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div>
                 <h4 className="text-lg font-semibold text-gray-800 mb-3">Examples</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

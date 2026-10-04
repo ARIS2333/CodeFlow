@@ -1,11 +1,19 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { STUDY_TASKS, feedbackModeFor } from '../src/config/studyConfig.ts';
+import { STUDY_TASKS, STUDY_TASK_SET_VERSION, feedbackModeFor } from '../src/config/studyConfig.ts';
 import { STUDY_SEQUENCE } from '../src/lib/studyStorage.ts';
 
 test('both groups see the same four C++ tasks in the same order', () => {
   assert.deepEqual(STUDY_TASKS.map((task) => task.id), ['q1', 'q2', 'q3', 'q4']);
-  assert.deepEqual(STUDY_TASKS.map((task) => task.kind), ['write', 'debug', 'write', 'debug']);
+  assert.deepEqual(STUDY_TASKS.map((task) => task.kind), ['write', 'write', 'write', 'write']);
+  assert.deepEqual(
+    STUDY_TASKS.map((task) => task.problem.title),
+    ['Unique Number', 'N-Sum: Two Sum', 'Find Digits', 'Hashing Mode'],
+  );
+  assert.equal(STUDY_TASK_SET_VERSION, 2);
+  STUDY_TASKS.forEach((task) => {
+    assert.match(task.starterCode, /Write your solution here\./);
+  });
 });
 
 test('survey checkpoints remain part of the persistent study navigation', () => {

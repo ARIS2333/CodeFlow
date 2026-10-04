@@ -12,70 +12,90 @@ export interface StudyTask {
   starterCode: string;
 }
 
+/** Bump only when the actual study questions change, so stale drafts are not
+ * restored into a different task while drafts for this task set remain cached. */
+export const STUDY_TASK_SET_VERSION = 2;
+
 export const STUDY_TASKS: StudyTask[] = [
   {
     id: 'q1',
     number: 1,
     kind: 'write',
     problem: {
-      title: 'Count Even Numbers',
-      description: 'Write `countEvens` to return how many values in an integer vector are even.',
+      title: 'Unique Number',
+      description: 'A number is **unique** when none of its decimal digits repeat. Write `isNumUnique` to return `true` when every digit in `n` is unique, and `false` otherwise. For a negative number, consider only its digits; the minus sign is not a digit.',
       examples: [
-        { input: 'countEvens({1, 2, 3, 4})', output: '2' },
-        { input: 'countEvens({2, 2, 2})', output: '3' },
-        { input: 'countEvens({1, 3, 5})', output: '0' },
+        { input: 'isNumUnique(1234)', output: 'true' },
+        { input: 'isNumUnique(1231)', output: 'false' },
+        { input: 'isNumUnique(-507)', output: 'true' },
       ],
-      constraints: ['The vector may be empty.', 'Values may be negative or zero.'],
+      constraints: [
+        '`INT_MIN <= n <= INT_MAX`.',
+        'The sign of a negative number is ignored.',
+        'The number `0` contains one digit and is unique.',
+      ],
     },
-    starterCode: `#include <vector>\nusing namespace std;\n\nint countEvens(const vector<int>& nums) {\n    // Write your solution here.\n\n}`,
+    starterCode: `bool isNumUnique(int n) {\n    // Write your solution here.\n\n}`,
   },
   {
     id: 'q2',
     number: 2,
-    kind: 'debug',
+    kind: 'write',
     problem: {
-      title: 'First Repeated Value',
-      description: 'Debug `firstRepeated` so it returns the first value whose second occurrence is encountered while scanning left to right. Return `-1` when no value repeats.',
+      title: 'N-Sum: Two Sum',
+      description: 'Write `two_sum` to find two different elements whose values add up to `target`. Return their **zero-based indices** as `{i, j}`, with `i < j`. If several pairs work, return the lexicographically earliest pair: the smallest possible `i`, then the smallest possible `j`. Return `{-1, -1}` when no pair exists. Use an `unordered_map` rather than a quadratic nested-loop solution.',
       examples: [
-        { input: 'firstRepeated({2, 5, 1, 5, 2})', output: '5' },
-        { input: 'firstRepeated({3, 3, 4})', output: '3' },
-        { input: 'firstRepeated({1, 2, 3})', output: '-1' },
+        { input: 'two_sum({2, 7, 11, 15, 0, 18}, 18)', output: '{1, 2}' },
+        { input: 'two_sum({3, 12, 11, 5, 15}, 13)', output: '{-1, -1}' },
+        { input: 'two_sum({4, 4}, 8)', output: '{0, 1}' },
       ],
-      constraints: ['The vector contains integers.', 'Keep the supplied function signature.'],
+      constraints: [
+        'The two indices must refer to different elements.',
+        'Return indices in ascending order.',
+        'Use `unordered_map` in the solution.',
+      ],
     },
-    starterCode: `#include <vector>\n#include <unordered_set>\nusing namespace std;\n\nint firstRepeated(const vector<int>& nums) {\n    unordered_set<int> seen;\n    for (int value : nums) {\n        if (seen.count(value) == 0) {\n            return value;\n        }\n        seen.insert(value);\n    }\n    return -1;\n}`,
+    starterCode: `#include <vector>\n#include <unordered_map>\n#include <utility>\nusing namespace std;\n\npair<int, int> two_sum(vector<int>& arr, int target) {\n    // Write your solution here.\n\n}`,
   },
   {
     id: 'q3',
     number: 3,
     kind: 'write',
     problem: {
-      title: 'Longest Positive Streak',
-      description: 'Write `longestPositiveStreak` to return the length of the longest consecutive run of positive values.',
+      title: 'Find Digits',
+      description: 'The string `y` is created by shuffling all digits of `x` and inserting zero or more additional digits. Write `findTheDigits` to return only the inserted digits, concatenated in ascending order. A digit may be inserted more than once. Use only sets or maps to track digit occurrences.',
       examples: [
-        { input: 'longestPositiveStreak({1, 2, -1, 3, 4, 5})', output: '3' },
-        { input: 'longestPositiveStreak({-2, 0, -1})', output: '0' },
-        { input: 'longestPositiveStreak({7, 8})', output: '2' },
+        { input: 'findTheDigits("8", "56981234")', output: '"1234569"' },
+        { input: 'findTheDigits("1234", "12345")', output: '"5"' },
+        { input: 'findTheDigits("12", "2210")', output: '"02"' },
       ],
-      constraints: ['Zero is not positive.', 'The vector may be empty.'],
+      constraints: [
+        '`0 < x.length()` and `x.length() <= y.length() <= 10^8`.',
+        '`y` contains every digit from `x` with the same multiplicity, plus any inserted digits.',
+        'Only set or map data structures may be used.',
+      ],
     },
-    starterCode: `#include <vector>\nusing namespace std;\n\nint longestPositiveStreak(const vector<int>& nums) {\n    // Write your solution here.\n\n}`,
+    starterCode: `#include <string>\n#include <map>\n\nstd::string findTheDigits(std::string x, std::string y) {\n    // Write your solution here.\n\n}`,
   },
   {
     id: 'q4',
     number: 4,
-    kind: 'debug',
+    kind: 'write',
     problem: {
-      title: 'Smallest Mode',
-      description: 'Debug `findMode` so it returns the most frequent value. If several values have the same frequency, return the smallest one.',
+      title: 'Hashing Mode',
+      description: 'The mode is the value that occurs most often. Write `findMode` to return the mode of a nonempty integer vector. If multiple values have the same highest frequency, return the smallest value among them.',
       examples: [
-        { input: 'findMode({1, 1, 2, 3, 3, 3})', output: '3' },
-        { input: 'findMode({4, 6, 4, 6})', output: '4' },
+        { input: 'findMode({1, 1, 2, 3, 5, 3, 5, 3})', output: '3' },
+        { input: 'findMode({6, 4, 9, 6, 6, 4, 9, 4, 9})', output: '4' },
         { input: 'findMode({5})', output: '5' },
       ],
-      constraints: ['The vector contains at least one integer.', 'Keep the supplied function signature.'],
+      constraints: [
+        '`nums` contains at least one integer.',
+        'Use a hash map to count occurrences.',
+        'When frequencies tie, return the smaller value.',
+      ],
     },
-    starterCode: `#include <vector>\n#include <unordered_map>\n#include <climits>\nusing namespace std;\n\nint findMode(const vector<int>& nums) {\n    unordered_map<int, int> frequency;\n    for (int value : nums) {\n        frequency[value]++;\n    }\n\n    int mode = INT_MAX;\n    int maxCount = 0;\n    for (const auto& entry : frequency) {\n        if (entry.second >= maxCount) {\n            maxCount = entry.second;\n            mode = entry.first;\n        }\n    }\n    return mode;\n}`,
+    starterCode: `#include <iostream>\n#include <vector>\n#include <unordered_map>\n#include <climits>\n\nusing namespace std;\n\nint findMode(vector<int>& nums) {\n    // Write your solution here.\n\n}`,
   },
 ];
 

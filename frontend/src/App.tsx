@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Layout } from './Layout';
 import { Header } from './Header';
-import { STUDY_TASKS, SURVEY_URLS, feedbackModeFor, type StudyGroup } from './config/studyConfig';
+import { STUDY_TASKS, STUDY_TASK_SET_VERSION, SURVEY_URLS, feedbackModeFor, type StudyGroup } from './config/studyConfig';
 import { STUDY_SEQUENCE, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen } from './lib/studyStorage';
 
 function ProfileDialog({ initial, onSave, onClose }: { initial?: ParticipantProfile; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
@@ -108,7 +108,10 @@ export default function App() {
 
   let content;
   if (!progress.participant) content = <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">CodeFlow study</p><h1 className="mt-2 text-3xl font-bold">Welcome</h1><p className="mt-4 text-gray-600">Enter your participant information to begin Question 1.</p></section></main>;
-  else if (task && feedbackMode) content = <Layout key={task.id} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={task.id} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} researchPassword={progress.participant.researchPassword} />;
+  else if (task && feedbackMode) {
+    const workspaceId = `${task.id}.v${STUDY_TASK_SET_VERSION}`;
+    content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} researchPassword={progress.participant.researchPassword} />;
+  }
   else if (progress.currentScreen === 'mid1' || progress.currentScreen === 'mid2' || progress.currentScreen === 'post') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
   else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-16"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold">Thank you</h1><p className="mt-4 text-gray-600">Your study activities are complete. You may review any unlocked question or survey from the navigation above.</p></section></main></div>;
   return <>{content}{showProfile && <ProfileDialog initial={progress.participant} onClose={progress.participant ? () => setShowProfile(false) : undefined} onSave={(participant) => { setProgress((current) => ({ ...current, participant })); setShowProfile(false); }} />}</>;
