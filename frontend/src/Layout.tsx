@@ -14,7 +14,7 @@ import {
 import { loadWorkspaceCache, updateWorkspaceCache } from './lib/workspaceCache';
 import type { FeedbackMode, StudyTask } from './config/studyConfig';
 import type { TextualFeedbackState } from './lib/textualFeedback';
-import type { ParticipantProfile } from './lib/studyStorage';
+import { hasCompleteParticipantProfile, type ParticipantProfile } from './lib/studyStorage';
 import type { SupportedLanguage } from './lib/codeAnalysis';
 import {
   createSubmission,
@@ -31,6 +31,7 @@ interface LayoutProps {
   feedbackMode: FeedbackMode;
   studyHeader: ReactNode;
   participant: ParticipantProfile;
+  onRequireParticipant: () => void;
 }
 
 /*
@@ -47,6 +48,7 @@ export const Layout = ({
   feedbackMode,
   studyHeader,
   participant,
+  onRequireParticipant,
 }: LayoutProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
   // State to manage the width of the right panel, initialized with default width from config
@@ -258,6 +260,8 @@ export const Layout = ({
           textualFeedbackState={textualFeedbackState}
           onTextualFeedbackStateChange={setTextualFeedbackState}
           settings={settings}
+          canRunStudy={hasCompleteParticipantProfile(participant)}
+          onRequireParticipant={onRequireParticipant}
           onCreateSubmission={handleCreateSubmission}
           onRequireSettings={() => {}}
           flowchartState={flowchartState}

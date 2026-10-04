@@ -83,6 +83,9 @@ interface MainContentProps {
   settings: ModelSettings | null;
   /** Handles a missing model configuration; retained for the reusable runner. */
   onRequireSettings: (notice?: string) => void;
+  /** Participant information must be complete before any run-side effects occur. */
+  canRunStudy: boolean;
+  onRequireParticipant: () => void;
   /** Creates the durable attempt before any compiler or model work starts. */
   onCreateSubmission: (
     sourceCode: string,
@@ -208,6 +211,8 @@ export const MainContent = ({
   onEvaluationStateChange,
   settings,
   onRequireSettings,
+  canRunStudy,
+  onRequireParticipant,
   onCreateSubmission,
 }: MainContentProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
@@ -622,6 +627,10 @@ export const MainContent = ({
     // Keep the run button locked until both tasks settle, but display each
     // task's result as soon as it is ready. The ref also guards double clicks.
     if (submissionSaveInFlight.current || activeRun.current?.isRunning() || isRunDisabled || !problemDetails) return;
+    if (!canRunStudy) {
+      onRequireParticipant();
+      return;
+    }
     if (!settings) {
       onRequireSettings('Choose a model before running your code.');
       return;

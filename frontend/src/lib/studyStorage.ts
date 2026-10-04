@@ -9,6 +9,16 @@ export interface ParticipantProfile {
   researchPassword: string;
 }
 
+export const hasCompleteParticipantProfile = (
+  profile: ParticipantProfile | undefined,
+): profile is ParticipantProfile => Boolean(
+  profile
+  && profile.name.trim()
+  && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email.trim())
+  && (profile.group === 'A' || profile.group === 'B')
+  && profile.researchPassword.trim(),
+);
+
 export interface StudyProgress {
   version: 1;
   participant?: ParticipantProfile;

@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Layout } from './Layout';
 import { Header } from './Header';
 import { STUDY_TASKS, STUDY_TASK_SET_VERSION, SURVEY_URLS, feedbackModeFor, type StudyGroup } from './config/studyConfig';
-import { STUDY_SEQUENCE, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen } from './lib/studyStorage';
+import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen } from './lib/studyStorage';
 
-function ProfileDialog({ initial, onSave, onClose }: { initial?: ParticipantProfile; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
+function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: ParticipantProfile; notice?: string; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [email, setEmail] = useState(initial?.email ?? '');
   const [group, setGroup] = useState<StudyGroup>(initial?.group ?? 'A');
@@ -17,6 +17,7 @@ function ProfileDialog({ initial, onSave, onClose }: { initial?: ParticipantProf
     <div role="dialog" aria-modal="true" aria-labelledby="participant-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
       <h2 id="participant-title" className="text-2xl font-bold text-gray-900">Participant information</h2>
       <p className="mt-2 text-sm leading-6 text-gray-600">Enter the information assigned for this study. You can update it later.</p>
+      {notice && <p role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">{notice}</p>}
       <form onSubmit={submit} className="mt-5 space-y-4">
         <label className="block text-sm font-medium text-gray-700">Name<input required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
         <label className="block text-sm font-medium text-gray-700">Contact email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
@@ -38,7 +39,8 @@ function SurveyPage({ screen, onComplete, navigation }: { screen: 'mid1' | 'mid2
 export default function App() {
   const initial = useMemo(() => loadStudyProgress(), []);
   const [progress, setProgress] = useState<StudyProgress>(initial);
-  const [showProfile, setShowProfile] = useState(!initial.participant?.researchPassword);
+  const [showProfile, setShowProfile] = useState(!hasCompleteParticipantProfile(initial.participant));
+  const [profileNotice, setProfileNotice] = useState<string | undefined>();
   const [showRightPanel, setShowRightPanel] = useState(false);
   useEffect(() => saveStudyProgress(progress), [progress]);
   const currentIndex = STUDY_SEQUENCE.indexOf(progress.currentScreen);
@@ -110,9 +112,9 @@ export default function App() {
   if (!progress.participant) content = <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">CodeFlow study</p><h1 className="mt-2 text-3xl font-bold">Welcome</h1><p className="mt-4 text-gray-600">Enter your participant information to begin Question 1.</p></section></main>;
   else if (task && feedbackMode) {
     const workspaceId = `${task.id}.v${STUDY_TASK_SET_VERSION}`;
-    content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} />;
+    content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} onRequireParticipant={() => { setProfileNotice('Complete your name, contact email, assigned group, and research password before running code.'); setShowProfile(true); }} />;
   }
   else if (progress.currentScreen === 'mid1' || progress.currentScreen === 'mid2' || progress.currentScreen === 'post') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
   else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-16"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold">Thank you</h1><p className="mt-4 text-gray-600">Your study activities are complete. You may review any unlocked question or survey from the navigation above.</p></section></main></div>;
-  return <>{content}{showProfile && <ProfileDialog initial={progress.participant} onClose={progress.participant ? () => setShowProfile(false) : undefined} onSave={(participant) => { setProgress((current) => ({ ...current, participant })); setShowProfile(false); }} />}</>;
+  return <>{content}{showProfile && <ProfileDialog initial={progress.participant} notice={profileNotice} onClose={hasCompleteParticipantProfile(progress.participant) ? () => { setProfileNotice(undefined); setShowProfile(false); } : undefined} onSave={(participant) => { setProgress((current) => ({ ...current, participant })); setProfileNotice(undefined); setShowProfile(false); }} />}</>;
 }
