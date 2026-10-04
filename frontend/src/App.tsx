@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Layout } from './Layout';
 import { Header } from './Header';
 import { STUDY_TASKS, STUDY_TASK_SET_VERSION, SURVEY_URLS, feedbackModeFor, type StudyGroup } from './config/studyConfig';
-import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen } from './lib/studyStorage';
+import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen, type SurveyId } from './lib/studyStorage';
 
 function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: ParticipantProfile; notice?: string; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
   const [name, setName] = useState(initial?.name ?? '');
@@ -29,11 +29,38 @@ function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: Partici
   </div>;
 }
 
-function SurveyPage({ screen, onComplete, navigation }: { screen: 'mid1' | 'mid2' | 'post'; onComplete: () => void; navigation: ReactNode }) {
-  const copy = screen === 'post'
-    ? { eyebrow: 'Final step', title: 'Post-study survey', body: 'Please complete the final survey before finishing the study.', button: 'Complete study' }
-    : { eyebrow: screen === 'mid1' ? 'Stage 1 complete' : 'Stage 2 complete', title: 'Mid-study survey', body: 'Please complete the survey in a new tab, then confirm below.', button: 'Continue' };
-  return <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={navigation} /><main className="p-6"><section className="mx-auto mt-10 max-w-2xl rounded-2xl bg-white p-8 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">{copy.eyebrow}</p><h1 className="mt-2 text-3xl font-bold text-gray-900">{copy.title}</h1><p className="mx-auto mt-4 max-w-lg leading-7 text-gray-600">{copy.body}</p><a href={SURVEY_URLS[screen]} target="_blank" rel="noopener noreferrer" className="mt-7 inline-flex rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700">Open Google Form</a><div className="mt-8 border-t border-gray-200 pt-6"><button onClick={onComplete} className="rounded-lg border border-blue-300 bg-blue-50 px-5 py-3 font-medium text-blue-700 hover:bg-blue-100">I completed the survey — {copy.button}</button></div></section></main></div>;
+function SurveyPage({ screen, onComplete, navigation }: { screen: SurveyId; onComplete: () => void; navigation: ReactNode }) {
+  const copy = {
+    s1: {
+      eyebrow: 'Before you begin',
+      title: 'Survey 1',
+      body: [
+        'This survey asks about your programming background.',
+        'Throughout the entire study, your name and email are collected only so we can award extra credit. They will be removed after the extra credit process is complete, and all study data will then be anonymized.',
+        'Your participation and all answers provided throughout the study will not affect your course grade.',
+      ],
+      button: 'Continue to Question 1',
+    },
+    s2: {
+      eyebrow: 'Stage 1 complete',
+      title: 'Survey 2',
+      body: ['This survey asks about your experience using the feedback format provided in the first stage.'],
+      button: 'Continue to Question 3',
+    },
+    s3: {
+      eyebrow: 'Stage 2 complete',
+      title: 'Survey 3',
+      body: ['This survey asks about your experience using the feedback format provided in the second stage.'],
+      button: 'Continue to Survey 4',
+    },
+    s4: {
+      eyebrow: 'Final step',
+      title: 'Survey 4',
+      body: ['This final survey asks you to compare the two feedback formats you used during the study.'],
+      button: 'Complete study',
+    },
+  }[screen];
+  return <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={navigation} /><main className="p-6"><section className="mx-auto mt-10 max-w-2xl rounded-2xl bg-white p-8 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">{copy.eyebrow}</p><h1 className="mt-2 text-3xl font-bold text-gray-900">{copy.title}</h1><div className="mx-auto mt-4 max-w-lg space-y-3 leading-7 text-gray-600">{copy.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div><a href={SURVEY_URLS[screen]} target="_blank" rel="noopener noreferrer" className="mt-7 inline-flex rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700">Open Google Form</a><div className="mt-8 border-t border-gray-200 pt-6"><button onClick={onComplete} className="rounded-lg border border-blue-300 bg-blue-50 px-5 py-3 font-medium text-blue-700 hover:bg-blue-100">I completed the survey — {copy.button}</button></div></section></main></div>;
 }
 
 export default function App() {
@@ -53,10 +80,10 @@ export default function App() {
   const task = STUDY_TASKS.find((entry) => entry.id === progress.currentScreen);
   const feedbackMode = useMemo(() => task && progress.participant ? feedbackModeFor(progress.participant.group, task.id) : undefined, [task, progress.participant]);
   const navigationItems: { screen: StudyScreen; label: string }[] = [
-    { screen: 'q1', label: 'Q1' }, { screen: 'q2', label: 'Q2' },
-    { screen: 'mid1', label: 'S1' }, { screen: 'q3', label: 'Q3' },
-    { screen: 'q4', label: 'Q4' }, { screen: 'mid2', label: 'S2' },
-    { screen: 'post', label: 'S3' },
+    { screen: 's1', label: 'S1' }, { screen: 'q1', label: 'Q1' },
+    { screen: 'q2', label: 'Q2' }, { screen: 's2', label: 'S2' },
+    { screen: 'q3', label: 'Q3' }, { screen: 'q4', label: 'Q4' },
+    { screen: 's3', label: 'S3' }, { screen: 's4', label: 'S4' },
   ];
   const canContinueFromNavigation = Boolean(task && currentIndex === progress.furthestIndex);
   const studyHeader = progress.participant ? (
@@ -114,7 +141,7 @@ export default function App() {
     const workspaceId = `${task.id}.v${STUDY_TASK_SET_VERSION}`;
     content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} onRequireParticipant={() => { setProfileNotice('Complete your name, contact email, assigned group, and research password before running code.'); setShowProfile(true); }} />;
   }
-  else if (progress.currentScreen === 'mid1' || progress.currentScreen === 'mid2' || progress.currentScreen === 'post') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
+  else if (progress.currentScreen === 's1' || progress.currentScreen === 's2' || progress.currentScreen === 's3' || progress.currentScreen === 's4') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
   else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-16"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold">Thank you</h1><p className="mt-4 text-gray-600">Your study activities are complete. You may review any unlocked question or survey from the navigation above.</p></section></main></div>;
   return <>{content}{showProfile && <ProfileDialog initial={progress.participant} notice={profileNotice} onClose={hasCompleteParticipantProfile(progress.participant) ? () => { setProfileNotice(undefined); setShowProfile(false); } : undefined} onSave={(participant) => { setProgress((current) => ({ ...current, participant })); setProfileNotice(undefined); setShowProfile(false); }} />}</>;
 }

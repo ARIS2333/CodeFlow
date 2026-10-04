@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { STUDY_TASKS, STUDY_TASK_SET_VERSION, feedbackModeFor } from '../src/config/studyConfig.ts';
+import { STUDY_TASKS, STUDY_TASK_SET_VERSION, SURVEY_URLS, feedbackModeFor } from '../src/config/studyConfig.ts';
 import { STUDY_SEQUENCE } from '../src/lib/studyStorage.ts';
 
 test('both groups see the same four C++ tasks in the same order', () => {
@@ -17,7 +17,11 @@ test('both groups see the same four C++ tasks in the same order', () => {
 });
 
 test('survey checkpoints remain part of the persistent study navigation', () => {
-  assert.deepEqual(STUDY_SEQUENCE, ['q1', 'q2', 'mid1', 'q3', 'q4', 'mid2', 'post', 'complete']);
+  assert.deepEqual(STUDY_SEQUENCE, ['s1', 'q1', 'q2', 's2', 'q3', 'q4', 's3', 's4', 'complete']);
+  assert.match(SURVEY_URLS.s1, /SfnBvJ5kOvudcYIKuTYPA5dWsLU8nLCtMw8Z8kxMrmTmTF-yw/);
+  assert.match(SURVEY_URLS.s2, /SfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/);
+  assert.equal(SURVEY_URLS.s3, SURVEY_URLS.s2);
+  assert.match(SURVEY_URLS.s4, /SeQIKeT0k6yJ3VSFUvf4rXiCeoiBh5QQm4usFWe6Xj2i1_P9A/);
 });
 
 test('feedback order is counterbalanced without binding tasks to one condition', () => {

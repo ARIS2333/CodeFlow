@@ -11,7 +11,7 @@ This combination provides two complementary views of a mistake:
 - **Flowchart comparison** shows how the student's overall logic differs from a correct approach.
 - **Execution tracing** shows when and why those differences affect the program for a specific input.
 
-Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4. Group B receives the same questions in the same order with the feedback conditions reversed. Mid-study surveys separate the two stages, followed by a post-study survey.
+Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4. Group B receives the same questions in the same order with the feedback conditions reversed. A pre-study survey comes before Q1, surveys separate and follow the two task stages, and a final survey completes the study.
 
 ## Core features
 
@@ -34,7 +34,7 @@ Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4
 2. Complete Q1 and Q2 using the assigned first feedback condition.
 3. Open and confirm completion of the first mid-study survey.
 4. Complete Q3 and Q4 using the other feedback condition.
-5. Complete the second mid-study survey and the post-study survey.
+5. Complete the remaining stage and final surveys.
 
 The study uses fixed questions; students do not upload their own problems. Earlier questions remain editable throughout the session.
 

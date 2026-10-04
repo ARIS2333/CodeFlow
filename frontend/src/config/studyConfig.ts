@@ -107,7 +107,8 @@ export const feedbackModeFor = (group: StudyGroup, taskId: StudyTaskId): Feedbac
 };
 
 export const SURVEY_URLS = {
-  mid1: 'https://forms.gle/example-mid-survey-1',
-  mid2: 'https://forms.gle/example-mid-survey-2',
-  post: 'https://forms.gle/example-post-survey',
+  s1: 'https://docs.google.com/forms/d/e/1FAIpQLSfnBvJ5kOvudcYIKuTYPA5dWsLU8nLCtMw8Z8kxMrmTmTF-yw/viewform?usp=dialog',
+  s2: 'https://docs.google.com/forms/d/e/1FAIpQLSfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/viewform?usp=dialog',
+  s3: 'https://docs.google.com/forms/d/e/1FAIpQLSfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/viewform?usp=dialog',
+  s4: 'https://docs.google.com/forms/d/e/1FAIpQLSeQIKeT0k6yJ3VSFUvf4rXiCeoiBh5QQm4usFWe6Xj2i1_P9A/viewform?usp=dialog',
 } as const;
