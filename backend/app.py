@@ -1,8 +1,9 @@
 import asyncio
+import hmac
 import json
 import os
 from dataclasses import asdict
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from flask import Flask, Response, g, jsonify, request
@@ -13,6 +14,11 @@ from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from agentscope.message import SystemMsg, UserMsg
 
 from code_analysis import CodeAnalysisError, analyze_code
+from database import (
+    DatabaseNotConfigured,
+    create_submission_record,
+    update_submission_record,
+)
 from model_config import (
     AuthenticationError,
     ModelConfigError,
@@ -115,6 +121,121 @@ async def call_model(spec: ModelSpec, system_message: str, user_message: str):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+def valid_research_password(body: dict) -> bool:
+    expected = os.getenv("RESEARCH_PASSWORD", "")
+    supplied = body.get("researchPassword")
+    return (
+        bool(expected)
+        and isinstance(supplied, str)
+        and hmac.compare_digest(expected, supplied)
+    )
+
+
+@app.route("/api/submissions", methods=["POST"])
+def create_submission_resource():
+    """Record the code snapshot for one click of Run Code."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        if not valid_research_password(body):
+            return public_error("Invalid research password", 401)
+
+        string_fields = (
+            "submissionId",
+            "name",
+            "email",
+            "group",
+            "questionId",
+            "language",
+            "feedbackFormat",
+        )
+        if any(
+            not isinstance(body.get(field), str) or not body[field].strip()
+            for field in string_fields
+        ):
+            return public_error("Missing submission fields", 400)
+        if not isinstance(body.get("sourceCode"), str):
+            return public_error("Missing submission fields", 400)
+
+        try:
+            submission_id = UUID(body["submissionId"])
+        except (TypeError, ValueError):
+            return public_error("Invalid submission ID", 400)
+
+        email = body["email"].strip().lower()
+        if "@" not in email or len(email) > 320:
+            return public_error("Invalid participant email", 400)
+        if body["group"] not in {"A", "B"}:
+            return public_error("Invalid study group", 400)
+        if body["questionId"] not in {"q1", "q2", "q3", "q4"}:
+            return public_error("Invalid question", 400)
+        if body["feedbackFormat"] not in {"codeflow", "textual"}:
+            return public_error("Invalid feedback format", 400)
+        if body["language"] not in {"cpp", "python", "java"}:
+            return public_error("Invalid language", 400)
+
+        created = create_submission_record(
+            submission_id=submission_id,
+            participant_name=body["name"].strip(),
+            participant_email=email,
+            study_group=body["group"],
+            question_id=body["questionId"],
+            source_code=body["sourceCode"],
+            language=body["language"],
+            feedback_format=body["feedbackFormat"],
+        )
+        return jsonify(created), 201
+    except DatabaseNotConfigured:
+        app.logger.exception("Study database is not configured")
+        return public_error("Study database is unavailable", 503)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Submission creation failed (request %s)", g.request_id)
+        return public_error("Submission could not be saved", 500)
+
+
+@app.route("/api/submissions/<uuid:submission_id>", methods=["PATCH"])
+def update_submission_resource(submission_id):
+    """Attach terminal and feedback workspace state to an existing attempt."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        if not valid_research_password(body):
+            return public_error("Invalid research password", 401)
+
+        allowed = {
+            field: body[field]
+            for field in (
+                "terminalResult",
+                "flowchart",
+                "codeTrace",
+                "textualFeedback",
+            )
+            if field in body
+        }
+        if not allowed:
+            return public_error("No submission fields to update", 400)
+
+        if not update_submission_record(submission_id, allowed):
+            return public_error("Submission not found", 404)
+        return jsonify({"saved": True})
+    except DatabaseNotConfigured:
+        app.logger.exception("Study database is not configured")
+        return public_error("Study database is unavailable", 503)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Submission update failed (request %s)", g.request_id)
+        return public_error("Submission could not be updated", 500)
 
 
 @app.route("/api/analyze-code", methods=["POST"])

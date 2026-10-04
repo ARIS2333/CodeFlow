@@ -18,6 +18,11 @@ export interface WorkspaceCache {
   flowchartState?: FlowchartState;
   traceState?: TraceState;
   textualFeedbackState?: TextualFeedbackState;
+  activeSubmission?: {
+    submissionId: string;
+    attemptNumber: number;
+    participantEmail: string;
+  };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

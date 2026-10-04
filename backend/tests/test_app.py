@@ -3,6 +3,7 @@ import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from uuid import UUID
 
 from agentscope.message import TextBlock
 
@@ -128,6 +129,86 @@ class AppTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private parser detail", response.get_data(as_text=True))
+
+    def test_submission_is_created_with_normalized_email(self):
+        created = {
+            "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
+            "attemptNumber": 2,
+        }
+        with (
+            patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}),
+            patch.object(
+                backend_app,
+                "create_submission_record",
+                return_value=created,
+            ) as create_record,
+        ):
+            response = self.client.post("/api/submissions", json={
+                "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "name": "Alice",
+                "email": " Alice@Example.com ",
+                "group": "A",
+                "questionId": "q2",
+                "sourceCode": "int answer() { return 1; }",
+                "language": "cpp",
+                "feedbackFormat": "codeflow",
+                "researchPassword": "study-secret",
+            })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json(), created)
+        self.assertEqual(
+            create_record.call_args.kwargs["participant_email"],
+            "alice@example.com",
+        )
+        self.assertEqual(
+            create_record.call_args.kwargs["submission_id"],
+            UUID("85d87357-c214-42e7-a4ed-741e374063a6"),
+        )
+
+    def test_submission_rejects_wrong_research_password(self):
+        with (
+            patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}),
+            patch.object(backend_app, "create_submission_record") as create_record,
+        ):
+            response = self.client.post("/api/submissions", json={
+                "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "name": "Alice",
+                "email": "alice@example.com",
+                "group": "A",
+                "questionId": "q1",
+                "sourceCode": "code",
+                "language": "cpp",
+                "feedbackFormat": "codeflow",
+                "researchPassword": "wrong",
+            })
+
+        self.assertEqual(response.status_code, 401)
+        create_record.assert_not_called()
+
+    def test_submission_workspace_results_are_updated(self):
+        submission_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        update = {
+            "terminalResult": {"status": "success", "data": {"IsCorrect": False}},
+            "flowchart": {"status": "success", "data": {"student": {}}},
+            "codeTrace": {"status": "skipped", "reason": "compile error"},
+        }
+        with (
+            patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}),
+            patch.object(
+                backend_app,
+                "update_submission_record",
+                return_value=True,
+            ) as update_record,
+        ):
+            response = self.client.patch(
+                f"/api/submissions/{submission_id}",
+                json={"researchPassword": "study-secret", **update},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(update_record.call_args.args[0], UUID(submission_id))
+        self.assertEqual(update_record.call_args.args[1], update)
 
     def test_textual_feedback_stream_uses_server_owned_prompt(self):
         captured = {}

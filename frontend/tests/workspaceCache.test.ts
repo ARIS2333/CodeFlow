@@ -99,3 +99,19 @@ test('study questions use independent workspace snapshots', () => {
   assert.equal(loadWorkspaceCache('q1'), null);
   assert.equal(loadWorkspaceCache('q2')?.code, 'q2 answer');
 });
+
+test('the active database submission survives a refresh', () => {
+  updateWorkspaceCache({
+    activeSubmission: {
+      submissionId: 'submission-id',
+      attemptNumber: 4,
+      participantEmail: 'alice@example.com',
+    },
+  }, 'q1');
+
+  assert.deepEqual(loadWorkspaceCache('q1')?.activeSubmission, {
+    submissionId: 'submission-id',
+    attemptNumber: 4,
+    participantEmail: 'alice@example.com',
+  });
+});

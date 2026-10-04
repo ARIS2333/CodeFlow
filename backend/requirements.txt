@@ -4,6 +4,7 @@ gunicorn==26.2.0
 agentscope==2.0.7
 pydantic==2.12.4
 python-dotenv==1.2.2
+psycopg[binary]==3.2.10
 tree-sitter==0.26.0
 tree-sitter-java==0.23.5
 tree-sitter-python==0.25.0

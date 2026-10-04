@@ -59,6 +59,7 @@ import {
   requestTextualFeedback,
   type TextualFeedbackState,
 } from './lib/textualFeedback';
+import type { CreatedSubmission } from './lib/submissions';
 
 interface MainContentProps {
   workspaceId: string;
@@ -82,6 +83,11 @@ interface MainContentProps {
   settings: ModelSettings | null;
   /** Handles a missing model configuration; retained for the reusable runner. */
   onRequireSettings: (notice?: string) => void;
+  /** Creates the durable attempt before any compiler or model work starts. */
+  onCreateSubmission: (
+    sourceCode: string,
+    language: SupportedLanguage,
+  ) => Promise<CreatedSubmission>;
 }
 
 // Java keywords for autocompletion
@@ -202,6 +208,7 @@ export const MainContent = ({
   onEvaluationStateChange,
   settings,
   onRequireSettings,
+  onCreateSubmission,
 }: MainContentProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
   const initialLanguage: SupportedLanguage = 'cpp';
@@ -215,6 +222,8 @@ export const MainContent = ({
     cachedWorkspace?.evaluationState ?? { status: 'idle' },
   );
   const [isFlowchartRegenerating, setIsFlowchartRegenerating] = useState(false);
+  const [isSubmissionSaving, setIsSubmissionSaving] = useState(false);
+  const submissionSaveInFlight = useRef(false);
   const activeRun = useRef<AnalysisRun | null>(null);
   const uploadCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const regenerateFlowchartAction = useRef<() => void>(() => {});
@@ -223,7 +232,7 @@ export const MainContent = ({
   // the handler through a ref rather than closing over a stale render's copy.
   const runShortcut = useRef<() => void>(() => {});
   const isCodeEvaluating = evaluationState.status === 'loading';
-  const isRunning = isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
+  const isRunning = isSubmissionSaving || isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
   const syntaxDiagnostic = flowchartState.status !== 'idle'
@@ -609,10 +618,10 @@ export const MainContent = ({
     onFlowchartRegenerateAvailabilityChange,
   ]);
 
-  const handleRunCode = () => {
+  const handleRunCode = async () => {
     // Keep the run button locked until both tasks settle, but display each
     // task's result as soon as it is ready. The ref also guards double clicks.
-    if (activeRun.current?.isRunning() || isRunDisabled || !problemDetails) return;
+    if (submissionSaveInFlight.current || activeRun.current?.isRunning() || isRunDisabled || !problemDetails) return;
     if (!settings) {
       onRequireSettings('Choose a model before running your code.');
       return;
@@ -623,6 +632,21 @@ export const MainContent = ({
     setIsFlowchartRegenerating(false);
     onFlowchartRegenerationStateChange({ status: 'idle' });
     onRunStart();
+
+    submissionSaveInFlight.current = true;
+    setIsSubmissionSaving(true);
+    try {
+      await onCreateSubmission(code, language);
+    } catch (error: unknown) {
+      setEvaluationState({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Submission could not be saved.',
+      });
+      return;
+    } finally {
+      submissionSaveInFlight.current = false;
+      setIsSubmissionSaving(false);
+    }
 
     // Evaluation remains independent. Flowcharts use parser grounding for clean
     // source, or source-only inference when parsing reports syntax recovery.

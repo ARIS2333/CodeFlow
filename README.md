@@ -2,7 +2,7 @@
 
 ## About CodeFlow
 
-CodeFlow is a web-based programming feedback platform for a counterbalanced human study. Every participant completes the same four C++ questions: two solution-writing tasks and two debugging tasks. Depending on the participant's preassigned group, each stage uses either **flowchart-based feedback** or **textual step-by-step AI feedback**.
+CodeFlow is a web-based programming feedback platform for a counterbalanced human study. Every participant writes solutions for the same four C++ questions. Depending on the participant's preassigned group, each stage uses either **flowchart-based feedback** or **textual step-by-step AI feedback**.
 
 The comparison continues beyond the static diagrams. CodeFlow can run the same test input through both flowcharts at the same time and replay their execution one step at a time. At each step, students can see the active block and current variable values, allowing them to observe where the two executions begin to behave differently.
 
@@ -26,6 +26,7 @@ Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4
 - **Textual feedback condition** — streams five Markdown sections covering the selected input, both logic descriptions, and both step-by-step executions, without a chat interface or corrected solution.
 - **Study workflow** — includes participant information, four fixed C++ tasks, two mid-study survey transitions, and a final survey.
 - **Per-question recovery** — restores each question's code and generated feedback after navigation or a browser refresh on the same browser and site.
+- **Submission snapshots** — saves each Run Code attempt, including its code, terminal result, and assigned feedback workspace, with per-question attempt numbering.
 
 ## Typical workflow
 
@@ -43,6 +44,7 @@ The study uses fixed questions; students do not upload their own problems. Earli
 - Node.js 22.14.0 for the frontend
 - Python 3.10 or later for the backend; Python 3.12.7 is recommended
 - `g++` with C++17 support for authoritative C++ compile diagnostics
+- PostgreSQL 17 for local study-submission storage
 
 The frontend and backend must run in separate terminals.
 
@@ -78,6 +80,7 @@ Copy-Item .env.example .env
 Edit `backend/.env`:
 
 ```dotenv
+DATABASE_URL=postgresql://localhost/codeflow_study
 API_KEY=
 BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.6-sol
@@ -89,7 +92,15 @@ RESEARCH_PASSWORD=
 - To allow only user-provided API keys, leave the server credentials and `RESEARCH_PASSWORD` empty.
 - `PROVIDER` can be `openai`, `dashscope`, `anthropic`, or `deepseek`.
 
-Start the backend:
+On macOS, initialize the local study database once:
+
+```bash
+brew install postgresql@17
+./setup_local_db.sh
+python init_db.py
+```
+
+Start the backend after the database is initialized:
 
 ```bash
 python app.py

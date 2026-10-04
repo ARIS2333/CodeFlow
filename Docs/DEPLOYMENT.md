@@ -4,6 +4,7 @@ CodeFlow stays as two small services:
 
 - `codeflow-frontend`: a Render Static Site built from `frontend/dist`.
 - `codeflow-backend`: the Flask application served by Gunicorn.
+- `codeflow-study-db`: the PostgreSQL database containing Run Code snapshots.
 
 The repository-root `render.yaml` creates both services from the `main`
 branch. Flask's development server and Vite's development/preview server are
@@ -14,7 +15,11 @@ not exposed publicly.
 1. Push the `main` branch to the Git provider connected to Render.
 2. In Render, choose **New > Blueprint**, select this repository, and use the
    root-level `render.yaml`.
-3. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
+3. Confirm that the existing Render Postgres resource is named
+   `codeflow-study-db`. The Blueprint links its internal connection URL to the
+   backend as `DATABASE_URL`. The backend runs `init_db.py` before Gunicorn, so
+   the submissions table is created automatically.
+4. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
    when Render asks for the backend configuration. `BASE_URL` is the provider's
    complete API endpoint; the server does not construct it from a workspace ID.
    Set the password in the dashboard
@@ -22,13 +27,13 @@ not exposed publicly.
    the source would be permanently searchable and could not be rotated without
    a commit. The human-study interface requires this value because participants
    enter the shared password in **Participant information**.
-4. Let Render create the backend and copy its public HTTPS URL.
-5. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
+5. Let Render create the backend and copy its public HTTPS URL.
+6. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
    slash (for example, `https://codeflow-backend.onrender.com`). Redeploy the
    frontend so Vite includes the value in its static build.
-6. Replace the placeholder Google Forms links in
+7. Replace the placeholder Google Forms links in
    `frontend/src/config/studyConfig.ts` with the study's real survey URLs.
-7. Open the frontend URL and verify both Group A and Group B from Q1 through
+8. Open the frontend URL and verify both Group A and Group B from Q1 through
    the final survey, including refresh recovery, flowcharts, traces, and textual
    feedback. The backend health check is available at `/health`.
 
@@ -61,12 +66,12 @@ requested, so a study-wide spending cap still has to be set at the provider,
 not in this application. Rotating the password means changing
 `RESEARCH_PASSWORD` in the Render dashboard; students then re-enter it once.
 
-Participant name, email, assigned group, research password, question code, and
-generated feedback are stored only in that browser's local storage so the page
-can recover after a refresh. Name and email are not sent to the model as part
-of textual or flowchart generation. Clearing site data, changing browsers, or
-using private browsing removes that recovery. This application does not collect
-study responses or behavior telemetry on the server.
+Browser local storage still provides refresh recovery. In addition, every Run
+Code click creates one PostgreSQL submission containing the participant name,
+normalized email, group, question, per-question attempt number, source code,
+feedback format, terminal result, and either the flowchart/trace workspace or
+the textual-feedback workspace. The shared research password is used to
+authorize these writes and is never stored in the submissions table.
 
 ## Future work deliberately not enabled
 

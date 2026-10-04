@@ -5,6 +5,7 @@
 - Python 3.10 or later
 - Python 3.12.7 is recommended and matches the project's `.python-version`
 - `g++` with C++17 support for authoritative C++ compile diagnostics
+- PostgreSQL 17 for local study-submission storage
 
 The compiler must be available on `PATH`. Verify it before starting the backend:
 
@@ -74,6 +75,7 @@ Copy-Item .env.example .env
 Edit `.env`:
 
 ```dotenv
+DATABASE_URL=postgresql://localhost/codeflow_study
 API_KEY=
 BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.6-sol
@@ -83,6 +85,7 @@ RESEARCH_PASSWORD=
 
 | Variable | Purpose |
 | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection used to save each Run Code submission |
 | `API_KEY` | Server-side API key for the shared research model |
 | `BASE_URL` | Base API URL for the model provider |
 | `MODEL` | Model used in shared research mode |
@@ -90,6 +93,17 @@ RESEARCH_PASSWORD=
 | `RESEARCH_PASSWORD` | Password required to use shared research mode; leave empty to disable this mode |
 
 To enable shared research mode, correctly configure `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`. If users will provide their own API keys, the shared research credentials can remain empty.
+
+On macOS, install and initialize the local database once:
+
+```bash
+brew install postgresql@17
+./setup_local_db.sh
+python init_db.py
+```
+
+`setup_local_db.sh` starts PostgreSQL and creates `codeflow_study` if it does
+not already exist. `init_db.py` creates the `submissions` table and indexes.
 
 The development server also supports these optional environment variables:
 
@@ -128,7 +142,7 @@ python -m unittest discover -s tests
 After installing the dependencies, start the backend with Gunicorn:
 
 ```bash
-gunicorn app:app
+python init_db.py && gunicorn app:app
 ```
 
 The Gunicorn configuration reads the platform-provided `PORT` and supports `WEB_CONCURRENCY` and `GUNICORN_THREADS`. Its request timeout is configured in `gunicorn.conf.py`.
