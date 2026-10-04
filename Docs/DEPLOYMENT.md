@@ -18,7 +18,10 @@ not exposed publicly.
 3. Confirm that the existing Render Postgres resource is named
    `codeflow-study-db`. The Blueprint links its internal connection URL to the
    backend as `DATABASE_URL`. The backend runs `init_db.py` before Gunicorn, so
-   the submissions table is created automatically.
+   the submissions table is created automatically. The submission persistence
+   layer also performs a concurrency-safe initialization on its first use, so
+   an existing Render service with a stale Start Command can recover after the
+   updated backend is deployed.
 4. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
    when Render asks for the backend configuration. `BASE_URL` is the provider's
    complete API endpoint; the server does not construct it from a workspace ID.

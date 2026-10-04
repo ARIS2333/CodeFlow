@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from threading import Lock
 from typing import Any
 from uuid import UUID
 
@@ -43,6 +44,10 @@ class DatabaseNotConfigured(RuntimeError):
     """The deployment has no database connection configured."""
 
 
+_schema_lock = Lock()
+_schema_initialized = False
+
+
 def database_url() -> str:
     value = os.getenv("DATABASE_URL", "").strip()
     if not value:
@@ -55,9 +60,26 @@ def connect():
 
 
 def initialize_database() -> None:
-    with connect() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(SCHEMA_SQL)
+    """Create the study schema once per worker, safely across workers.
+
+    Render services created before submission persistence was added can retain
+    an older Start Command. Lazy initialization keeps those deployments usable,
+    while the transaction advisory lock serializes concurrent worker startup.
+    """
+    global _schema_initialized
+    if _schema_initialized:
+        return
+    with _schema_lock:
+        if _schema_initialized:
+            return
+        with connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                    ("codeflow-study-schema-v1",),
+                )
+                cursor.execute(SCHEMA_SQL)
+        _schema_initialized = True
 
 
 def create_submission_record(
@@ -72,6 +94,7 @@ def create_submission_record(
     feedback_format: str,
 ) -> dict[str, Any]:
     """Create one immutable code attempt and allocate its per-question number."""
+    initialize_database()
     attempt_key = f"{participant_email}:{question_id}"
 
     with connect() as connection:
@@ -172,6 +195,7 @@ def update_submission_record(
     if not assignments:
         return False
 
+    initialize_database()
     assignments.append("updated_at = NOW()")
     values.append(submission_id)
     with connect() as connection:
