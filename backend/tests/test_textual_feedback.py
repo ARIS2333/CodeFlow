@@ -47,6 +47,31 @@ class TextualFeedbackTests(unittest.TestCase):
         self.assertIn("count({2, 4, 5})", rendered)
         self.assertTrue(rendered.startswith(TEXTUAL_RETRACE_PROMPT.split("{{PROBLEM_DESCRIPTION}}")[0]))
 
+    def test_full_and_retrace_prompts_share_the_execution_contract(self):
+        for prompt in (TEXTUAL_FEEDBACK_PROMPT, TEXTUAL_RETRACE_PROMPT):
+            self.assertIn("same initial input", prompt)
+            self.assertIn("**State:**", prompt)
+            self.assertIn("own nested bullet line", prompt)
+            self.assertIn("at most 120 numbered execution steps", prompt)
+            self.assertIn("at most eight visible", prompt)
+            self.assertIn("at most 120 characters", prompt)
+            self.assertIn("separate `Termination:` or `Output:` summary", prompt)
+            self.assertIn("Do not claim that you compiled, ran, tested, or verified", prompt)
+
+    def test_full_prompt_preserves_structural_equivalence_without_diagnosing(self):
+        self.assertIn("hierarchical natural-language outline", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("shortest valid input", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("complete normally", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("final externally observable results differ", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("identify or label the first divergence", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("interface may place the independent textual", TEXTUAL_FEEDBACK_PROMPT)
+        self.assertIn("For steps that genuinely correspond", TEXTUAL_FEEDBACK_PROMPT)
+
+    def test_retrace_follows_both_fixed_logic_outlines(self):
+        self.assertIn("TRACE THE FIXED STUDENT LOGIC", TEXTUAL_RETRACE_PROMPT)
+        self.assertIn("Follow that fixed outline faithfully", TEXTUAL_RETRACE_PROMPT)
+        self.assertIn("TRACE THE FIXED RECOMMENDED LOGIC", TEXTUAL_RETRACE_PROMPT)
+
 
 if __name__ == "__main__":
     unittest.main()
