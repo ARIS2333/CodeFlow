@@ -3,7 +3,7 @@ services:
     name: codeflow-backend
     runtime: python
     plan: free
-    branch: main
+    branch: UF_1_toolEval
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: python init_db.py && gunicorn -c gunicorn.conf.py app:app
@@ -43,7 +43,7 @@ services:
   - type: web
     name: codeflow-frontend
     runtime: static
-    branch: main
+    branch: UF_1_toolEval
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
