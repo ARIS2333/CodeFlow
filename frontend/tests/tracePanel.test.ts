@@ -101,6 +101,19 @@ test('flowcharts allow very small zoom levels for unusually large graphs', () =>
   assert.match(source, /<Controls showInteractive=\{false\}/);
 });
 
+test('full-screen feedback uses the viewport and gives both diagrams flexible space', () => {
+  const source = readFileSync(new URL('../src/RightContent.tsx', import.meta.url), 'utf8');
+  assert.match(source, /fixed inset-0[^']*h-dvh[^']*overflow-hidden/);
+  assert.match(source, /grid h-full min-h-0 grid-cols-1 grid-rows-2[^']*md:grid-cols-2 md:grid-rows-1/);
+  assert.match(source, /diagramHeightClassName=\{expanded \? 'h-full' : undefined\}/);
+});
+
+test('full-screen trace reserves flexible chart space and bounded scrollable state space', () => {
+  const source = readFileSync(new URL('../src/RightContent.tsx', import.meta.url), 'utf8');
+  assert.match(source, /grid min-h-\[180px\] flex-1/);
+  assert.match(source, /max-h-\[clamp\(130px,26dvh,280px\)\][^']*overflow-auto/);
+});
+
 test('an untraceable run explains itself in its own area, without redrawing the charts', () => {
   const { above, below } = split(render({ status: 'skipped', reason: 'The code did not run for any input.' }));
   assert.match(above, /Student&#x27;s Logic Flow/);

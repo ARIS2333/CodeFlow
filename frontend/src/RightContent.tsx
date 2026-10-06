@@ -51,10 +51,10 @@ function FullscreenFrame({ label, children }: {
       ref={frameRef}
       aria-label={label}
       className={expanded
-        ? 'fixed inset-0 z-50 overflow-auto bg-white p-4 md:p-6'
+        ? 'fixed inset-0 z-50 flex h-dvh min-h-0 flex-col overflow-hidden bg-white p-3 md:p-5'
         : 'relative'}
     >
-      <div className={expanded ? 'sticky top-0 z-30 mb-3 flex justify-end' : 'mb-3 flex justify-end'}>
+      <div className={expanded ? 'z-30 mb-2 flex shrink-0 justify-end' : 'mb-3 flex justify-end'}>
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
@@ -64,7 +64,9 @@ function FullscreenFrame({ label, children }: {
           {expanded ? 'Exit full screen' : 'Full screen'}
         </button>
       </div>
-      {typeof children === 'function' ? children(expanded) : children}
+      <div className={expanded ? 'min-h-0 flex-1' : undefined}>
+        {typeof children === 'function' ? children(expanded) : children}
+      </div>
     </div>
   );
 }
@@ -123,10 +125,10 @@ function FlowchartPane({ title, graph, loading, trace, step = 0, diagramHeightCl
   }, [trace, reached]);
 
   return (
-    <section className="min-w-0 flex-1" aria-label={title} aria-busy={!graph && loading}>
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={title} aria-busy={!graph && loading}>
+      <h3 className="mb-2 shrink-0 text-lg font-semibold">{title}</h3>
       {diagram ? (
-        <div className="border rounded-lg overflow-hidden">
+        <div className={`overflow-hidden rounded-lg border ${diagramHeightClassName === 'h-full' ? 'min-h-0 flex-1' : ''}`}>
           <FlowchartDiagram
             nodes={diagram.nodes}
             edges={diagram.edges}
@@ -279,10 +281,22 @@ function RightContent({
         // the student reads and rearranges them, and a replay must not disturb
         // whatever they have arranged here.
         <FullscreenFrame label="Flowchart comparison">
-          <div className="flex flex-col gap-6 md:flex-row">
-            <FlowchartPane title="Student's Logic Flow" graph={graphs?.student} loading={flowchartState.status === 'loading'} />
-            <FlowchartPane title="Recommended Logic Flow" graph={graphs?.llm} loading={flowchartState.status === 'loading'} />
-          </div>
+          {(expanded) => <div className={expanded
+            ? 'grid h-full min-h-0 grid-cols-1 grid-rows-2 gap-3 md:grid-cols-2 md:grid-rows-1'
+            : 'flex flex-col gap-6 md:flex-row'}>
+            <FlowchartPane
+              title="Student's Logic Flow"
+              graph={graphs?.student}
+              loading={flowchartState.status === 'loading'}
+              diagramHeightClassName={expanded ? 'h-full' : undefined}
+            />
+            <FlowchartPane
+              title="Recommended Logic Flow"
+              graph={graphs?.llm}
+              loading={flowchartState.status === 'loading'}
+              diagramHeightClassName={expanded ? 'h-full' : undefined}
+            />
+          </div>}
         </FullscreenFrame>
       ) : (
         <div className="bg-gray-50 p-4 rounded-lg">
@@ -298,8 +312,8 @@ function RightContent({
         // stepping through a run cannot move or recolour the charts above.
         <section aria-label="Execution trace" className="mt-10 border-t-2 border-gray-300 pt-6">
           <FullscreenFrame label="Execution trace viewer">
-            {(expanded) => <>
-              <div className={expanded ? 'flex flex-wrap items-stretch gap-3' : undefined}>
+            {(expanded) => <div className={expanded ? 'flex h-full min-h-0 flex-col' : undefined}>
+              <div className={expanded ? 'flex shrink-0 flex-wrap items-stretch gap-3' : undefined}>
                 <div className={expanded ? 'min-w-0 flex-1' : undefined}>
                   <TracePanel
                     traceState={traceState}
@@ -317,15 +331,17 @@ function RightContent({
                 )}
               </div>
               {totalSteps > 0 && graphs?.student && graphs.llm ? (
-                <>
-                <div className="flex flex-col gap-6 md:flex-row">
+                <div className={expanded ? 'flex min-h-0 flex-1 flex-col' : undefined}>
+                <div className={expanded
+                  ? 'grid min-h-[180px] flex-1 grid-cols-1 grid-rows-2 gap-3 md:grid-cols-2 md:grid-rows-1'
+                  : 'flex flex-col gap-6 md:flex-row'}>
                   <FlowchartPane
                     title="Student's Run"
                     graph={graphs.student}
                     loading={false}
                     trace={traces?.student}
                     step={safeStep}
-                    diagramHeightClassName={expanded ? 'h-[clamp(260px,42vh,520px)]' : undefined}
+                    diagramHeightClassName={expanded ? 'h-full' : undefined}
                   />
                   <FlowchartPane
                     title="Recommended Run"
@@ -333,26 +349,26 @@ function RightContent({
                     loading={false}
                     trace={traces?.llm}
                     step={safeStep}
-                    diagramHeightClassName={expanded ? 'h-[clamp(260px,42vh,520px)]' : undefined}
+                    diagramHeightClassName={expanded ? 'h-full' : undefined}
                   />
                 </div>
                 {!expanded && (
                   <TraceControls totalSteps={totalSteps} step={safeStep} onStepChange={setStep} />
                 )}
                 <div className={expanded
-                  ? 'flex max-h-[24vh] flex-col gap-6 overflow-auto md:flex-row'
+                  ? 'mt-3 grid max-h-[clamp(130px,26dvh,280px)] shrink-0 grid-cols-1 gap-3 overflow-auto md:grid-cols-2'
                   : 'flex flex-col gap-6 md:flex-row'}>
                   <TraceStepDetails trace={traces?.student} step={safeStep} />
                   <TraceStepDetails trace={traces?.llm} step={safeStep} />
                 </div>
-                </>
+                </div>
               ) : traceState.status === 'loading' ? (
                 <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
                   <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                   The AI is working through this input step by step...
                 </div>
               ) : null}
-            </>}
+            </div>}
           </FullscreenFrame>
         </section>
       )}
