@@ -558,6 +558,20 @@ export const createFlowchartValidator = (
 ): ((input: unknown) => ValidationResult<FlowchartData>) =>
   (input: unknown) => validateFlowchartWithAnalysis(input, codeAnalysis);
 
+/** Keep the simulated terminal output value-only, even for older cached model replies. */
+export const conciseCodeEvaluationOutput = (yourOutput: string, expected = ''): string => {
+  const output = yourOutput.trim();
+  const containsExplanation = output.length > 160
+    || /[\r\n]/.test(output)
+    || /\b(?:because|depends?\s+on|likely\s+returns?|logic\s+defect|depending\s+on|iteration\s+order)\b/i.test(output);
+  if (!containsExplanation) return output;
+  if (/\b(?:depends?|non[- ]?determin|iteration\s+order)\b/i.test(output)) {
+    return '❌ Non-deterministic';
+  }
+  if (output.startsWith('✅')) return `✅ ${expected.trim()}`;
+  return '❌ Incorrect result';
+};
+
 export const validateCodeEvaluation = (
   input: unknown
 ): ValidationResult<CodeEvaluationResponse> => {
@@ -614,10 +628,16 @@ export const validateCodeEvaluation = (
       return;
     }
 
+    const rawOutput = (yourOutput as string).trim();
+    const conciseOutput = conciseCodeEvaluationOutput(rawOutput, expected as string);
+    if (conciseOutput !== rawOutput) {
+      repairs.push(`${where}.yourOutput contained explanation text and was reduced to a concise verdict`);
+    }
+
     testResults.push({
       input: input_ as string,
       expected: expected as string,
-      yourOutput: yourOutput as string,
+      yourOutput: conciseOutput,
     });
   });
 

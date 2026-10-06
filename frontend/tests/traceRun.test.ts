@@ -111,6 +111,17 @@ test('runtime failures and non-terminating cases are not automatically traced', 
   ]), null);
 });
 
+test('non-deterministic cases are not used to generate a trace', () => {
+  assert.equal(selectTraceCase([
+    result('findMode({4, 6, 4, 6})', '❌ Non-deterministic', '4'),
+  ]), null);
+
+  assert.equal(selectTraceCase([
+    result('findMode({4, 6, 4, 6})', '❌ Depends on unordered_map iteration order.', '4'),
+    result('findMode({5})', '✅ 5', '5'),
+  ])?.input, 'findMode({5})');
+});
+
 test('a normally completed case is traced when another case raises', () => {
   assert.equal(selectTraceCase([
     result('f(1, 0)', '❌ Runtime Error: ZeroDivisionError'),

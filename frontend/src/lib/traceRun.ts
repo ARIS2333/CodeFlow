@@ -1,6 +1,6 @@
 import { requestExecutionTrace, type TraceCase, type TraceProgress, type TraceRequest } from './traceClient.ts';
 import type { ExecutionTrace } from './executionTrace';
-import type { TestResult } from './llmSchemas';
+import { conciseCodeEvaluationOutput, type TestResult } from './llmSchemas.ts';
 import type { ModelConfigPayload } from './modelSettings.ts';
 import { compileDiagnosticFor, syntaxDiagnosticFor, type CodeAnalysis } from './codeAnalysis.ts';
 
@@ -18,10 +18,11 @@ export type TraceState =
 const VERDICT_MARKS = /[✅❌\u{1F527}]/gu;
 
 const isIncompleteExecution = (result: TestResult): boolean =>
-  /(?:compil(?:e|ation)|syntax|runtime|interface)\s*error|does\s+not\s+terminate/i
-    .test(result.yourOutput);
+  /(?:compil(?:e|ation)|syntax|runtime|interface)\s*error|does\s+not\s+terminate|non-deterministic/i
+    .test(conciseCodeEvaluationOutput(result.yourOutput, result.expected));
 
-const isPassing = (result: TestResult): boolean => result.yourOutput.includes('✅');
+const isPassing = (result: TestResult): boolean =>
+  conciseCodeEvaluationOutput(result.yourOutput, result.expected).includes('✅');
 
 /**
  * Pick the case worth walking through.
@@ -46,7 +47,9 @@ export const selectTraceCase = (results: TestResult[]): TraceCase | null => {
   return {
     input: chosen.input,
     ...(chosen.expected.trim() ? { expected: chosen.expected.trim() } : {}),
-    ...(chosen.yourOutput.trim() ? { observedOutput: chosen.yourOutput } : {}),
+    ...(chosen.yourOutput.trim()
+      ? { observedOutput: conciseCodeEvaluationOutput(chosen.yourOutput, chosen.expected) }
+      : {}),
   };
 };
 

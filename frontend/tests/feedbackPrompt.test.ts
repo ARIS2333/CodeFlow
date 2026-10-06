@@ -7,6 +7,7 @@ import {
   systemPrompt_GeneratePythonFeedback,
 } from '../src/config/systemPrompt_GenerateFeedback.ts';
 import {
+  conciseCodeEvaluationOutput,
   validateCodeEvaluation,
   validateCodeEvaluationForAnalysis,
 } from '../src/lib/llmSchemas.ts';
@@ -67,6 +68,18 @@ test('both prompts derive expected values independently and preserve the JSON co
     assert.match(prompt, /"TestResults"/);
     assert.match(prompt, /Return JSON only/);
   }
+});
+
+test('simulated terminal output removes explanations and normalizes non-deterministic results', () => {
+  assert.equal(
+    conciseCodeEvaluationOutput('❌ Depends on unordered_map iteration order; likely returns 6 or 4.'),
+    '❌ Non-deterministic',
+  );
+  assert.equal(
+    conciseCodeEvaluationOutput('❌ Logic defect: the wrong branch returns a larger value.'),
+    '❌ Incorrect result',
+  );
+  assert.equal(conciseCodeEvaluationOutput('❌ 6'), '❌ 6');
 });
 
 test('a blocking language error cannot be mixed with simulated outputs', () => {
