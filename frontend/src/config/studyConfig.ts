@@ -108,7 +108,7 @@ export const feedbackModeFor = (group: StudyGroup, taskId: StudyTaskId): Feedbac
 
 export const SURVEY_URLS = {
   s1: 'https://docs.google.com/forms/d/e/1FAIpQLSfnBvJ5kOvudcYIKuTYPA5dWsLU8nLCtMw8Z8kxMrmTmTF-yw/viewform?usp=dialog',
-  s2: 'https://docs.google.com/forms/d/e/1FAIpQLSfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/viewform?usp=dialog',
+  s2: 'https://docs.google.com/forms/d/e/1FAIpQLScH1EQmejk1q8yZbrbg6KKr6vJl3VkFmZX0mvqaMfIT2S0_rQ/viewform?usp=dialog',
   s3: 'https://docs.google.com/forms/d/e/1FAIpQLSfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/viewform?usp=dialog',
   s4: 'https://docs.google.com/forms/d/e/1FAIpQLSeQIKeT0k6yJ3VSFUvf4rXiCeoiBh5QQm4usFWe6Xj2i1_P9A/viewform?usp=dialog',
 } as const;
