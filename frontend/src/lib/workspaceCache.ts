@@ -4,12 +4,14 @@ import type { ProblemDetails } from './llmSchemas';
 import type { SupportedLanguage } from './codeAnalysis';
 import type { TextualFeedbackState } from './textualFeedback';
 
-const LEGACY_WORKSPACE_CACHE_KEY = 'codeflow.workspace.v1';
+const LEGACY_WORKSPACE_CACHE_KEY = 'codeflow.workspace.v2';
 const workspaceCacheKey = (workspaceId?: string) =>
-  workspaceId ? `codeflow.study.workspace.v1.${workspaceId}` : LEGACY_WORKSPACE_CACHE_KEY;
+  workspaceId ? `codeflow.study.workspace.v2.${workspaceId}` : LEGACY_WORKSPACE_CACHE_KEY;
+const privateLegacyWorkspaceKey = (workspaceId?: string) =>
+  workspaceId ? `codeflow.study.workspace.v1.${workspaceId}` : 'codeflow.workspace.v1';
 
 export interface WorkspaceCache {
-  version: 1;
+  version: 2;
   code?: string;
   language?: SupportedLanguage;
   problem?: string | null;
@@ -21,7 +23,7 @@ export interface WorkspaceCache {
   activeSubmission?: {
     submissionId: string;
     attemptNumber: number;
-    participantEmail: string;
+    participantId: string;
   };
 }
 
@@ -35,10 +37,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  */
 export const loadWorkspaceCache = (workspaceId?: string): WorkspaceCache | null => {
   try {
+    window.localStorage.removeItem(privateLegacyWorkspaceKey(workspaceId));
     const raw = window.localStorage.getItem(workspaceCacheKey(workspaceId));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || parsed.version !== 1) return null;
+    if (!isRecord(parsed) || parsed.version !== 2) return null;
 
     const cache = parsed as unknown as WorkspaceCache;
     return {
@@ -64,10 +67,10 @@ export const loadWorkspaceCache = (workspaceId?: string): WorkspaceCache | null 
 /** Merge because MainContent and Layout own different pieces of the workspace. */
 export const updateWorkspaceCache = (patch: Partial<WorkspaceCache>, workspaceId?: string): void => {
   try {
-    const current = loadWorkspaceCache(workspaceId) ?? { version: 1 as const };
+    const current = loadWorkspaceCache(workspaceId) ?? { version: 2 as const };
     window.localStorage.setItem(
       workspaceCacheKey(workspaceId),
-      JSON.stringify({ ...current, ...patch, version: 1 }),
+      JSON.stringify({ ...current, ...patch, version: 2 }),
     );
   } catch {
     // Storage may be blocked or full. The app remains usable without recovery.

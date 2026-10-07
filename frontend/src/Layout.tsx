@@ -79,7 +79,7 @@ export const Layout = ({
   const flowchartRegenerator = useRef<(() => void) | null>(null);
   const textualRegenerator = useRef<((input: string) => void) | null>(null);
   const [canRegenerateFlowchart, setCanRegenerateFlowchart] = useState(false);
-  const restoredSubmission = cachedWorkspace?.activeSubmission?.participantEmail === participant.email.trim().toLowerCase()
+  const restoredSubmission = cachedWorkspace?.activeSubmission?.participantId === participant.participantId
     ? cachedWorkspace.activeSubmission
     : undefined;
   const activeSubmissionRef = useRef(restoredSubmission);
@@ -87,12 +87,11 @@ export const Layout = ({
   const submissionUpdateChain = useRef<Promise<void>>(Promise.resolve());
   const [submissionSyncError, setSubmissionSyncError] = useState<string | null>(null);
 
-  // Study participants enter the shared password with their participant data.
-  // Every model request uses that research configuration; there is no separate
-  // provider/settings workflow in the study UI.
+  // The assigned participant ID authorizes the server-owned study model; no
+  // shared credential is exposed in the browser.
   const settings = useMemo<ModelSettings>(
-    () => ({ mode: 'research', password: participant.researchPassword }),
-    [participant.researchPassword],
+    () => ({ mode: 'participant', participantId: participant.participantId }),
+    [participant.participantId],
   );
 
   const persistSubmissionUpdate = useCallback((update: SubmissionUpdate) => {
@@ -103,7 +102,7 @@ export const Layout = ({
       .catch(() => undefined)
       .then(() => updateSubmission(
         submissionId,
-        participant.researchPassword,
+        participant.participantId,
         update,
       ))
       .then(() => setSubmissionSyncError(null))
@@ -112,25 +111,22 @@ export const Layout = ({
           error instanceof Error ? error.message : 'Submission result could not be saved.',
         );
       });
-  }, [participant.researchPassword]);
+  }, [participant.participantId]);
 
   const handleCreateSubmission = useCallback(async (
     sourceCode: string,
     language: SupportedLanguage,
   ): Promise<CreatedSubmission> => {
     const created = await createSubmission({
-      name: participant.name,
-      email: participant.email,
-      group: participant.group,
+      participantId: participant.participantId,
       questionId: task.id,
       sourceCode,
       language,
       feedbackFormat: feedbackMode,
-      researchPassword: participant.researchPassword,
     });
     const stored = {
       ...created,
-      participantEmail: participant.email.trim().toLowerCase(),
+      participantId: participant.participantId,
     };
     activeSubmissionRef.current = stored;
     setActiveSubmission(stored);
@@ -139,10 +135,10 @@ export const Layout = ({
   }, [feedbackMode, participant, task.id]);
 
   useEffect(() => {
-    if (participant.email.trim().toLowerCase() === activeSubmissionRef.current?.participantEmail) return;
+    if (participant.participantId === activeSubmissionRef.current?.participantId) return;
     activeSubmissionRef.current = undefined;
     setActiveSubmission(undefined);
-  }, [participant.email]);
+  }, [participant.participantId]);
 
   useEffect(() => {
     updateWorkspaceCache({ activeSubmission }, workspaceId);

@@ -222,7 +222,7 @@ export const MainContent = ({
   );
   const [language, setLanguage] = useState<SupportedLanguage>(initialLanguage);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [isRedoConfirmOpen, setIsRedoConfirmOpen] = useState(false);
   const [evaluationState, setEvaluationState] = useState<EvaluationState>(
     cachedWorkspace?.evaluationState ?? { status: 'idle' },
   );
@@ -392,6 +392,25 @@ export const MainContent = ({
     setCode(STARTER_CODE[DEFAULT_LANGUAGE]);
     setCursor({ line: 1, column: 1 });
     clearWorkspaceCache();
+  };
+
+  const handleRedoQuestion = () => {
+    setIsRedoConfirmOpen(false);
+    clearResults();
+    if (uploadCommitTimer.current) {
+      clearTimeout(uploadCommitTimer.current);
+      uploadCommitTimer.current = null;
+    }
+    setIsUploadPopupOpen(false);
+    setIsApiProcessing(false);
+    setIsLoading(false);
+    setApiError(null);
+    setProblem(task.problem.description);
+    setProblemDetails(task.problem);
+    setLanguage(initialLanguage);
+    setCode(task.starterCode);
+    setCursor({ line: 1, column: 1 });
+    clearWorkspaceCache(workspaceId);
   };
 
   const handleLoadExample = (exampleLanguage: SupportedLanguage) => {
@@ -791,26 +810,6 @@ export const MainContent = ({
 
   useEffect(() => { runShortcut.current = handleRunCode; });
 
-  const handleCopyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopyState('copied');
-    } catch {
-      // The clipboard API can be refused outright (denied permission, an
-      // insecure context, a locked-down lab browser). Say so instead of
-      // silently doing nothing, and point at the shortcut that still works.
-      setCopyState('failed');
-    }
-  };
-
-  // Return the button to its resting label, dropping the timer if the student
-  // navigates away or clicks again first.
-  useEffect(() => {
-    if (copyState === 'idle') return;
-    const timer = setTimeout(() => setCopyState('idle'), 2000);
-    return () => clearTimeout(timer);
-  }, [copyState]);
-
   // Create extensions with autocompletion enabled for all languages
   const getExtensions = () => {
     const baseExtensions = [
@@ -1068,17 +1067,13 @@ export const MainContent = ({
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={handleCopyCode}
-                title="Copy code to clipboard"
-                className={`rounded px-2 py-1 text-sm transition-colors hover:bg-gray-700 ${
-                  copyState === 'failed'
-                    ? 'text-amber-400'
-                    : 'text-gray-300 hover:text-white'
-                }`}
+                type="button"
+                onClick={() => setIsRedoConfirmOpen(true)}
+                disabled={isRunning || isApiProcessing || isLoading}
+                title="Restore this question's starter code"
+                className="rounded-md border border-gray-500 bg-gray-700 px-3 py-1.5 text-sm font-medium text-gray-100 transition-colors hover:border-gray-400 hover:bg-gray-600 hover:text-white disabled:cursor-not-allowed disabled:border-gray-700 disabled:bg-gray-800 disabled:text-gray-600"
               >
-                {copyState === 'copied' ? 'Copied'
-                  : copyState === 'failed' ? 'Use \u2318C'
-                    : 'Copy'}
+                Restore Starter
               </button>
               <span className="rounded bg-gray-700 px-3 py-1 text-sm text-white">C++</span>
               {!task && <select
@@ -1219,6 +1214,35 @@ export const MainContent = ({
 
       </div>
     </main>
+    {isRedoConfirmOpen && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4">
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="redo-confirm-title"
+          className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl"
+        >
+          <h2 id="redo-confirm-title" className="text-xl font-bold text-gray-900">Restore starter code?</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-600">This will replace your current code with the original starter code and clear this question’s feedback.</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsRedoConfirmOpen(false)}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRedoQuestion}
+              className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
+            >
+              Restore code
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
     </>
   );
 };

@@ -37,6 +37,12 @@ test('research settings travel as a password, never as a provider', () => {
   assert.deepEqual(toModelConfig(settings), { password: 'study-secret' });
 });
 
+test('study settings travel as a participant ID without a shared password', () => {
+  const settings: ModelSettings = { mode: 'participant', participantId: 'CF-P001' };
+  assert.deepEqual(toModelConfig(settings), { participantId: 'CF-P001' });
+  assert.equal(describeSettings(settings), 'Study mode');
+});
+
 test('an omitted base URL is left out rather than sent empty', () => {
   const config = toModelConfig({
     mode: 'byok', provider: 'openai', model: 'gpt-4o', apiKey: 'sk-x',

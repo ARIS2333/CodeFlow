@@ -1,7 +1,8 @@
 /**
  * Which model the app may call, and with whose credentials.
  *
- * Two shapes, matching the two ways a student can be authorised:
+ * Three shapes, matching the ways a user can be authorised:
+ *   participant — an ID from the server-owned human-study registry
  *   research — the study password; the server pays, and the password is
  *              checked on the server, never here
  *   byok     — the student's own provider, model, and key
@@ -29,17 +30,21 @@ export interface ProviderCatalog {
 
 export type ModelSettings =
   | { mode: 'research'; password: string }
+  | { mode: 'participant'; participantId: string }
   | { mode: 'byok'; provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
 
 /** The wire shape the backend expects under `modelConfig`. */
 export type ModelConfigPayload =
   | { password: string }
+  | { participantId: string }
   | { provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
 
 export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
   settings.mode === 'research'
     ? { password: settings.password }
-    : {
+    : settings.mode === 'participant'
+      ? { participantId: settings.participantId }
+      : {
       provider: settings.provider,
       model: settings.model,
       apiKey: settings.apiKey,
@@ -50,6 +55,7 @@ export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
 export const describeSettings = (settings: ModelSettings | null): string => {
   if (!settings) return 'Not configured';
   if (settings.mode === 'research') return 'Research mode';
+  if (settings.mode === 'participant') return 'Study mode';
   return `${settings.provider} · ${settings.model}`;
 };
 

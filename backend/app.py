@@ -1,5 +1,4 @@
 import asyncio
-import hmac
 import json
 import os
 from dataclasses import asdict
@@ -28,6 +27,7 @@ from model_config import (
     resolve_model_spec,
 )
 from model_stream import create_stream_blueprint, stream_model_response
+from participants import group_for_participant
 from textual_feedback import render_textual_feedback_prompt
 
 load_dotenv()
@@ -123,14 +123,20 @@ def health():
     return jsonify({"status": "ok"})
 
 
-def valid_research_password(body: dict) -> bool:
-    expected = os.getenv("RESEARCH_PASSWORD", "")
-    supplied = body.get("researchPassword")
-    return (
-        bool(expected)
-        and isinstance(supplied, str)
-        and hmac.compare_digest(expected, supplied)
-    )
+@app.route("/api/participants/verify", methods=["POST"])
+def verify_participant():
+    """Verify a study ID and return its server-assigned condition."""
+    try:
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        assignment = group_for_participant(body.get("participantId"))
+        if assignment is None:
+            return public_error("Invalid participant ID", 401)
+        participant_id, group = assignment
+        return jsonify({"participantId": participant_id, "group": group})
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
 
 
 @app.route("/api/submissions", methods=["POST"])
@@ -140,14 +146,9 @@ def create_submission_resource():
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict):
             return public_error("Request body must be a JSON object", 400)
-        if not valid_research_password(body):
-            return public_error("Invalid research password", 401)
-
         string_fields = (
             "submissionId",
-            "name",
-            "email",
-            "group",
+            "participantId",
             "questionId",
             "language",
             "feedbackFormat",
@@ -165,11 +166,10 @@ def create_submission_resource():
         except (TypeError, ValueError):
             return public_error("Invalid submission ID", 400)
 
-        email = body["email"].strip().lower()
-        if "@" not in email or len(email) > 320:
-            return public_error("Invalid participant email", 400)
-        if body["group"] not in {"A", "B"}:
-            return public_error("Invalid study group", 400)
+        assignment = group_for_participant(body["participantId"])
+        if assignment is None:
+            return public_error("Invalid participant ID", 401)
+        participant_id, group = assignment
         if body["questionId"] not in {"q1", "q2", "q3", "q4"}:
             return public_error("Invalid question", 400)
         if body["feedbackFormat"] not in {"codeflow", "textual"}:
@@ -179,9 +179,8 @@ def create_submission_resource():
 
         created = create_submission_record(
             submission_id=submission_id,
-            participant_name=body["name"].strip(),
-            participant_email=email,
-            study_group=body["group"],
+            participant_id=participant_id,
+            study_group=group,
             question_id=body["questionId"],
             source_code=body["sourceCode"],
             language=body["language"],
@@ -207,8 +206,10 @@ def update_submission_resource(submission_id):
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict):
             return public_error("Request body must be a JSON object", 400)
-        if not valid_research_password(body):
-            return public_error("Invalid research password", 401)
+        assignment = group_for_participant(body.get("participantId"))
+        if assignment is None:
+            return public_error("Invalid participant ID", 401)
+        participant_id, _group = assignment
 
         allowed = {
             field: body[field]
@@ -223,7 +224,7 @@ def update_submission_resource(submission_id):
         if not allowed:
             return public_error("No submission fields to update", 400)
 
-        if not update_submission_record(submission_id, allowed):
+        if not update_submission_record(submission_id, participant_id, allowed):
             return public_error("Submission not found", 404)
         return jsonify({"saved": True})
     except DatabaseNotConfigured:

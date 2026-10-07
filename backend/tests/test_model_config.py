@@ -28,6 +28,18 @@ class ResearchModeTests(unittest.TestCase):
         self.assertEqual(spec.api_key, "sk-server-side")
         self.assertEqual(spec.base_url, "https://workspace-1.example.com/v1")
 
+    def test_a_registered_participant_id_unlocks_the_study_model(self):
+        with patch.dict(os.environ, RESEARCH_ENV, clear=False):
+            spec = model_config.resolve_model_spec({"participantId": "CF-P001"})
+
+        self.assertTrue(spec.research_mode)
+        self.assertEqual(spec.api_key, "sk-server-side")
+
+    def test_an_unknown_participant_id_is_rejected(self):
+        with patch.dict(os.environ, RESEARCH_ENV, clear=False):
+            with self.assertRaises(model_config.AuthenticationError):
+                model_config.resolve_model_spec({"participantId": "CF-P999"})
+
     def test_research_mode_supports_any_configured_provider(self):
         env = {
             **RESEARCH_ENV,

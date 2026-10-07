@@ -130,7 +130,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private parser detail", response.get_data(as_text=True))
 
-    def test_submission_is_created_with_normalized_email(self):
+    def test_submission_is_created_with_verified_participant_id(self):
         created = {
             "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
             "attemptNumber": 2,
@@ -145,46 +145,61 @@ class AppTests(unittest.TestCase):
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "name": "Alice",
-                "email": " Alice@Example.com ",
-                "group": "A",
+                "participantId": " cf-p001 ",
                 "questionId": "q2",
                 "sourceCode": "int answer() { return 1; }",
                 "language": "cpp",
                 "feedbackFormat": "codeflow",
-                "researchPassword": "study-secret",
             })
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.get_json(), created)
         self.assertEqual(
-            create_record.call_args.kwargs["participant_email"],
-            "alice@example.com",
+            create_record.call_args.kwargs["participant_id"],
+            "CF-P001",
         )
+        self.assertEqual(create_record.call_args.kwargs["study_group"], "A")
         self.assertEqual(
             create_record.call_args.kwargs["submission_id"],
             UUID("85d87357-c214-42e7-a4ed-741e374063a6"),
         )
 
-    def test_submission_rejects_wrong_research_password(self):
+    def test_submission_rejects_unknown_participant_id(self):
         with (
             patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}),
             patch.object(backend_app, "create_submission_record") as create_record,
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "name": "Alice",
-                "email": "alice@example.com",
-                "group": "A",
+                "participantId": "CF-P999",
                 "questionId": "q1",
                 "sourceCode": "code",
                 "language": "cpp",
                 "feedbackFormat": "codeflow",
-                "researchPassword": "wrong",
             })
 
         self.assertEqual(response.status_code, 401)
         create_record.assert_not_called()
+
+    def test_participant_verification_returns_server_assigned_group(self):
+        with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
+            response = self.client.post("/api/participants/verify", json={
+                "participantId": "cf-p002",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {
+            "participantId": "CF-P002",
+            "group": "B",
+        })
+
+    def test_participant_verification_rejects_unknown_id(self):
+        with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
+            response = self.client.post("/api/participants/verify", json={
+                "participantId": "CF-P999",
+            })
+
+        self.assertEqual(response.status_code, 401)
 
     def test_submission_workspace_results_are_updated(self):
         submission_id = "85d87357-c214-42e7-a4ed-741e374063a6"
@@ -203,12 +218,13 @@ class AppTests(unittest.TestCase):
         ):
             response = self.client.patch(
                 f"/api/submissions/{submission_id}",
-                json={"researchPassword": "study-secret", **update},
+                json={"participantId": "CF-P001", **update},
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(update_record.call_args.args[0], UUID(submission_id))
-        self.assertEqual(update_record.call_args.args[1], update)
+        self.assertEqual(update_record.call_args.args[1], "CF-P001")
+        self.assertEqual(update_record.call_args.args[2], update)
 
     def test_textual_feedback_stream_uses_server_owned_prompt(self):
         captured = {}

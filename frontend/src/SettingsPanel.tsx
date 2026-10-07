@@ -65,7 +65,9 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
 }) => {
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>(settings?.mode ?? 'research');
+  const [mode, setMode] = useState<Mode>(
+    settings?.mode === 'byok' ? 'byok' : 'research',
+  );
   const [password, setPassword] = useState(
     settings?.mode === 'research' ? settings.password : '',
   );

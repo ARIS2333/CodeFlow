@@ -6,20 +6,16 @@ afterEach(() => { delete (globalThis as { window?: unknown }).window; });
 
 test('participant profile requires every field before code can run', () => {
   const complete = {
-    name: 'Alice Student',
-    email: 'alice@example.com',
+    participantId: 'CF-P001',
     group: 'A' as const,
-    researchPassword: 'study-password',
   };
 
   assert.equal(hasCompleteParticipantProfile(complete), true);
-  assert.equal(hasCompleteParticipantProfile({ ...complete, name: '  ' }), false);
-  assert.equal(hasCompleteParticipantProfile({ ...complete, email: 'not-an-email' }), false);
-  assert.equal(hasCompleteParticipantProfile({ ...complete, researchPassword: '' }), false);
+  assert.equal(hasCompleteParticipantProfile({ ...complete, participantId: '  ' }), false);
   assert.equal(hasCompleteParticipantProfile(undefined), false);
 });
 
-test('legacy progress keeps participant information but restarts at required S1', () => {
+test('legacy progress containing private fields is discarded', () => {
   const legacy = JSON.stringify({
     version: 1,
     participant: {
@@ -32,16 +28,20 @@ test('legacy progress keeps participant information but restarts at required S1'
     furthestIndex: 4,
     completedSurveys: ['mid1'],
   });
+  const removed: string[] = [];
   (globalThis as { window?: unknown }).window = {
     localStorage: {
-      getItem: (key: string) => key === 'codeflow.study.progress.v1' ? legacy : null,
+      getItem: (key: string) => key === 'codeflow.study.progress.v2' ? legacy : null,
+      removeItem: (key: string) => removed.push(key),
     },
   };
 
   const migrated = loadStudyProgress();
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.equal(migrated.currentScreen, 's1');
   assert.equal(migrated.furthestIndex, 0);
   assert.deepEqual(migrated.completedSurveys, []);
-  assert.equal(migrated.participant?.email, 'alice@example.com');
+  assert.equal(migrated.participant, undefined);
+  assert.ok(removed.includes('codeflow.study.progress.v2'));
+  assert.ok(removed.includes('codeflow.researchPassword'));
 });

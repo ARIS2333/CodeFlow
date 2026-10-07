@@ -16,14 +16,11 @@ test('createSubmission sends one complete Run Code snapshot', async () => {
 
   try {
     const created = await createSubmission({
-      name: 'Alice',
-      email: 'alice@example.com',
-      group: 'A',
+      participantId: 'CF-P001',
       questionId: 'q1',
       sourceCode: 'bool isNumUnique(int n) { return true; }',
       language: 'cpp',
       feedbackFormat: 'codeflow',
-      researchPassword: 'secret',
     });
     assert.equal(created.attemptNumber, 3);
     assert.match(captured.url ?? '', /\/api\/submissions$/);
@@ -32,14 +29,11 @@ test('createSubmission sends one complete Run Code snapshot', async () => {
     assert.match(sent.submissionId, /^[0-9a-f-]{36}$/);
     delete sent.submissionId;
     assert.deepEqual(sent, {
-      name: 'Alice',
-      email: 'alice@example.com',
-      group: 'A',
+      participantId: 'CF-P001',
       questionId: 'q1',
       sourceCode: 'bool isNumUnique(int n) { return true; }',
       language: 'cpp',
       feedbackFormat: 'codeflow',
-      researchPassword: 'secret',
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -55,13 +49,13 @@ test('updateSubmission attaches generated workspace state to the same record', a
   }) as typeof fetch;
 
   try {
-    await updateSubmission('submission-id', 'secret', {
+    await updateSubmission('submission-id', 'CF-P001', {
       textualFeedback: { status: 'success', markdown: 'feedback' },
     });
     assert.match(captured.url ?? '', /\/api\/submissions\/submission-id$/);
     assert.equal(captured.init?.method, 'PATCH');
     assert.deepEqual(JSON.parse(String(captured.init?.body)), {
-      researchPassword: 'secret',
+      participantId: 'CF-P001',
       textualFeedback: { status: 'success', markdown: 'feedback' },
     });
   } finally {

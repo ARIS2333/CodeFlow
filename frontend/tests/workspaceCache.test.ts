@@ -105,13 +105,13 @@ test('the active database submission survives a refresh', () => {
     activeSubmission: {
       submissionId: 'submission-id',
       attemptNumber: 4,
-      participantEmail: 'alice@example.com',
+      participantId: 'CF-P001',
     },
   }, 'q1');
 
   assert.deepEqual(loadWorkspaceCache('q1')?.activeSubmission, {
     submissionId: 'submission-id',
     attemptNumber: 4,
-    participantEmail: 'alice@example.com',
+    participantId: 'CF-P001',
   });
 });

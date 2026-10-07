@@ -30,7 +30,7 @@ Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4
 
 ## Typical workflow
 
-1. Enter participant information and the preassigned group.
+1. Enter the assigned participant ID; the server verifies it and selects the preassigned group automatically.
 2. Complete Q1 and Q2 using the assigned first feedback condition.
 3. Open and confirm completion of the first mid-study survey.
 4. Complete Q3 and Q4 using the other feedback condition.

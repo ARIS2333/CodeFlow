@@ -1,6 +1,9 @@
 """Resolve which model a request may use, and with whose credentials.
 
-A request arrives in one of two modes:
+A request arrives in one of three modes:
+
+*Participant mode* — the human-study UI sends an assigned participant ID. It
+is checked against the backend registry before server credentials are used.
 
 *Research mode* — the request carries the study password.  It is checked here,
 server-side, against ``RESEARCH_PASSWORD``, and only then are the server's own
@@ -12,7 +15,7 @@ the study's quota.
 optional base URL.  Those credentials are used for that single request and are
 never logged or stored.
 
-Both modes end at the same place: a configured ``ChatModelBase``.  AgentScope
+All modes end at the same place: a configured ``ChatModelBase``.  AgentScope
 gives every provider the same constructor and lets a credential name its own
 model class, so supporting another provider is one entry in ``PROVIDERS``.
 """
@@ -29,6 +32,7 @@ from urllib.parse import urlparse
 from agentscope.credential import CredentialFactory
 from agentscope.model import ChatModelBase, DashScopeChatModel
 from openai_responses import CodeFlowResponseModel
+from participants import group_for_participant
 
 # Providers offered to students. Every one of these credentials takes the same
 # `api_key` + optional `base_url` pair, which is what keeps `build_model`
@@ -191,6 +195,12 @@ def resolve_model_spec(config) -> ModelSpec:
         )
     if not isinstance(config, dict):
         raise ModelConfigError('"modelConfig" must be a JSON object.')
+
+    participant_id = config.get("participantId")
+    if participant_id not in (None, ""):
+        if group_for_participant(participant_id) is None:
+            raise AuthenticationError("Invalid participant ID.")
+        return _research_spec()
 
     # Research mode takes precedence: if a password was sent, it must be right.
     password = config.get("password")

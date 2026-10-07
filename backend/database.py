@@ -14,8 +14,7 @@ from psycopg.types.json import Jsonb
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS submissions (
     submission_id UUID PRIMARY KEY,
-    participant_name TEXT NOT NULL,
-    participant_email TEXT NOT NULL,
+    participant_id TEXT NOT NULL,
     study_group TEXT NOT NULL CHECK (study_group IN ('A', 'B')),
     question_id TEXT NOT NULL CHECK (question_id IN ('q1', 'q2', 'q3', 'q4')),
     attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
@@ -29,11 +28,33 @@ CREATE TABLE IF NOT EXISTS submissions (
     textual_feedback JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (participant_email, question_id, attempt_number)
+    UNIQUE (participant_id, question_id, attempt_number)
 );
 
-CREATE INDEX IF NOT EXISTS submissions_email_index
-    ON submissions (participant_email);
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS participant_id TEXT;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'submissions' AND column_name = 'participant_name'
+    ) THEN
+        ALTER TABLE submissions ALTER COLUMN participant_name DROP NOT NULL;
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'submissions' AND column_name = 'participant_email'
+    ) THEN
+        ALTER TABLE submissions ALTER COLUMN participant_email DROP NOT NULL;
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS submissions_participant_attempt_index
+    ON submissions (participant_id, question_id, attempt_number)
+    WHERE participant_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS submissions_participant_index
+    ON submissions (participant_id);
 
 CREATE INDEX IF NOT EXISTS submissions_question_index
     ON submissions (question_id);
@@ -85,8 +106,7 @@ def initialize_database() -> None:
 def create_submission_record(
     *,
     submission_id: UUID,
-    participant_name: str,
-    participant_email: str,
+    participant_id: str,
     study_group: str,
     question_id: str,
     source_code: str,
@@ -95,7 +115,7 @@ def create_submission_record(
 ) -> dict[str, Any]:
     """Create one immutable code attempt and allocate its per-question number."""
     initialize_database()
-    attempt_key = f"{participant_email}:{question_id}"
+    attempt_key = f"{participant_id}:{question_id}"
 
     with connect() as connection:
         with connection.cursor() as cursor:
@@ -111,7 +131,7 @@ def create_submission_record(
                 }
 
             # A participant can have the study open in two tabs. Serializing
-            # this email/question pair prevents both clicks receiving the same
+            # this participant/question pair prevents both clicks receiving the same
             # MAX(attempt_number) + 1 value.
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtext(%s))",
@@ -133,29 +153,27 @@ def create_submission_record(
                 """
                 SELECT COALESCE(MAX(attempt_number), 0) + 1
                 FROM submissions
-                WHERE participant_email = %s AND question_id = %s
+                WHERE participant_id = %s AND question_id = %s
                 """,
-                (participant_email, question_id),
+                (participant_id, question_id),
             )
             attempt_number = cursor.fetchone()[0]
             cursor.execute(
                 """
                 INSERT INTO submissions (
                     submission_id,
-                    participant_name,
-                    participant_email,
+                    participant_id,
                     study_group,
                     question_id,
                     attempt_number,
                     source_code,
                     language,
                     feedback_format
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     submission_id,
-                    participant_name,
-                    participant_email,
+                    participant_id,
                     study_group,
                     question_id,
                     attempt_number,
@@ -181,6 +199,7 @@ _UPDATE_COLUMNS = {
 
 def update_submission_record(
     submission_id: UUID,
+    participant_id: str,
     updates: dict[str, Any],
 ) -> bool:
     """Merge completed workspace components into one Run Code attempt."""
@@ -197,14 +216,14 @@ def update_submission_record(
 
     initialize_database()
     assignments.append("updated_at = NOW()")
-    values.append(submission_id)
+    values.extend((submission_id, participant_id))
     with connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 f"""
                 UPDATE submissions
                 SET {', '.join(assignments)}
-                WHERE submission_id = %s
+                WHERE submission_id = %s AND participant_id = %s
                 """,
                 values,
             )

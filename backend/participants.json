@@ -1,0 +1,12 @@
+[
+  { "participantId": "CF-P001", "group": "A" },
+  { "participantId": "CF-P002", "group": "B" },
+  { "participantId": "CF-P003", "group": "A" },
+  { "participantId": "CF-P004", "group": "B" },
+  { "participantId": "CF-P005", "group": "A" },
+  { "participantId": "CF-P006", "group": "B" },
+  { "participantId": "CF-P007", "group": "A" },
+  { "participantId": "CF-P008", "group": "B" },
+  { "participantId": "CF-P009", "group": "A" },
+  { "participantId": "CF-P010", "group": "B" }
+]

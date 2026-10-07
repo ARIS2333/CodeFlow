@@ -1,16 +1,13 @@
 import { API_BASE_URL } from '../config/apiConfig.ts';
-import type { FeedbackMode, StudyGroup, StudyTaskId } from '../config/studyConfig.ts';
+import type { FeedbackMode, StudyTaskId } from '../config/studyConfig.ts';
 import type { SupportedLanguage } from './codeAnalysis.ts';
 
 export interface CreateSubmissionRequest {
-  name: string;
-  email: string;
-  group: StudyGroup;
+  participantId: string;
   questionId: StudyTaskId;
   sourceCode: string;
   language: SupportedLanguage;
   feedbackFormat: FeedbackMode;
-  researchPassword: string;
 }
 
 export interface CreatedSubmission {
@@ -75,7 +72,7 @@ export interface SubmissionUpdate {
 
 export const updateSubmission = async (
   submissionId: string,
-  researchPassword: string,
+  participantId: string,
   update: SubmissionUpdate,
 ): Promise<void> => {
   let response: Response | undefined;
@@ -84,7 +81,7 @@ export const updateSubmission = async (
       response = await fetch(`${API_BASE_URL}/api/submissions/${submissionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ researchPassword, ...update }),
+        body: JSON.stringify({ participantId, ...update }),
       });
       if (response.status < 500) break;
     } catch {
