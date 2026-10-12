@@ -2,6 +2,9 @@ import type { EvaluationState, FlowchartState } from './analysisRun';
 import type { TraceState } from './traceRun';
 import type { ProblemDetails } from './llmSchemas';
 import type { SupportedLanguage } from './codeAnalysis';
+import type { TextualFeedbackState } from './textualFeedback';
+
+export type FeedbackMode = 'flowchart' | 'textual';
 
 const WORKSPACE_CACHE_KEY = 'codeflow.workspace.v1';
 
@@ -14,6 +17,8 @@ export interface WorkspaceCache {
   evaluationState?: EvaluationState;
   flowchartState?: FlowchartState;
   traceState?: TraceState;
+  textualFeedbackState?: TextualFeedbackState;
+  feedbackMode?: FeedbackMode;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -43,6 +48,9 @@ export const loadWorkspaceCache = (): WorkspaceCache | null => {
       traceState: cache.traceState?.status === 'loading'
         ? { status: 'idle' }
         : cache.traceState,
+      textualFeedbackState: cache.textualFeedbackState?.status === 'loading'
+        ? { status: 'idle' }
+        : cache.textualFeedbackState,
     };
   } catch {
     return null;

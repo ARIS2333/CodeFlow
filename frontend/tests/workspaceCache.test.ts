@@ -23,6 +23,7 @@ afterEach(() => { delete (globalThis as { window?: unknown }).window; });
 
 test('editor, problem, and generated results merge into one refresh snapshot', () => {
   updateWorkspaceCache({ code: 'return a + b;', language: 'java' });
+  updateWorkspaceCache({ feedbackMode: 'textual' });
   updateWorkspaceCache({
     problem: 'Add two numbers',
     problemDetails: {
@@ -43,12 +44,14 @@ test('editor, problem, and generated results merge into one refresh snapshot', (
   assert.equal(restored?.code, 'return a + b;');
   assert.equal(restored?.problemDetails?.title, 'Addition');
   assert.equal(restored?.evaluationState?.status, 'success');
+  assert.equal(restored?.feedbackMode, 'textual');
 });
 
 test('a refresh never restores an interrupted request as permanently loading', () => {
   updateWorkspaceCache({
     evaluationState: { status: 'loading' },
     flowchartState: { status: 'loading' },
+    textualFeedbackState: { status: 'loading', markdown: 'partial' },
     traceState: {
       status: 'loading',
       request: {
@@ -65,6 +68,7 @@ test('a refresh never restores an interrupted request as permanently loading', (
   assert.equal(restored?.evaluationState?.status, 'idle');
   assert.equal(restored?.flowchartState?.status, 'idle');
   assert.equal(restored?.traceState?.status, 'idle');
+  assert.equal(restored?.textualFeedbackState?.status, 'idle');
 });
 
 test('blocked or malformed browser storage is safely ignored', () => {

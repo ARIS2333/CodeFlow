@@ -8,6 +8,7 @@ import {
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
+import type { FeedbackMode } from './lib/workspaceCache';
 
 interface ProjectLink {
   label: string;
@@ -45,10 +46,13 @@ interface HeaderProps {
   modelLabel: string;
   /** Dimmed until a model is configured, since nothing can run without one. */
   isConfigured: boolean;
+  feedbackMode: FeedbackMode;
+  onFeedbackModeChange: (mode: FeedbackMode) => void;
 }
 
 export const Header: FC<HeaderProps> = ({
   onTogglePanel, onOpenSettings, modelLabel, isConfigured,
+  feedbackMode, onFeedbackModeChange,
 }) => {
   return (
     <header className="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6">
@@ -67,6 +71,32 @@ export const Header: FC<HeaderProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-3 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2">
+          <div className="flex rounded-lg border border-gray-200 bg-gray-100 p-1" aria-label="Feedback format">
+            <button
+              type="button"
+              onClick={() => onFeedbackModeChange('flowchart')}
+              aria-pressed={feedbackMode === 'flowchart'}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                feedbackMode === 'flowchart'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white'
+              }`}
+            >
+              Flowchart
+            </button>
+            <button
+              type="button"
+              onClick={() => onFeedbackModeChange('textual')}
+              aria-pressed={feedbackMode === 'textual'}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                feedbackMode === 'textual'
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white'
+              }`}
+            >
+              Textual AI
+            </button>
+          </div>
           <button
             onClick={onOpenSettings}
             title="Model settings"
@@ -81,7 +111,11 @@ export const Header: FC<HeaderProps> = ({
           </button>
           <button
             onClick={onTogglePanel}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className={`rounded-md px-4 py-2 text-white transition-colors ${
+              feedbackMode === 'flowchart'
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-violet-600 hover:bg-violet-700'
+            }`}
           >
             Code Analysis
           </button>

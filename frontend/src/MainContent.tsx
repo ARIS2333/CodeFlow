@@ -53,8 +53,16 @@ import {
   loadWorkspaceCache,
   updateWorkspaceCache,
 } from './lib/workspaceCache';
+import type { FeedbackMode } from './lib/workspaceCache';
+import {
+  requestTextualFeedback,
+  type TextualFeedbackState,
+} from './lib/textualFeedback';
 
 interface MainContentProps {
+  feedbackMode: FeedbackMode;
+  textualFeedbackState: TextualFeedbackState;
+  onTextualFeedbackStateChange: (state: TextualFeedbackState) => void;
   flowchartState: FlowchartState;
   traceState: TraceState;
   onFlowchartStateChange: (state: FlowchartState) => void;
@@ -62,6 +70,7 @@ interface MainContentProps {
   onRunStart: () => void;
   onCancelRetrace: () => void;
   onRegisterFlowchartRegenerator: (handler: (() => void) | null) => void;
+  onRegisterTextualRegenerator: (handler: ((input: string) => void) | null) => void;
   onFlowchartRegenerateAvailabilityChange: (available: boolean) => void;
   onFlowchartRegenerationStateChange: (state: FlowchartRegenerationState) => void;
   /** Shares the terminal result with the analysis panel so both describe the same run. */
@@ -172,6 +181,9 @@ const cppCompletion = (context: CompletionContext): CompletionResult | null => {
 };
 
 export const MainContent = ({
+  feedbackMode,
+  textualFeedbackState,
+  onTextualFeedbackStateChange,
   flowchartState,
   traceState,
   onFlowchartStateChange,
@@ -179,6 +191,7 @@ export const MainContent = ({
   onRunStart,
   onCancelRetrace,
   onRegisterFlowchartRegenerator,
+  onRegisterTextualRegenerator,
   onFlowchartRegenerateAvailabilityChange,
   onFlowchartRegenerationStateChange,
   onEvaluationStateChange,
@@ -200,11 +213,15 @@ export const MainContent = ({
   const activeRun = useRef<AnalysisRun | null>(null);
   const uploadCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const regenerateFlowchartAction = useRef<() => void>(() => {});
+  const regenerateTextualAction = useRef<(input: string) => void>(() => {});
   // CodeMirror keeps the extension instance it was given, so the shortcut reads
   // the handler through a ref rather than closing over a stale render's copy.
   const runShortcut = useRef<() => void>(() => {});
   const isCodeEvaluating = evaluationState.status === 'loading';
-  const isRunning = isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
+  const isRunning = isCodeEvaluating
+    || flowchartState.status === 'loading'
+    || textualFeedbackState.status === 'loading'
+    || isFlowchartRegenerating;
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
   const syntaxDiagnostic = flowchartState.status !== 'idle'
@@ -239,6 +256,7 @@ export const MainContent = ({
     setEvaluationState({ status: 'idle' });
     onFlowchartStateChange({ status: 'idle' });
     onTraceStateChange({ status: 'idle' });
+    onTextualFeedbackStateChange({ status: 'idle' });
   };
 
   /**
@@ -294,8 +312,10 @@ export const MainContent = ({
       problem,
       problemDetails,
       evaluationState,
+      textualFeedbackState,
+      feedbackMode,
     });
-  }, [code, language, problem, problemDetails, evaluationState]);
+  }, [code, language, problem, problemDetails, evaluationState, textualFeedbackState, feedbackMode]);
 
   /*
    * The footer's indicator used to be a hardcoded green dot reading "Ready",
@@ -304,7 +324,9 @@ export const MainContent = ({
    */
   const status = isRunning
     ? { dot: 'bg-amber-400 animate-pulse', label: 'Running' }
-    : codeEvaluationError || flowchartState.status === 'error'
+    : codeEvaluationError
+        || (feedbackMode === 'flowchart' && flowchartState.status === 'error')
+        || (feedbackMode === 'textual' && textualFeedbackState.status === 'error')
       ? { dot: 'bg-red-500', label: 'Last run failed' }
       : !problemDetails
         ? { dot: 'bg-gray-500', label: 'Upload a problem' }
@@ -519,6 +541,79 @@ export const MainContent = ({
     return () => onRegisterFlowchartRegenerator(null);
   }, [onRegisterFlowchartRegenerator]);
 
+  const handleRegenerateTextual = (executionInput: string) => {
+    const input = executionInput.trim();
+    if (!input || !problemDetails || activeRun.current?.isRunning()) return;
+    if (!settings) {
+      onRequireSettings('Choose a model before regenerating textual feedback.');
+      return;
+    }
+
+    const controller = new AbortController();
+    let running = true;
+    let streamedMarkdown = '';
+    const textualRun: AnalysisRun = {
+      isRunning: () => running && !controller.signal.aborted,
+      cancel: () => {
+        running = false;
+        controller.abort();
+      },
+    };
+    activeRun.current = textualRun;
+    onTextualFeedbackStateChange({
+      status: 'loading',
+      markdown: '',
+      requestedInput: input,
+    });
+
+    void requestTextualFeedback(
+      problemDetails,
+      code,
+      language,
+      toModelConfig(settings),
+      (markdown) => {
+        streamedMarkdown = markdown;
+        if (!controller.signal.aborted) {
+          onTextualFeedbackStateChange({
+            status: 'loading',
+            markdown,
+            requestedInput: input,
+          });
+        }
+      },
+      input,
+      textualFeedbackState.status === 'idle' ? undefined : textualFeedbackState.markdown,
+      controller.signal,
+    ).then((markdown) => {
+      if (!controller.signal.aborted) {
+        onTextualFeedbackStateChange({
+          status: 'success',
+          markdown,
+          requestedInput: input,
+        });
+      }
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        onTextualFeedbackStateChange({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Textual feedback failed',
+          requestedInput: input,
+          ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
+        });
+      }
+    }).finally(() => {
+      running = false;
+      if (activeRun.current === textualRun) activeRun.current = null;
+    });
+  };
+
+  useEffect(() => { regenerateTextualAction.current = handleRegenerateTextual; });
+  useEffect(() => {
+    const invoke = (input: string) => regenerateTextualAction.current(input);
+    onRegisterTextualRegenerator(invoke);
+    return () => onRegisterTextualRegenerator(null);
+  }, [onRegisterTextualRegenerator]);
+
   useEffect(() => {
     const available = Boolean(flowchartRetryContext.current)
       && !isCodeEvaluating
@@ -586,6 +681,81 @@ export const MainContent = ({
         ...(retryContext.codeAnalysis ? { codeAnalysis: retryContext.codeAnalysis } : {}),
       });
     };
+
+    if (feedbackMode === 'textual') {
+      onFlowchartStateChange({ status: 'idle' });
+      onTraceStateChange({ status: 'idle' });
+      const controller = new AbortController();
+      let running = true;
+      const textualRun: AnalysisRun = {
+        isRunning: () => running && !controller.signal.aborted,
+        cancel: () => {
+          running = false;
+          controller.abort();
+        },
+      };
+      activeRun.current = textualRun;
+      setEvaluationState({ status: 'loading' });
+      onTextualFeedbackStateChange({ status: 'loading', markdown: '' });
+
+      const evaluation = getCodeAnalysis(controller.signal)
+        .then((codeAnalysis) => requestStructured({
+          systemPrompt: feedbackSystemPromptFor(language),
+          message: JSON.stringify({ ...requestPayload, codeAnalysis }),
+          validate: (input) => validateCodeEvaluationForAnalysis(input, codeAnalysis),
+          label: 'feedback',
+          signal: controller.signal,
+          modelConfig,
+        }))
+        .then((result) => {
+          if (!controller.signal.aborted) setEvaluationState({ status: 'success', data: result });
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted) {
+            setEvaluationState({
+              status: 'error',
+              error: error instanceof Error ? error.message : 'Evaluation failed',
+            });
+          }
+        });
+
+      let streamedMarkdown = '';
+      const textual = requestTextualFeedback(
+        problemDetails,
+        code,
+        language,
+        modelConfig,
+        (markdown) => {
+          streamedMarkdown = markdown;
+          if (!controller.signal.aborted) {
+            onTextualFeedbackStateChange({ status: 'loading', markdown });
+          }
+        },
+        undefined,
+        undefined,
+        controller.signal,
+      ).then((markdown) => {
+        if (!controller.signal.aborted) {
+          onTextualFeedbackStateChange({ status: 'success', markdown });
+        }
+      }).catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          onTextualFeedbackStateChange({
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Textual feedback failed',
+            ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
+          });
+        }
+      });
+
+      void Promise.allSettled([evaluation, textual]).finally(() => {
+        running = false;
+        if (activeRun.current === textualRun) activeRun.current = null;
+      });
+      return;
+    }
+
+    onTextualFeedbackStateChange({ status: 'idle' });
 
     activeRun.current = startAnalysisRun({
       requestFeedback: async (signal) => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Header } from './Header';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
+import { TextualPanel } from './TextualPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { panelConfig } from './config/panelConfig';
 import type { EvaluationState, FlowchartRegenerationState, FlowchartState } from './lib/analysisRun';
@@ -13,6 +14,8 @@ import {
   type ModelSettings,
 } from './lib/modelSettings';
 import { loadWorkspaceCache, updateWorkspaceCache } from './lib/workspaceCache';
+import type { FeedbackMode } from './lib/workspaceCache';
+import type { TextualFeedbackState } from './lib/textualFeedback';
 
 interface LayoutProps {
   showRightPanel: boolean;
@@ -44,6 +47,12 @@ export const Layout = ({
   const [evaluationState, setEvaluationState] = useState<EvaluationState>(
     cachedWorkspace?.evaluationState ?? { status: 'idle' },
   );
+  const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>(
+    cachedWorkspace?.feedbackMode ?? 'flowchart',
+  );
+  const [textualFeedbackState, setTextualFeedbackState] = useState<TextualFeedbackState>(
+    cachedWorkspace?.textualFeedbackState ?? { status: 'idle' },
+  );
 
   // The trace lives here rather than in the panel so that a re-trace survives
   // the panel being closed, and so a new run can cancel one the student left
@@ -53,6 +62,7 @@ export const Layout = ({
   );
   const retraceAbort = useRef<AbortController | null>(null);
   const flowchartRegenerator = useRef<(() => void) | null>(null);
+  const textualRegenerator = useRef<((input: string) => void) | null>(null);
   const [canRegenerateFlowchart, setCanRegenerateFlowchart] = useState(false);
 
   /*
@@ -82,12 +92,20 @@ export const Layout = ({
   const registerFlowchartRegenerator = useCallback((handler: (() => void) | null) => {
     flowchartRegenerator.current = handler;
   }, []);
+  const registerTextualRegenerator = useCallback((handler: ((input: string) => void) | null) => {
+    textualRegenerator.current = handler;
+  }, []);
 
   useEffect(() => cancelRetrace, [cancelRetrace]);
 
   useEffect(() => {
-    updateWorkspaceCache({ flowchartState, traceState });
-  }, [flowchartState, traceState]);
+    updateWorkspaceCache({
+      flowchartState,
+      traceState,
+      textualFeedbackState,
+      feedbackMode,
+    });
+  }, [flowchartState, traceState, textualFeedbackState, feedbackMode]);
 
   const startRetrace = useCallback((request: TraceRequest) => {
     if (!settings) {
@@ -127,6 +145,8 @@ export const Layout = ({
           onOpenSettings={() => openSettings()}
           modelLabel={describeSettings(settings)}
           isConfigured={settings !== null}
+          feedbackMode={feedbackMode}
+          onFeedbackModeChange={setFeedbackMode}
         />
         <MainContent 
           settings={settings}
@@ -137,6 +157,10 @@ export const Layout = ({
           onTraceStateChange={setTraceState}
           onCancelRetrace={cancelRetrace}
           onRegisterFlowchartRegenerator={registerFlowchartRegenerator}
+          feedbackMode={feedbackMode}
+          textualFeedbackState={textualFeedbackState}
+          onTextualFeedbackStateChange={setTextualFeedbackState}
+          onRegisterTextualRegenerator={registerTextualRegenerator}
           onFlowchartRegenerateAvailabilityChange={setCanRegenerateFlowchart}
           onFlowchartRegenerationStateChange={setFlowchartRegenerationState}
           onEvaluationStateChange={setEvaluationState}
@@ -150,7 +174,7 @@ export const Layout = ({
 
       {/* Right Panel - Conditionally rendered based on isVisible prop */}
       <RightPanel
-        isVisible={showRightPanel}
+        isVisible={showRightPanel && feedbackMode === 'flowchart'}
         onClose={onTogglePanel}
         onWidthChange={handleWidthChange}
         flowchartState={flowchartState}
@@ -160,6 +184,16 @@ export const Layout = ({
         onRegenerateFlowchart={() => flowchartRegenerator.current?.()}
         canRegenerateFlowchart={canRegenerateFlowchart}
         flowchartRegenerationState={flowchartRegenerationState}
+      />
+
+      <TextualPanel
+        isVisible={showRightPanel && feedbackMode === 'textual'}
+        onClose={onTogglePanel}
+        state={textualFeedbackState}
+        width={panelWidth}
+        onWidthChange={handleWidthChange}
+        defaultInput=""
+        onRegenerate={(input) => textualRegenerator.current?.(input)}
       />
 
       <SettingsPanel
