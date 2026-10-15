@@ -38,6 +38,11 @@ Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4
 
 The study uses fixed questions; students do not upload their own problems. Earlier questions remain editable throughout the session.
 
+Participant IDs follow `S1_###_XXXXX` for the CodeFlow-first sequence and
+`S2_###_XXXXX` for the Textual-AI-first sequence. The server-owned registry
+contains 150 unique IDs for each sequence; the interface never asks students to
+choose a group themselves.
+
 ## Requirements
 
 - Git

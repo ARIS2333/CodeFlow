@@ -38,8 +38,8 @@ test('research settings travel as a password, never as a provider', () => {
 });
 
 test('study settings travel as a participant ID without a shared password', () => {
-  const settings: ModelSettings = { mode: 'participant', participantId: 'CF-P001' };
-  assert.deepEqual(toModelConfig(settings), { participantId: 'CF-P001' });
+  const settings: ModelSettings = { mode: 'participant', participantId: 'S1_001_G5XYP' };
+  assert.deepEqual(toModelConfig(settings), { participantId: 'S1_001_G5XYP' });
   assert.equal(describeSettings(settings), 'Study mode');
 });
 

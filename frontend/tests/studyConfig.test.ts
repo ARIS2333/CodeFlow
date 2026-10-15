@@ -19,8 +19,8 @@ test('both groups see the same four C++ tasks in the same order', () => {
 test('survey checkpoints remain part of the persistent study navigation', () => {
   assert.deepEqual(STUDY_SEQUENCE, ['s1', 'q1', 'q2', 's2', 'q3', 'q4', 's3', 's4', 'complete']);
   assert.match(SURVEY_URLS.s1, /SfnBvJ5kOvudcYIKuTYPA5dWsLU8nLCtMw8Z8kxMrmTmTF-yw/);
-  assert.match(SURVEY_URLS.s2, /SfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/);
-  assert.equal(SURVEY_URLS.s3, SURVEY_URLS.s2);
+  assert.match(SURVEY_URLS.s2, /ScH1EQmejk1q8yZbrbg6KKr6vJl3VkFmZX0mvqaMfIT2S0_rQ/);
+  assert.match(SURVEY_URLS.s3, /SfPnfhO-CQRNw4gtDBzVrslrce6sqcWl1qn3LC3Ncj-fhWZLA/);
   assert.match(SURVEY_URLS.s4, /SeQIKeT0k6yJ3VSFUvf4rXiCeoiBh5QQm4usFWe6Xj2i1_P9A/);
 });
 

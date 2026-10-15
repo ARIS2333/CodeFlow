@@ -6,7 +6,7 @@ afterEach(() => { delete (globalThis as { window?: unknown }).window; });
 
 test('participant profile requires every field before code can run', () => {
   const complete = {
-    participantId: 'CF-P001',
+    participantId: 'S1_001_G5XYP',
     group: 'A' as const,
   };
 

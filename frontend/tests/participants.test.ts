@@ -8,7 +8,7 @@ test('participant verification returns the server-owned group assignment', async
   let requestBody: unknown;
   globalThis.fetch = (async (_input, init) => {
     requestBody = JSON.parse(String(init?.body));
-    return new Response(JSON.stringify({ participantId: 'CF-P002', group: 'B' }), {
+    return new Response(JSON.stringify({ participantId: 'S2_001_2WTLM', group: 'B' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -17,7 +17,7 @@ test('participant verification returns the server-owned group assignment', async
   try {
     const verified = await verifyParticipant('cf-p002');
     assert.deepEqual(requestBody, { participantId: 'cf-p002' });
-    assert.deepEqual(verified, { participantId: 'CF-P002', group: 'B' });
+    assert.deepEqual(verified, { participantId: 'S2_001_2WTLM', group: 'B' });
   } finally {
     globalThis.fetch = originalFetch;
   }

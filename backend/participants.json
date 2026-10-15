@@ -1,12 +1,1202 @@
 [
-  { "participantId": "CF-P001", "group": "A" },
-  { "participantId": "CF-P002", "group": "B" },
-  { "participantId": "CF-P003", "group": "A" },
-  { "participantId": "CF-P004", "group": "B" },
-  { "participantId": "CF-P005", "group": "A" },
-  { "participantId": "CF-P006", "group": "B" },
-  { "participantId": "CF-P007", "group": "A" },
-  { "participantId": "CF-P008", "group": "B" },
-  { "participantId": "CF-P009", "group": "A" },
-  { "participantId": "CF-P010", "group": "B" }
+  {
+    "participantId": "S1_001_G5XYP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_002_JTT42",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_003_AZDMW",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_004_MWCX7",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_005_TGHWP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_006_3FMMB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_007_S2CVB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_008_NGSRB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_009_TRUEQ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_010_JF34Z",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_011_7RF48",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_012_Y4HVC",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_013_2XEEL",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_014_49N6K",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_015_5QL7R",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_016_RT5R6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_017_PHER3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_018_AY2X3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_019_XBUXK",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_020_S4DCR",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_021_24LSC",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_022_X8ZPP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_023_W37MX",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_024_NCX2V",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_025_BLYVW",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_026_HSNDP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_027_8JADZ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_028_K8D62",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_029_XCQMH",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_030_LSK8U",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_031_GCYZ2",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_032_4LQTF",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_033_W93LP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_034_5XBHB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_035_Z2HW8",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_036_92LQ6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_037_ZFRTT",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_038_U6K73",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_039_9UBZN",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_040_RS6R8",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_041_59RW6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_042_953KJ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_043_3YBLL",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_044_QSH7Y",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_045_YU692",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_046_3ZMH6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_047_3J6HU",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_048_S6CVR",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_049_5C2VT",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_050_5N26W",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_051_RSAPV",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_052_5ASK4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_053_P4XDZ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_054_RD5YG",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_055_PE43H",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_056_L7J4P",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_057_YB9AK",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_058_AZPNU",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_059_LEGBY",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_060_EFDNC",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_061_6Q9KV",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_062_NCHR6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_063_TT3EN",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_064_NKN33",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_065_T8SEE",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_066_QP7Y7",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_067_9CGJP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_068_SAKYF",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_069_VAPTK",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_070_DJXU5",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_071_ZUDBB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_072_88EKZ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_073_DXG4X",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_074_B7XP9",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_075_EB7XD",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_076_XFEZD",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_077_NXS3L",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_078_GAFQ8",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_079_PJRLT",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_080_UCVS3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_081_WUFUN",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_082_WZR2B",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_083_FXGKF",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_084_LE4V8",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_085_4QUTX",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_086_UM2YX",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_087_EJARZ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_088_ABVVS",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_089_SUQX2",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_090_XDR48",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_091_XA8S4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_092_NLT3J",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_093_TC4US",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_094_C92U4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_095_ZYFRY",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_096_9QC8N",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_097_K4WW3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_098_J6PUK",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_099_JTSRD",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_100_EPE3Y",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_101_L4YPP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_102_55E9Z",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_103_N29EN",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_104_XUQA2",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_105_74JNT",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_106_Q3NR7",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_107_657Y5",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_108_R5D9W",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_109_X4WS4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_110_F9JWX",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_111_R6AN7",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_112_USZK4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_113_YV6G5",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_114_C6X78",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_115_QKAU4",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_116_U89H6",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_117_Q74YA",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_118_W5CMJ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_119_G5VJP",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_120_LWW4M",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_121_MTM8Q",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_122_58V6E",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_123_9BLC5",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_124_UQ7KL",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_125_MBLXY",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_126_JKG8M",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_127_2UDNN",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_128_BAQAM",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_129_VYRA3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_130_93AZL",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_131_CNLRL",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_132_GBEJQ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_133_KC5TV",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_134_4KQ6Z",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_135_S7MZZ",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_136_UAPD8",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_137_76LJB",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_138_BLADF",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_139_RBUUU",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_140_VGH9F",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_141_72T9U",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_142_BTK3Y",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_143_VGKKM",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_144_4Q9HC",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_145_BWUNR",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_146_Y6GX5",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_147_4AYW3",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_148_LWK58",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_149_2P29B",
+    "group": "A"
+  },
+  {
+    "participantId": "S1_150_62GQV",
+    "group": "A"
+  },
+  {
+    "participantId": "S2_001_2WTLM",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_002_24ZFV",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_003_FFMVR",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_004_YVGD4",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_005_X3SC5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_006_X3B22",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_007_6RAUT",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_008_U2GET",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_009_YU2Z7",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_010_UDRDQ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_011_QJUD3",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_012_DD539",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_013_3UDZY",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_014_T5QPK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_015_K29P7",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_016_CQNQH",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_017_P365M",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_018_DY5BJ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_019_HNSGD",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_020_YNZKV",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_021_KBLST",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_022_MT92D",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_023_ND448",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_024_KR7QD",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_025_DZWDH",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_026_CVSNG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_027_KLZ9L",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_028_E5Z7R",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_029_NDX5L",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_030_7AVYX",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_031_U6WKB",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_032_HD99J",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_033_47EQK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_034_PWZ9D",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_035_38YU5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_036_FK4AH",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_037_XQMX7",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_038_YNGHQ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_039_L3YLK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_040_LZGGR",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_041_XPA3K",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_042_J8R3D",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_043_775KV",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_044_WEKEM",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_045_DN792",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_046_QG6QF",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_047_3KGAJ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_048_3LDFK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_049_UWEPG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_050_A2GQP",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_051_C2ZS8",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_052_G2R4C",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_053_TR3V9",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_054_JSPK5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_055_RVYDL",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_056_P3R5J",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_057_TQKZP",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_058_YSF8M",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_059_PMZHG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_060_27LML",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_061_JRNMW",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_062_J3VBN",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_063_JD794",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_064_MXA6T",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_065_WZS3Y",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_066_ZRP3D",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_067_YQ4G6",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_068_LFBTM",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_069_A5NBD",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_070_BSPPW",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_071_Y7VCY",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_072_WQKRK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_073_EE4L2",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_074_73KEF",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_075_26HGS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_076_HEQLG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_077_HZDG2",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_078_MSBC2",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_079_5H482",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_080_8NSNY",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_081_P5SQD",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_082_FMHXS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_083_GFMB9",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_084_XX57Z",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_085_6WDA6",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_086_DZEZU",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_087_7C92D",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_088_GNCE4",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_089_4VDVT",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_090_5W6RS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_091_GL5KA",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_092_DK23R",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_093_FGCGJ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_094_LECXR",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_095_WTXVD",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_096_4YEX2",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_097_WHWXZ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_098_WZU93",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_099_4TP5V",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_100_MRBNE",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_101_KT5S3",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_102_TFRBS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_103_C2KHS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_104_63LM5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_105_WKDL6",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_106_4QRBQ",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_107_NTXLG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_108_YFVPC",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_109_FZRDY",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_110_H72BG",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_111_DP4D5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_112_2QN7L",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_113_GKFAN",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_114_LZSKN",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_115_VB24W",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_116_99TG9",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_117_FQHWB",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_118_5GDG2",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_119_DTGMK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_120_L5SDA",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_121_EGYLL",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_122_TYML3",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_123_HXVK9",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_124_K9RMH",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_125_EJXJH",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_126_54GMC",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_127_6MRLB",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_128_CX7Q3",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_129_MS8RV",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_130_B8SY6",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_131_JQLJ5",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_132_MGCC3",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_133_864GY",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_134_TPQ8F",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_135_8V3XX",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_136_5GFWE",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_137_7C9VK",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_138_B6GZA",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_139_GZE5R",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_140_7YY72",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_141_FSUDS",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_142_HCQA4",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_143_EHZR9",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_144_BYLJ4",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_145_KLXQA",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_146_N7NH8",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_147_QQ3MF",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_148_9ZY5Z",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_149_UWYSX",
+    "group": "B"
+  },
+  {
+    "participantId": "S2_150_PL73D",
+    "group": "B"
+  }
 ]

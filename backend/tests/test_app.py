@@ -145,7 +145,7 @@ class AppTests(unittest.TestCase):
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "participantId": " cf-p001 ",
+                "participantId": " s1_001_g5xyp ",
                 "questionId": "q2",
                 "sourceCode": "int answer() { return 1; }",
                 "language": "cpp",
@@ -156,7 +156,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.get_json(), created)
         self.assertEqual(
             create_record.call_args.kwargs["participant_id"],
-            "CF-P001",
+            "S1_001_G5XYP",
         )
         self.assertEqual(create_record.call_args.kwargs["study_group"], "A")
         self.assertEqual(
@@ -171,7 +171,7 @@ class AppTests(unittest.TestCase):
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "participantId": "CF-P999",
+                "participantId": "S1_999_BADID",
                 "questionId": "q1",
                 "sourceCode": "code",
                 "language": "cpp",
@@ -184,19 +184,19 @@ class AppTests(unittest.TestCase):
     def test_participant_verification_returns_server_assigned_group(self):
         with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
             response = self.client.post("/api/participants/verify", json={
-                "participantId": "cf-p002",
+                "participantId": "s2_001_2wtlm",
             })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {
-            "participantId": "CF-P002",
+            "participantId": "S2_001_2WTLM",
             "group": "B",
         })
 
     def test_participant_verification_rejects_unknown_id(self):
         with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
             response = self.client.post("/api/participants/verify", json={
-                "participantId": "CF-P999",
+                "participantId": "S1_999_BADID",
             })
 
         self.assertEqual(response.status_code, 401)
@@ -218,12 +218,12 @@ class AppTests(unittest.TestCase):
         ):
             response = self.client.patch(
                 f"/api/submissions/{submission_id}",
-                json={"participantId": "CF-P001", **update},
+                json={"participantId": "S1_001_G5XYP", **update},
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(update_record.call_args.args[0], UUID(submission_id))
-        self.assertEqual(update_record.call_args.args[1], "CF-P001")
+        self.assertEqual(update_record.call_args.args[1], "S1_001_G5XYP")
         self.assertEqual(update_record.call_args.args[2], update)
 
     def test_textual_feedback_stream_uses_server_owned_prompt(self):

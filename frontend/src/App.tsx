@@ -30,7 +30,7 @@ function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: Partici
       {notice && <p role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">{notice}</p>}
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
       <form onSubmit={submit} className="mt-5 space-y-4">
-        <label className="block text-sm font-medium text-gray-700">Participant ID<input required autoCapitalize="characters" autoComplete="off" value={participantId} onChange={(event) => setParticipantId(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" placeholder="CF-P001" /></label>
+        <label className="block text-sm font-medium text-gray-700">Participant ID<input required autoCapitalize="characters" autoComplete="off" value={participantId} onChange={(event) => setParticipantId(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" placeholder="S1_001_XXXXX" /></label>
         <div className="flex justify-end gap-2 pt-2">{onClose && <button type="button" onClick={onClose} disabled={isVerifying} className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>}<button type="submit" disabled={isVerifying} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60">{isVerifying ? 'Verifying…' : 'Save and continue'}</button></div>
       </form>
     </div>
