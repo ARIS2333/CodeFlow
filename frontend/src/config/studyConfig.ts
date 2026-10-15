@@ -14,7 +14,7 @@ export interface StudyTask {
 
 /** Bump only when the actual study questions change, so stale drafts are not
  * restored into a different task while drafts for this task set remain cached. */
-export const STUDY_TASK_SET_VERSION = 2;
+export const STUDY_TASK_SET_VERSION = 3;
 
 export const STUDY_TASKS: StudyTask[] = [
   {
@@ -23,7 +23,7 @@ export const STUDY_TASKS: StudyTask[] = [
     kind: 'write',
     problem: {
       title: 'Unique Number',
-      description: 'A number is **unique** when none of its decimal digits repeat. Write `isNumUnique` to return `true` when every digit in `n` is unique, and `false` otherwise. For a negative number, consider only its digits; the minus sign is not a digit.',
+      description: 'A number is **unique** if none of its decimal digits repeat. Write `isNumUnique` to return `true` when all digits in `n` are different, and `false` otherwise. For a negative number, ignore the minus sign.',
       examples: [
         { input: 'isNumUnique(1234)', output: 'true' },
         { input: 'isNumUnique(1231)', output: 'false' },
@@ -43,7 +43,7 @@ export const STUDY_TASKS: StudyTask[] = [
     kind: 'write',
     problem: {
       title: 'N-Sum: Two Sum',
-      description: 'Write `two_sum` to find two different elements whose values add up to `target`. Return their **zero-based indices** as `{i, j}`, with `i < j`. If several pairs work, return the lexicographically earliest pair: the smallest possible `i`, then the smallest possible `j`. Return `{-1, -1}` when no pair exists. Use an `unordered_map` rather than a quadratic nested-loop solution.',
+      description: 'Write `two_sum` to find two different elements whose values add up to `target`. Return their **zero-based indices** as `{i, j}`, where `i < j`. If more than one pair works, choose the pair with the smallest `i`; if there is still a tie, choose the smallest `j`. Return `{-1, -1}` if no pair exists. Use an `unordered_map` instead of nested loops.',
       examples: [
         { input: 'two_sum({2, 7, 11, 15, 0, 18}, 18)', output: '{1, 2}' },
         { input: 'two_sum({3, 12, 11, 5, 15}, 13)', output: '{-1, -1}' },
@@ -51,7 +51,7 @@ export const STUDY_TASKS: StudyTask[] = [
       ],
       constraints: [
         'The two indices must refer to different elements.',
-        'Return indices in ascending order.',
+        'Return the pair with the smallest possible `i`, then the smallest possible `j`.',
         'Use `unordered_map` in the solution.',
       ],
     },
@@ -63,7 +63,7 @@ export const STUDY_TASKS: StudyTask[] = [
     kind: 'write',
     problem: {
       title: 'Find Digits',
-      description: 'The string `y` is created by shuffling all digits of `x` and inserting zero or more additional digits. Write `findTheDigits` to return only the inserted digits, concatenated in ascending order. A digit may be inserted more than once. Use only sets or maps to track digit occurrences.',
+      description: 'The string `y` contains all digits from `x` in a shuffled order, plus zero or more inserted digits. Write `findTheDigits` to return the inserted digits as one string in ascending order. Count repeated digits separately. If no digits were inserted, return an empty string. Use a set or map as the only auxiliary data structure; do not sort the strings.',
       examples: [
         { input: 'findTheDigits("8", "56981234")', output: '"1234569"' },
         { input: 'findTheDigits("1234", "12345")', output: '"5"' },
@@ -72,7 +72,7 @@ export const STUDY_TASKS: StudyTask[] = [
       constraints: [
         '`0 < x.length()` and `x.length() <= y.length() <= 10^8`.',
         '`y` contains every digit from `x` with the same multiplicity, plus any inserted digits.',
-        'Only set or map data structures may be used.',
+        'Use a set or map as the only auxiliary data structure; do not sort the strings.',
       ],
     },
     starterCode: `#include <string>\n#include <map>\n\nstd::string findTheDigits(std::string x, std::string y) {\n    // Write your solution here.\n\n}`,
@@ -83,7 +83,7 @@ export const STUDY_TASKS: StudyTask[] = [
     kind: 'write',
     problem: {
       title: 'Hashing Mode',
-      description: 'The mode is the value that occurs most often. Write `findMode` to return the mode of a nonempty integer vector. If multiple values have the same highest frequency, return the smallest value among them.',
+      description: 'The mode is the value that appears most often. Write `findMode` to return the mode of a nonempty integer vector. If multiple values have the same highest frequency, return the smallest one.',
       examples: [
         { input: 'findMode({1, 1, 2, 3, 5, 3, 5, 3})', output: '3' },
         { input: 'findMode({6, 4, 9, 6, 6, 4, 9, 4, 9})', output: '4' },

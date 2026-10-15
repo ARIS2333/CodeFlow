@@ -15,14 +15,12 @@ test('participant profile requires every field before code can run', () => {
   assert.equal(hasCompleteParticipantProfile(undefined), false);
 });
 
-test('legacy progress containing private fields is discarded', () => {
+test('older progress is discarded so the assigned participant ID must be verified again', () => {
   const legacy = JSON.stringify({
-    version: 1,
+    version: 3,
     participant: {
-      name: 'Alice Student',
-      email: 'alice@example.com',
+      participantId: 'CF-P001',
       group: 'B',
-      researchPassword: 'study-password',
     },
     currentScreen: 'q4',
     furthestIndex: 4,
@@ -31,17 +29,17 @@ test('legacy progress containing private fields is discarded', () => {
   const removed: string[] = [];
   (globalThis as { window?: unknown }).window = {
     localStorage: {
-      getItem: (key: string) => key === 'codeflow.study.progress.v2' ? legacy : null,
+      getItem: (key: string) => key === 'codeflow.study.progress.v3' ? legacy : null,
       removeItem: (key: string) => removed.push(key),
     },
   };
 
   const migrated = loadStudyProgress();
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.equal(migrated.currentScreen, 's1');
   assert.equal(migrated.furthestIndex, 0);
   assert.deepEqual(migrated.completedSurveys, []);
   assert.equal(migrated.participant, undefined);
-  assert.ok(removed.includes('codeflow.study.progress.v2'));
+  assert.ok(removed.includes('codeflow.study.progress.v3'));
   assert.ok(removed.includes('codeflow.researchPassword'));
 });

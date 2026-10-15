@@ -24,9 +24,17 @@ function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: Partici
     }
   };
   return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4">
-    <div role="dialog" aria-modal="true" aria-labelledby="participant-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-labelledby="participant-title" className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
       <h2 id="participant-title" className="text-2xl font-bold text-gray-900">Participant information</h2>
       <p className="mt-2 text-sm leading-6 text-gray-600">Enter the participant ID assigned for this study. Your study group will be selected automatically.</p>
+      <section aria-labelledby="before-you-begin" className="mt-5 rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+        <h3 id="before-you-begin" className="font-semibold text-gray-900">Before you begin</h3>
+        <ul className="mt-3 space-y-2.5 text-sm leading-5 text-gray-700">
+          <li className="flex gap-2.5"><span aria-hidden="true">⏱️</span><span>If possible, please complete all four questions and surveys in one sitting.</span></li>
+          <li className="flex gap-2.5"><span aria-hidden="true">✓</span><span>Extra credit is awarded for completing the full study, not for answering every question correctly—so don&apos;t worry!</span></li>
+          <li className="flex gap-2.5"><span aria-hidden="true">💡</span><span>Do not worry about making mistakes; they actually help us understand whether the feedback is useful!</span></li>
+        </ul>
+      </section>
       {notice && <p role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">{notice}</p>}
       {error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
       <form onSubmit={submit} className="mt-5 space-y-4">
@@ -92,6 +100,7 @@ export default function App() {
     { screen: 'q2', label: 'Q2' }, { screen: 's2', label: 'S2' },
     { screen: 'q3', label: 'Q3' }, { screen: 'q4', label: 'Q4' },
     { screen: 's3', label: 'S3' }, { screen: 's4', label: 'S4' },
+    { screen: 'complete', label: 'Finish' },
   ];
   const canContinueFromNavigation = Boolean(task && currentIndex === progress.furthestIndex);
   const studyHeader = progress.participant ? (
@@ -151,6 +160,6 @@ export default function App() {
     content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} onRequireParticipant={() => { setProfileNotice('Enter a valid participant ID before running code.'); setShowProfile(true); }} />;
   }
   else if (progress.currentScreen === 's1' || progress.currentScreen === 's2' || progress.currentScreen === 's3' || progress.currentScreen === 's4') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
-  else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-16"><section className="max-w-xl rounded-2xl bg-white p-10 text-center shadow-lg"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold">Thank you</h1><p className="mt-4 text-gray-600">Your study activities are complete. You may review any unlocked question or survey from the navigation above.</p></section></main></div>;
+  else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-6 sm:p-16"><section className="w-full max-w-2xl rounded-2xl bg-white p-8 text-center shadow-lg sm:p-10"><div aria-hidden="true" className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">✓</div><p className="mt-5 text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold text-gray-900">Thank you for participating!</h1><div className="mx-auto mt-5 max-w-xl space-y-3 leading-7 text-gray-600"><p>You have completed the full study. Your extra-credit reward will be issued after participation records are reviewed.</p><p>If you chose to participate in a Zoom interview, we will contact you with the next steps.</p><p className="font-medium text-gray-700">You may now close this page.</p></div></section></main></div>;
   return <>{content}{showProfile && <ProfileDialog initial={progress.participant} notice={profileNotice} onClose={hasCompleteParticipantProfile(progress.participant) ? () => { setProfileNotice(undefined); setShowProfile(false); } : undefined} onSave={(participant) => { setProgress((current) => ({ ...current, participant })); setProfileNotice(undefined); setShowProfile(false); }} />}</>;
 }

@@ -1,5 +1,9 @@
 [
   {
+    "participantId": "S1_000_ABCDE",
+    "group": "A"
+  },
+  {
     "participantId": "S1_001_G5XYP",
     "group": "A"
   },
