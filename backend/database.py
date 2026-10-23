@@ -95,9 +95,10 @@ CREATE INDEX IF NOT EXISTS submissions_registration_index
 CREATE INDEX IF NOT EXISTS submissions_question_index
     ON submissions (question_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS study_participants_unique_password_index
-    ON study_participants (participant_password)
-    WHERE participant_password IS NOT NULL;
+DROP INDEX IF EXISTS study_participants_unique_password_index;
+
+CREATE UNIQUE INDEX IF NOT EXISTS study_participants_unique_name_index
+    ON study_participants (LOWER(student_name));
 """
 
 
@@ -109,8 +110,8 @@ class InvalidStudentLogin(ValueError):
     """A returning student's name and password do not match."""
 
 
-class DuplicateParticipantPassword(ValueError):
-    """A new participant selected a password already used in this study."""
+class DuplicateStudentName(ValueError):
+    """A participant tried to register a name already used in this study."""
 
 
 _schema_lock = Lock()
@@ -166,9 +167,9 @@ def register_participant_record(
     """Create, resume, or update a participant account.
 
     A transaction-level advisory lock serializes new registrations across all
-    Render workers. New registrations alternate A, B, A, B. Names need not be
-    unique: a returning student is located by the name/password combination.
-    This research-demo
+    Render workers. New registrations alternate A, B, A, B. Names are unique
+    case-insensitively, while different students may choose the same password.
+    A returning student is located by the name/password combination. This research-demo
     deployment intentionally stores the participant password in recoverable
     form so the study administrator can help a participant who forgets it.
     """
@@ -208,6 +209,20 @@ def register_participant_record(
                 (registration_id,),
             )
             existing = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT 1
+                FROM study_participants
+                WHERE LOWER(student_name) = LOWER(%s)
+                  AND registration_id <> %s
+                LIMIT 1
+                """,
+                (normalized_name, registration_id),
+            )
+            if cursor.fetchone() is not None:
+                raise DuplicateStudentName(
+                    "This name is already registered. Please include your middle name and try again."
+                )
             if existing:
                 assignment_number, study_group, saved_password = existing
                 if saved_password != password:
@@ -221,19 +236,6 @@ def register_participant_record(
                     (normalized_name, registration_id),
                 )
             else:
-                cursor.execute(
-                    """
-                    SELECT 1
-                    FROM study_participants
-                    WHERE participant_password = %s
-                    LIMIT 1
-                    """,
-                    (password,),
-                )
-                if cursor.fetchone() is not None:
-                    raise DuplicateParticipantPassword(
-                        "This password is already in use. Please choose a different password."
-                    )
                 cursor.execute(
                     "SELECT COALESCE(MAX(assignment_number), 0) + 1 FROM study_participants"
                 )
@@ -293,6 +295,24 @@ def update_participant_name(
     normalized_name = normalize_student_name(student_name)
     with connect() as connection:
         with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                ("codeflow-study-participant-registration-v1",),
+            )
+            cursor.execute(
+                """
+                SELECT 1
+                FROM study_participants
+                WHERE LOWER(student_name) = LOWER(%s)
+                  AND registration_id <> %s
+                LIMIT 1
+                """,
+                (normalized_name, registration_id),
+            )
+            if cursor.fetchone() is not None:
+                raise DuplicateStudentName(
+                    "This name is already registered. Please include your middle name and try again."
+                )
             cursor.execute(
                 """
                 UPDATE study_participants

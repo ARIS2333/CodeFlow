@@ -236,19 +236,34 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.get_json()["error"], "Name or password is incorrect.")
 
-    def test_registration_rejects_a_password_used_by_another_account(self):
-        message = "This password is already in use. Please choose a different password."
+    def test_registration_rejects_a_name_used_by_another_account(self):
+        message = "This name is already registered. Please include your middle name and try again."
         with patch.object(
             backend_app,
             "register_participant_record",
-            side_effect=backend_app.DuplicateParticipantPassword(message),
+            side_effect=backend_app.DuplicateStudentName(message),
         ):
             response = self.client.post("/api/participants/register", json={
                 "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "studentName": "Grace Hopper",
-                "password": "used-password",
+                "studentName": "Ada Lovelace",
+                "password": "any-password",
                 "action": "register",
             })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["error"], message)
+
+    def test_name_update_reports_a_duplicate_name(self):
+        message = "This name is already registered. Please include your middle name and try again."
+        with patch.object(
+            backend_app,
+            "update_participant_name",
+            side_effect=backend_app.DuplicateStudentName(message),
+        ):
+            response = self.client.patch(
+                "/api/participants/85d87357-c214-42e7-a4ed-741e374063a6/name",
+                json={"studentName": "Ada Lovelace"},
+            )
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.get_json()["error"], message)

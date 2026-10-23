@@ -15,7 +15,7 @@ from agentscope.message import SystemMsg, UserMsg
 from code_analysis import CodeAnalysisError, analyze_code
 from database import (
     DatabaseNotConfigured,
-    DuplicateParticipantPassword,
+    DuplicateStudentName,
     InvalidStudentLogin,
     create_submission_record,
     participant_registration,
@@ -172,7 +172,7 @@ def register_participant():
         ))
     except InvalidStudentLogin as error:
         return public_error(str(error), 401)
-    except DuplicateParticipantPassword as error:
+    except DuplicateStudentName as error:
         return public_error(str(error), 409)
     except DatabaseNotConfigured:
         app.logger.exception("Study database is not configured")
@@ -207,6 +207,8 @@ def change_participant_name(registration_id: str):
         if participant is None:
             return public_error("Participant account was not found", 404)
         return jsonify(participant)
+    except DuplicateStudentName as error:
+        return public_error(str(error), 409)
     except DatabaseNotConfigured:
         app.logger.exception("Study database is not configured")
         return public_error("Study registration is unavailable", 503)
