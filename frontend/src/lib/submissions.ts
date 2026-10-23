@@ -3,7 +3,7 @@ import type { FeedbackMode, StudyTaskId } from '../config/studyConfig.ts';
 import type { SupportedLanguage } from './codeAnalysis.ts';
 
 export interface CreateSubmissionRequest {
-  participantId: string;
+  registrationId: string;
   questionId: StudyTaskId;
   sourceCode: string;
   language: SupportedLanguage;
@@ -72,7 +72,7 @@ export interface SubmissionUpdate {
 
 export const updateSubmission = async (
   submissionId: string,
-  participantId: string,
+  registrationId: string,
   update: SubmissionUpdate,
 ): Promise<void> => {
   let response: Response | undefined;
@@ -81,7 +81,7 @@ export const updateSubmission = async (
       response = await fetch(`${API_BASE_URL}/api/submissions/${submissionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantId, ...update }),
+        body: JSON.stringify({ registrationId, ...update }),
       });
       if (response.status < 500) break;
     } catch {

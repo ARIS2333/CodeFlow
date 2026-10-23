@@ -15,7 +15,15 @@ from agentscope.message import SystemMsg, UserMsg
 from code_analysis import CodeAnalysisError, analyze_code
 from database import (
     DatabaseNotConfigured,
+    DuplicateParticipantPassword,
+    InvalidStudentLogin,
     create_submission_record,
+    participant_registration,
+    participant_study_state,
+    register_participant_record,
+    save_participant_progress,
+    save_participant_workspace,
+    update_participant_name,
     update_submission_record,
 )
 from model_config import (
@@ -27,7 +35,6 @@ from model_config import (
     resolve_model_spec,
 )
 from model_stream import create_stream_blueprint, stream_model_response
-from participants import group_for_participant
 from textual_feedback import render_textual_feedback_prompt
 
 load_dotenv()
@@ -123,20 +130,178 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/participants/verify", methods=["POST"])
-def verify_participant():
-    """Verify a study ID and return its server-assigned condition."""
+def resolve_registration(value: object) -> tuple[UUID, dict[str, str]] | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        registration_id = UUID(value)
+    except ValueError:
+        return None
+    registration = participant_registration(registration_id)
+    return (registration_id, registration) if registration else None
+
+
+@app.route("/api/participants/register", methods=["POST"])
+def register_participant():
+    """Persist a student's name and assign the next alternating condition."""
     try:
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict):
             return public_error("Request body must be a JSON object", 400)
-        assignment = group_for_participant(body.get("participantId"))
-        if assignment is None:
-            return public_error("Invalid participant ID", 401)
-        participant_id, group = assignment
-        return jsonify({"participantId": participant_id, "group": group})
+        student_name = body.get("studentName")
+        if not isinstance(student_name, str):
+            return public_error("Student name is required", 400)
+        student_name = " ".join(student_name.split())
+        if not student_name or len(student_name) > 100:
+            return public_error("Student name must be between 1 and 100 characters", 400)
+        password = body.get("password")
+        if not isinstance(password, str) or not 4 <= len(password) <= 100:
+            return public_error("Password must be between 4 and 100 characters", 400)
+        action = body.get("action", "register")
+        if action not in {"register", "login"}:
+            return public_error("Invalid registration action", 400)
+        try:
+            registration_id = UUID(str(body.get("registrationId", "")))
+        except ValueError:
+            return public_error("Invalid registration ID", 400)
+        return jsonify(register_participant_record(
+            registration_id=registration_id,
+            student_name=student_name,
+            password=password,
+            action=action,
+        ))
+    except InvalidStudentLogin as error:
+        return public_error(str(error), 401)
+    except DuplicateParticipantPassword as error:
+        return public_error(str(error), 409)
+    except DatabaseNotConfigured:
+        app.logger.exception("Study database is not configured")
+        return public_error("Study registration is unavailable", 503)
     except (BadRequest, json.JSONDecodeError):
         return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Participant registration failed (request %s)", g.request_id)
+        return public_error("Participant registration failed", 500)
+
+
+@app.route("/api/participants/<registration_id>/name", methods=["PATCH"])
+def change_participant_name(registration_id: str):
+    """Let a signed-in participant correct their saved name."""
+    try:
+        try:
+            parsed_registration_id = UUID(registration_id)
+        except ValueError:
+            return public_error("Invalid registration ID", 400)
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        student_name = body.get("studentName")
+        if not isinstance(student_name, str):
+            return public_error("Student name is required", 400)
+        student_name = " ".join(student_name.split())
+        if not student_name or len(student_name) > 100:
+            return public_error("Student name must be between 1 and 100 characters", 400)
+        participant = update_participant_name(parsed_registration_id, student_name)
+        if participant is None:
+            return public_error("Participant account was not found", 404)
+        return jsonify(participant)
+    except DatabaseNotConfigured:
+        app.logger.exception("Study database is not configured")
+        return public_error("Study registration is unavailable", 503)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Participant name update failed (request %s)", g.request_id)
+        return public_error("Participant name could not be updated", 500)
+
+
+def registered_participant_id(registration_id: str) -> UUID | None:
+    """Parse and verify the browser-held registration token."""
+    try:
+        parsed = UUID(registration_id)
+    except ValueError:
+        return None
+    return parsed if participant_registration(parsed) else None
+
+
+@app.route("/api/participants/<registration_id>/state", methods=["GET"])
+def get_participant_state(registration_id: str):
+    """Restore progress, drafts, and latest generated feedback on another device."""
+    try:
+        parsed = registered_participant_id(registration_id)
+        if parsed is None:
+            return public_error("Participant account was not found", 404)
+        return jsonify(participant_study_state(parsed))
+    except DatabaseNotConfigured:
+        return public_error("Study state is unavailable", 503)
+    except Exception:
+        app.logger.exception("Participant state load failed (request %s)", g.request_id)
+        return public_error("Study state could not be loaded", 500)
+
+
+@app.route("/api/participants/<registration_id>/progress", methods=["PUT"])
+def put_participant_progress(registration_id: str):
+    """Persist the participant's latest study-navigation snapshot."""
+    try:
+        parsed = registered_participant_id(registration_id)
+        if parsed is None:
+            return public_error("Participant account was not found", 404)
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Progress must be a JSON object", 400)
+        screen = body.get("currentScreen")
+        furthest = body.get("furthestIndex")
+        completed = body.get("completedSurveys")
+        valid_screens = {"s1", "q1", "q2", "s2", "q3", "q4", "s3", "s4", "complete"}
+        if screen not in valid_screens or not isinstance(furthest, int) or not 0 <= furthest <= 8:
+            return public_error("Invalid study progress", 400)
+        if not isinstance(completed, list) or any(item not in {"s1", "s2", "s3", "s4"} for item in completed):
+            return public_error("Invalid completed surveys", 400)
+        snapshot = {
+            "currentScreen": screen,
+            "furthestIndex": furthest,
+            "completedSurveys": list(dict.fromkeys(completed)),
+        }
+        save_participant_progress(parsed, snapshot)
+        return jsonify({"saved": True})
+    except DatabaseNotConfigured:
+        return public_error("Study state is unavailable", 503)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Participant progress save failed (request %s)", g.request_id)
+        return public_error("Study progress could not be saved", 500)
+
+
+@app.route("/api/participants/<registration_id>/workspaces/<workspace_id>", methods=["PUT"])
+def put_participant_workspace(registration_id: str, workspace_id: str):
+    """Persist one question's latest code and generated-feedback workspace."""
+    try:
+        parsed = registered_participant_id(registration_id)
+        if parsed is None:
+            return public_error("Participant account was not found", 404)
+        if workspace_id not in {"q1.v3", "q2.v3", "q3.v3", "q4.v3"}:
+            return public_error("Invalid workspace", 400)
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict) or body.get("version") != 2:
+            return public_error("Invalid workspace state", 400)
+        save_participant_workspace(parsed, workspace_id, body)
+        return jsonify({"saved": True})
+    except DatabaseNotConfigured:
+        return public_error("Study state is unavailable", 503)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("Participant workspace save failed (request %s)", g.request_id)
+        return public_error("Workspace could not be saved", 500)
 
 
 @app.route("/api/submissions", methods=["POST"])
@@ -148,7 +313,7 @@ def create_submission_resource():
             return public_error("Request body must be a JSON object", 400)
         string_fields = (
             "submissionId",
-            "participantId",
+            "registrationId",
             "questionId",
             "language",
             "feedbackFormat",
@@ -166,10 +331,10 @@ def create_submission_resource():
         except (TypeError, ValueError):
             return public_error("Invalid submission ID", 400)
 
-        assignment = group_for_participant(body["participantId"])
-        if assignment is None:
-            return public_error("Invalid participant ID", 401)
-        participant_id, group = assignment
+        registration = resolve_registration(body["registrationId"])
+        if registration is None:
+            return public_error("Invalid study registration", 401)
+        registration_id, participant = registration
         if body["questionId"] not in {"q1", "q2", "q3", "q4"}:
             return public_error("Invalid question", 400)
         if body["feedbackFormat"] not in {"codeflow", "textual"}:
@@ -179,8 +344,9 @@ def create_submission_resource():
 
         created = create_submission_record(
             submission_id=submission_id,
-            participant_id=participant_id,
-            study_group=group,
+            registration_id=registration_id,
+            student_name=participant["studentName"],
+            study_group=participant["group"],
             question_id=body["questionId"],
             source_code=body["sourceCode"],
             language=body["language"],
@@ -206,10 +372,10 @@ def update_submission_resource(submission_id):
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict):
             return public_error("Request body must be a JSON object", 400)
-        assignment = group_for_participant(body.get("participantId"))
-        if assignment is None:
-            return public_error("Invalid participant ID", 401)
-        participant_id, _group = assignment
+        registration = resolve_registration(body.get("registrationId"))
+        if registration is None:
+            return public_error("Invalid study registration", 401)
+        registration_id, _participant = registration
 
         allowed = {
             field: body[field]
@@ -224,7 +390,7 @@ def update_submission_resource(submission_id):
         if not allowed:
             return public_error("No submission fields to update", 400)
 
-        if not update_submission_record(submission_id, participant_id, allowed):
+        if not update_submission_record(submission_id, registration_id, allowed):
             return public_error("Submission not found", 404)
         return jsonify({"saved": True})
     except DatabaseNotConfigured:

@@ -2,8 +2,9 @@
 
 A request arrives in one of three modes:
 
-*Participant mode* — the human-study UI sends an assigned participant ID. It
-is checked against the backend registry before server credentials are used.
+*Participant mode* — the human-study UI sends the internal registration UUID
+returned when the student entered their name. It is checked against PostgreSQL
+before server credentials are used.
 
 *Research mode* — the request carries the study password.  It is checked here,
 server-side, against ``RESEARCH_PASSWORD``, and only then are the server's own
@@ -28,11 +29,12 @@ import os
 import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
+from uuid import UUID
 
 from agentscope.credential import CredentialFactory
 from agentscope.model import ChatModelBase, DashScopeChatModel
 from openai_responses import CodeFlowResponseModel
-from participants import group_for_participant
+from database import participant_registration
 
 # Providers offered to students. Every one of these credentials takes the same
 # `api_key` + optional `base_url` pair, which is what keeps `build_model`
@@ -196,10 +198,14 @@ def resolve_model_spec(config) -> ModelSpec:
     if not isinstance(config, dict):
         raise ModelConfigError('"modelConfig" must be a JSON object.')
 
-    participant_id = config.get("participantId")
-    if participant_id not in (None, ""):
-        if group_for_participant(participant_id) is None:
-            raise AuthenticationError("Invalid participant ID.")
+    registration_id = config.get("registrationId")
+    if registration_id not in (None, ""):
+        try:
+            registration_uuid = UUID(registration_id)
+        except (TypeError, ValueError):
+            raise AuthenticationError("Invalid study registration.") from None
+        if participant_registration(registration_uuid) is None:
+            raise AuthenticationError("Invalid study registration.")
         return _research_spec()
 
     # Research mode takes precedence: if a password was sent, it must be right.

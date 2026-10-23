@@ -85,13 +85,20 @@ export default function TracePanel({
 
   return (
     <div className={`${compact ? 'mb-3 flex flex-wrap items-center gap-3 p-3' : 'mb-4 p-4'} rounded-lg border border-blue-200 bg-blue-50/60`}>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+      <div className="shrink-0">
         <h3 className="font-semibold text-gray-800">Execution Trace</h3>
         {loading && (
-          <span role="status" className="flex items-center gap-2 text-sm text-blue-700">
-            <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-            Tracing this input...
-          </span>
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-2 flex max-w-xl items-start gap-2 rounded-md border border-blue-200 bg-white/80 px-3 py-2 text-sm text-blue-800"
+          >
+            <span aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+            <span>
+              <span className="font-medium">Still generating the execution trace...</span>{' '}
+              You can review the available steps while it finishes.
+            </span>
+          </div>
         )}
       </div>
 

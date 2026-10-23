@@ -6,7 +6,7 @@ CodeFlow is a web-based learning tool and human-study platform for students in i
 
 Instead of giving students corrected code immediately, both conditions encourage them to examine their own approach and revise it themselves. The study contains four fixed C++ exercises: a solution-writing task and a debugging task in each stage.
 
-Participants are assigned to a group before opening the platform. Group A uses CodeFlow for Q1–Q2 and textual feedback for Q3–Q4. Group B uses textual feedback for Q1–Q2 and CodeFlow for Q3–Q4. This keeps the question order fixed while counterbalancing feedback order and ensures that both question sets are evaluated under both conditions.
+Participants are assigned to alternating groups when they first register. Group A uses CodeFlow for Q1–Q2 and textual feedback for Q3–Q4. Group B uses textual feedback for Q1–Q2 and CodeFlow for Q3–Q4. This keeps the question order fixed while counterbalancing feedback order and ensures that both question sets are evaluated under both conditions.
 
 ## The student experience
 
@@ -20,7 +20,7 @@ flowchart LR
     F --> G[Post survey]
 ```
 
-A student enters their name, contact email, and preassigned group, then works through the four questions in order. The browser saves each question independently, including its code and generated feedback, so switching questions or refreshing the page does not replace earlier work. Participant information remains editable, and earlier questions remain accessible.
+A student enters their name, creates a password, receives an automatically assigned group, and then works through the four questions in order. Each question is saved independently, including its latest code and generated feedback, so switching questions or refreshing the page does not replace earlier work. A returning student can resume with the same name and password on another device; the system restores their current stage and per-question workspace from the study database.
 
 In the CodeFlow condition, selecting **Run Code** provides three connected views:
 

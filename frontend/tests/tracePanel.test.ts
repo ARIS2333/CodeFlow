@@ -124,6 +124,8 @@ test('an untraceable run explains itself in its own area, without redrawing the 
 
 test('a trace still being generated says so, rather than showing a silent empty area', () => {
   const { below } = split(render({ status: 'loading', request: traceRequest }));
+  assert.match(below, /Still generating the execution trace/);
+  assert.match(below, /review the available steps while it finishes/);
   assert.match(below, /The AI is working through this input step by step/);
   assert.doesNotMatch(below, /Student&#x27;s Run/, 'no player until there are steps to play');
 });
@@ -165,7 +167,11 @@ test('a streaming trace is usable from the moment the student side lands', () =>
     request: traceRequest,
     progress: { attempt: 1, student: trace!.student },
   }));
-  assert.match(below, /Tracing this input/);
+  const heading = below.indexOf('Execution Trace');
+  const status = below.indexOf('Still generating the execution trace');
+  const input = below.indexOf('trace-input');
+  assert.ok(heading >= 0 && status > heading && input > status, 'generation status sits below the trace heading');
+  assert.match(below, /review the available steps while it finishes/);
   assert.match(below, /Step 1 \/ 4/);
   assert.match(below, /Student&#x27;s Run/);
 });

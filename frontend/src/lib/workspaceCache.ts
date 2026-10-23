@@ -3,6 +3,7 @@ import type { TraceState } from './traceRun';
 import type { ProblemDetails } from './llmSchemas';
 import type { SupportedLanguage } from './codeAnalysis';
 import type { TextualFeedbackState } from './textualFeedback';
+import { queueCloudWorkspaceSave } from './studyState.ts';
 
 const LEGACY_WORKSPACE_CACHE_KEY = 'codeflow.workspace.v2';
 const workspaceCacheKey = (workspaceId?: string) =>
@@ -23,7 +24,7 @@ export interface WorkspaceCache {
   activeSubmission?: {
     submissionId: string;
     attemptNumber: number;
-    participantId: string;
+    registrationId: string;
   };
 }
 
@@ -68,12 +69,26 @@ export const loadWorkspaceCache = (workspaceId?: string): WorkspaceCache | null 
 export const updateWorkspaceCache = (patch: Partial<WorkspaceCache>, workspaceId?: string): void => {
   try {
     const current = loadWorkspaceCache(workspaceId) ?? { version: 2 as const };
+    const updated = { ...current, ...patch, version: 2 as const };
     window.localStorage.setItem(
       workspaceCacheKey(workspaceId),
-      JSON.stringify({ ...current, ...patch, version: 2 }),
+      JSON.stringify(updated),
     );
+    queueCloudWorkspaceSave(workspaceId, updated);
   } catch {
     // Storage may be blocked or full. The app remains usable without recovery.
+  }
+};
+
+/** Install a server-restored snapshot without immediately echoing it back. */
+export const replaceWorkspaceCache = (workspace: WorkspaceCache, workspaceId: string): void => {
+  try {
+    window.localStorage.setItem(
+      workspaceCacheKey(workspaceId),
+      JSON.stringify({ ...workspace, version: 2 }),
+    );
+  } catch {
+    // The in-memory app can still start from its task template.
   }
 };
 

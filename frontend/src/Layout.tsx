@@ -79,7 +79,7 @@ export const Layout = ({
   const flowchartRegenerator = useRef<(() => void) | null>(null);
   const textualRegenerator = useRef<((input: string) => void) | null>(null);
   const [canRegenerateFlowchart, setCanRegenerateFlowchart] = useState(false);
-  const restoredSubmission = cachedWorkspace?.activeSubmission?.participantId === participant.participantId
+  const restoredSubmission = cachedWorkspace?.activeSubmission?.registrationId === participant.registrationId
     ? cachedWorkspace.activeSubmission
     : undefined;
   const activeSubmissionRef = useRef(restoredSubmission);
@@ -87,11 +87,11 @@ export const Layout = ({
   const submissionUpdateChain = useRef<Promise<void>>(Promise.resolve());
   const [submissionSyncError, setSubmissionSyncError] = useState<string | null>(null);
 
-  // The assigned participant ID authorizes the server-owned study model; no
+  // The opaque registration token authorizes the server-owned study model; no
   // shared credential is exposed in the browser.
   const settings = useMemo<ModelSettings>(
-    () => ({ mode: 'participant', participantId: participant.participantId }),
-    [participant.participantId],
+    () => ({ mode: 'participant', registrationId: participant.registrationId }),
+    [participant.registrationId],
   );
 
   const persistSubmissionUpdate = useCallback((update: SubmissionUpdate) => {
@@ -102,7 +102,7 @@ export const Layout = ({
       .catch(() => undefined)
       .then(() => updateSubmission(
         submissionId,
-        participant.participantId,
+        participant.registrationId,
         update,
       ))
       .then(() => setSubmissionSyncError(null))
@@ -111,14 +111,14 @@ export const Layout = ({
           error instanceof Error ? error.message : 'Submission result could not be saved.',
         );
       });
-  }, [participant.participantId]);
+  }, [participant.registrationId]);
 
   const handleCreateSubmission = useCallback(async (
     sourceCode: string,
     language: SupportedLanguage,
   ): Promise<CreatedSubmission> => {
     const created = await createSubmission({
-      participantId: participant.participantId,
+      registrationId: participant.registrationId,
       questionId: task.id,
       sourceCode,
       language,
@@ -126,7 +126,7 @@ export const Layout = ({
     });
     const stored = {
       ...created,
-      participantId: participant.participantId,
+      registrationId: participant.registrationId,
     };
     activeSubmissionRef.current = stored;
     setActiveSubmission(stored);
@@ -135,10 +135,10 @@ export const Layout = ({
   }, [feedbackMode, participant, task.id]);
 
   useEffect(() => {
-    if (participant.participantId === activeSubmissionRef.current?.participantId) return;
+    if (participant.registrationId === activeSubmissionRef.current?.registrationId) return;
     activeSubmissionRef.current = undefined;
     setActiveSubmission(undefined);
-  }, [participant.participantId]);
+  }, [participant.registrationId]);
 
   useEffect(() => {
     updateWorkspaceCache({ activeSubmission }, workspaceId);

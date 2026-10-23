@@ -130,7 +130,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private parser detail", response.get_data(as_text=True))
 
-    def test_submission_is_created_with_verified_participant_id(self):
+    def test_submission_is_created_with_registered_student(self):
         created = {
             "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
             "attemptNumber": 2,
@@ -142,10 +142,15 @@ class AppTests(unittest.TestCase):
                 "create_submission_record",
                 return_value=created,
             ) as create_record,
+            patch.object(
+                backend_app,
+                "participant_registration",
+                return_value={"studentName": "Ada Lovelace", "group": "A"},
+            ),
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "participantId": " s1_001_g5xyp ",
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
                 "questionId": "q2",
                 "sourceCode": "int answer() { return 1; }",
                 "language": "cpp",
@@ -155,23 +160,25 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.get_json(), created)
         self.assertEqual(
-            create_record.call_args.kwargs["participant_id"],
-            "S1_001_G5XYP",
+            create_record.call_args.kwargs["registration_id"],
+            UUID("85d87357-c214-42e7-a4ed-741e374063a6"),
         )
+        self.assertEqual(create_record.call_args.kwargs["student_name"], "Ada Lovelace")
         self.assertEqual(create_record.call_args.kwargs["study_group"], "A")
         self.assertEqual(
             create_record.call_args.kwargs["submission_id"],
             UUID("85d87357-c214-42e7-a4ed-741e374063a6"),
         )
 
-    def test_submission_rejects_unknown_participant_id(self):
+    def test_submission_rejects_unknown_registration(self):
         with (
             patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}),
             patch.object(backend_app, "create_submission_record") as create_record,
+            patch.object(backend_app, "participant_registration", return_value=None),
         ):
             response = self.client.post("/api/submissions", json={
                 "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",
-                "participantId": "S1_999_BADID",
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
                 "questionId": "q1",
                 "sourceCode": "code",
                 "language": "cpp",
@@ -181,25 +188,175 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         create_record.assert_not_called()
 
-    def test_participant_verification_returns_server_assigned_group(self):
-        with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
-            response = self.client.post("/api/participants/verify", json={
-                "participantId": "s2_001_2wtlm",
+    def test_participant_registration_returns_server_assigned_group(self):
+        registered = {
+            "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+            "studentName": "Ada Lovelace",
+            "group": "A",
+        }
+        with patch.object(
+            backend_app, "register_participant_record", return_value=registered
+        ) as register_record:
+            response = self.client.post("/api/participants/register", json={
+                "registrationId": registered["registrationId"],
+                "studentName": "  Ada   Lovelace  ",
+                "password": "study-pass",
+                "action": "register",
             })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {
-            "participantId": "S2_001_2WTLM",
-            "group": "B",
+            **registered,
+        })
+        self.assertEqual(register_record.call_args.kwargs["student_name"], "Ada Lovelace")
+        self.assertEqual(register_record.call_args.kwargs["password"], "study-pass")
+        self.assertEqual(register_record.call_args.kwargs["action"], "register")
+
+    def test_participant_registration_rejects_blank_name(self):
+        response = self.client.post("/api/participants/register", json={
+            "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+            "studentName": "   ",
         })
 
-    def test_participant_verification_rejects_unknown_id(self):
-        with patch.dict("os.environ", {"RESEARCH_PASSWORD": "study-secret"}):
-            response = self.client.post("/api/participants/verify", json={
-                "participantId": "S1_999_BADID",
+        self.assertEqual(response.status_code, 400)
+
+    def test_participant_login_rejects_incorrect_password(self):
+        with patch.object(
+            backend_app,
+            "register_participant_record",
+            side_effect=backend_app.InvalidStudentLogin("Name or password is incorrect."),
+        ):
+            response = self.client.post("/api/participants/register", json={
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "studentName": "Ada Lovelace",
+                "password": "wrong-pass",
+                "action": "login",
             })
 
         self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json()["error"], "Name or password is incorrect.")
+
+    def test_registration_rejects_a_password_used_by_another_account(self):
+        message = "This password is already in use. Please choose a different password."
+        with patch.object(
+            backend_app,
+            "register_participant_record",
+            side_effect=backend_app.DuplicateParticipantPassword(message),
+        ):
+            response = self.client.post("/api/participants/register", json={
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "studentName": "Grace Hopper",
+                "password": "used-password",
+                "action": "register",
+            })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["error"], message)
+
+    def test_participant_can_explicitly_resume_an_existing_name(self):
+        registered = {
+            "registrationId": "11111111-1111-4111-8111-111111111111",
+            "studentName": "Ada Lovelace",
+            "group": "B",
+        }
+        with patch.object(
+            backend_app, "register_participant_record", return_value=registered
+        ) as register_record:
+            response = self.client.post("/api/participants/register", json={
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "studentName": "Ada Lovelace",
+                "password": "study-pass",
+                "action": "login",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), registered)
+        self.assertEqual(register_record.call_args.kwargs["action"], "login")
+
+    def test_signed_in_participant_can_change_name_without_password(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        updated = {
+            "registrationId": registration_id,
+            "studentName": "Grace Hopper",
+            "group": "A",
+        }
+        with patch.object(
+            backend_app, "update_participant_name", return_value=updated
+        ) as update_name:
+            response = self.client.patch(
+                f"/api/participants/{registration_id}/name",
+                json={"studentName": "  Grace   Hopper  "},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), updated)
+        update_name.assert_called_once_with(UUID(registration_id), "Grace Hopper")
+
+    def test_name_change_rejects_an_unknown_registration(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        with patch.object(backend_app, "update_participant_name", return_value=None):
+            response = self.client.patch(
+                f"/api/participants/{registration_id}/name",
+                json={"studentName": "Grace Hopper"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_participant_state_restores_progress_and_workspaces(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        saved = {
+            "progress": {"currentScreen": "q2", "furthestIndex": 2, "completedSurveys": ["s1"]},
+            "workspaces": {"q1.v3": {"version": 2, "code": "return true;"}},
+        }
+        with (
+            patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
+            patch.object(backend_app, "participant_study_state", return_value=saved),
+        ):
+            response = self.client.get(f"/api/participants/{registration_id}/state")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), saved)
+
+    def test_participant_progress_is_validated_and_saved(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        with (
+            patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
+            patch.object(backend_app, "save_participant_progress") as save_progress,
+        ):
+            response = self.client.put(f"/api/participants/{registration_id}/progress", json={
+                "currentScreen": "q2",
+                "furthestIndex": 2,
+                "completedSurveys": ["s1", "s1"],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        save_progress.assert_called_once_with(UUID(registration_id), {
+            "currentScreen": "q2",
+            "furthestIndex": 2,
+            "completedSurveys": ["s1"],
+        })
+
+    def test_participant_workspace_is_validated_and_saved(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        workspace = {"version": 2, "code": "return true;"}
+        with (
+            patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
+            patch.object(backend_app, "save_participant_workspace") as save_workspace,
+        ):
+            response = self.client.put(
+                f"/api/participants/{registration_id}/workspaces/q1.v3",
+                json=workspace,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        save_workspace.assert_called_once_with(UUID(registration_id), "q1.v3", workspace)
+
+    def test_study_state_rejects_an_unknown_registration(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        with patch.object(backend_app, "participant_registration", return_value=None):
+            response = self.client.get(f"/api/participants/{registration_id}/state")
+
+        self.assertEqual(response.status_code, 404)
 
     def test_submission_workspace_results_are_updated(self):
         submission_id = "85d87357-c214-42e7-a4ed-741e374063a6"
@@ -215,15 +372,20 @@ class AppTests(unittest.TestCase):
                 "update_submission_record",
                 return_value=True,
             ) as update_record,
+            patch.object(
+                backend_app,
+                "participant_registration",
+                return_value={"studentName": "Ada Lovelace", "group": "A"},
+            ),
         ):
             response = self.client.patch(
                 f"/api/submissions/{submission_id}",
-                json={"participantId": "S1_001_G5XYP", **update},
+                json={"registrationId": "85d87357-c214-42e7-a4ed-741e374063a6", **update},
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(update_record.call_args.args[0], UUID(submission_id))
-        self.assertEqual(update_record.call_args.args[1], "S1_001_G5XYP")
+        self.assertEqual(update_record.call_args.args[1], UUID("85d87357-c214-42e7-a4ed-741e374063a6"))
         self.assertEqual(update_record.call_args.args[2], update)
 
     def test_textual_feedback_stream_uses_server_owned_prompt(self):

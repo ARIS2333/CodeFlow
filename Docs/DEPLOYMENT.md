@@ -4,44 +4,64 @@ CodeFlow stays as two small services:
 
 - `codeflow-frontend`: a Render Static Site built from `frontend/dist`.
 - `codeflow-backend`: the Flask application served by Gunicorn.
-- `codeflow-study-db`: the PostgreSQL database containing Run Code snapshots.
+- `codeflow-study-db`: the PostgreSQL database containing participant accounts,
+  immutable Run Code submissions, and each participant's latest recoverable
+  study workspace.
 
-The repository-root `render.yaml` creates both services from the `main`
+The repository-root `render.yaml` creates both services from the `UF_1_toolEval`
 branch. Flask's development server and Vite's development/preview server are
 not exposed publicly.
 
 ## First deployment
 
-1. Push the `main` branch to the Git provider connected to Render.
+1. Push the `UF_1_toolEval` branch to the Git provider connected to Render.
 2. In Render, choose **New > Blueprint**, select this repository, and use the
    root-level `render.yaml`.
 3. Confirm that the existing Render Postgres resource is named
    `codeflow-study-db`. The Blueprint links its internal connection URL to the
-   backend as `DATABASE_URL`. The backend runs `init_db.py` before Gunicorn, so
-   the submissions table is created automatically. The submission persistence
-   layer also performs a concurrency-safe initialization on its first use, so
-   an existing Render service with a stale Start Command can recover after the
-   updated backend is deployed.
-4. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
+   backend as `DATABASE_URL`. Keep that database and environment variable; a
+   second database is not needed. Before every Gunicorn start, the backend runs
+   the idempotent `init_db.py` initializer. It creates or migrates the
+   participant-account, submission, progress, and per-question workspace tables
+   without clearing existing study data. The persistence layer also performs a
+   concurrency-safe initialization on first use, so an existing Render service
+   with an older Start Command can recover after the updated backend is
+   deployed.
+4. Enter `API_KEY`, `BASE_URL`, `MODEL`, and `PROVIDER`
    when Render asks for the backend configuration. `BASE_URL` is the provider's
    complete API endpoint; the server does not construct it from a workspace ID.
-   Set the password in the dashboard
-   only — this repository is public, so a value committed to `render.yaml` or
-   the source would be permanently searchable and could not be rotated without
-   a commit. The human-study interface requires this value because participants
-   enter the shared password in **Participant information**.
+   These server-owned credentials fund feedback generation for registered study
+   participants and must be configured only in the Render dashboard.
 5. Let Render create the backend and copy its public HTTPS URL.
 6. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
    slash (for example, `https://codeflow-backend.onrender.com`). Redeploy the
    frontend so Vite includes the value in its static build.
 7. Replace the placeholder Google Forms links in
    `frontend/src/config/studyConfig.ts` with the study's real survey URLs.
-8. Open the frontend URL and verify both Group A and Group B from Q1 through
-   the final survey, including refresh recovery, flowcharts, traces, and textual
-   feedback. The backend health check is available at `/health`.
+8. Open the frontend URL and create a temporary study account. Run one question,
+   then sign in with the same name and password in a private window or another
+   browser. Verify that the assigned group, current stage, source code, terminal
+   result, and generated feedback are restored. Also verify both Group A and
+   Group B through the final survey. The backend health check is available at
+   `/health`.
 
 Render supplies HTTPS for both public URLs. The backend intentionally keeps its
 current public CORS behavior until the planned login/BYOK work is requested.
+
+## Updating the existing Render deployment
+
+1. Keep both services on the `UF_1_toolEval` branch and push the completed
+   changes to that branch.
+2. Keep the backend's existing `DATABASE_URL`. Do not create a second database
+   and do not manually delete the old tables.
+3. Redeploy the backend first. Its deploy log should show
+   `Study database is ready.` before Gunicorn starts; this confirms that the
+   account and recovery tables were initialized.
+4. Redeploy the frontend after the backend is healthy. The new frontend and old
+   participant-ID backend API are not compatible, so both services must use the
+   same revision.
+5. Complete the private-window recovery check described above before sharing
+   the study URL.
 
 ## Request timing and concurrency
 
@@ -59,25 +79,24 @@ or the two Gunicorn settings if requests queue or memory usage becomes high.
 
 ## Who may spend the study's quota
 
-Students enter the study password in **Participant information** and use the
-server-funded model. The password is checked on the server, so the public API
-cannot be called directly to bypass the browser interface.
+Students enter their name and create a password in **Participant information**.
+PostgreSQL stores the research-demo password in recoverable form and assigns a
+persistent alternating group. Database access must therefore remain restricted
+to the study administrators. Passwords must be unique within this deployment.
+The browser token preserves the session after a refresh; the name and password
+can restore it from another browser. PostgreSQL also stores the latest study
+navigation and one current workspace for each question, so code drafts,
+terminal results, flowcharts, traces, and textual feedback follow the
+participant.
 
-The password is a shared secret. Once handed to a cohort it can be forwarded,
-and nothing here prevents that — no rate limiting or per-participant quota was
-requested, so a study-wide spending cap still has to be set at the provider,
-not in this application. Rotating the password means changing
-`RESEARCH_PASSWORD` in the Render dashboard; students then re-enter it once.
-
-Browser local storage still provides refresh recovery. In addition, every Run
-Code click creates one PostgreSQL submission containing the participant name,
-normalized email, group, question, per-question attempt number, source code,
+Browser local storage still provides fast refresh recovery. PostgreSQL stores
+the latest navigation state and question workspaces for cross-device recovery.
+Separately, every Run Code click creates one immutable submission containing the student name,
+group, question, per-question attempt number, source code,
 feedback format, terminal result, and either the flowchart/trace workspace or
-the textual-feedback workspace. The shared research password is used to
-authorize these writes and is never stored in the submissions table.
+the textual-feedback workspace.
 
 ## Future work deliberately not enabled
 
 Per-participant quotas, rate limiting, and a study-wide spending cap remain
-unimplemented. Named accounts (as opposed to one shared password) are also out
-of scope.
+unimplemented.

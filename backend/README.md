@@ -80,19 +80,19 @@ API_KEY=
 BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.6-sol
 PROVIDER=openai
-RESEARCH_PASSWORD=
 ```
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection used to save each Run Code submission |
+| `DATABASE_URL` | PostgreSQL connection used for participant accounts, submissions, progress, and cross-device workspace recovery |
 | `API_KEY` | Server-side API key for the shared research model |
 | `BASE_URL` | Base API URL for the model provider |
 | `MODEL` | Model used in shared research mode |
 | `PROVIDER` | Model provider: `openai`, `dashscope`, `anthropic`, or `deepseek` |
-| `RESEARCH_PASSWORD` | Password required to use shared research mode; leave empty to disable this mode |
-
-To enable shared research mode, correctly configure `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`. If users will provide their own API keys, the shared research credentials can remain empty.
+To enable study feedback, correctly configure `API_KEY`, `BASE_URL`, `MODEL`,
+and `PROVIDER`. Participant access is controlled by the name/password account
+created in the study interface. If users will provide their own API keys, the
+shared model credentials can remain empty.
 
 On macOS, install and initialize the local database once:
 
@@ -103,7 +103,9 @@ python init_db.py
 ```
 
 `setup_local_db.sh` starts PostgreSQL and creates `codeflow_study` if it does
-not already exist. `init_db.py` creates the `submissions` table and indexes.
+not already exist. `init_db.py` idempotently creates or migrates participant
+accounts, immutable submissions, study progress, per-question workspaces, and
+their indexes.
 
 The development server also supports these optional environment variables:
 

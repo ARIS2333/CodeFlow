@@ -6,20 +6,21 @@ afterEach(() => { delete (globalThis as { window?: unknown }).window; });
 
 test('participant profile requires every field before code can run', () => {
   const complete = {
-    participantId: 'S1_001_G5XYP',
+    registrationId: '85d87357-c214-42e7-a4ed-741e374063a6',
+    studentName: 'Ada Lovelace',
     group: 'A' as const,
   };
 
   assert.equal(hasCompleteParticipantProfile(complete), true);
-  assert.equal(hasCompleteParticipantProfile({ ...complete, participantId: '  ' }), false);
+  assert.equal(hasCompleteParticipantProfile({ ...complete, registrationId: '  ' }), false);
   assert.equal(hasCompleteParticipantProfile(undefined), false);
 });
 
-test('older progress is discarded so the assigned participant ID must be verified again', () => {
+test('older progress is discarded so the student must register again', () => {
   const legacy = JSON.stringify({
     version: 3,
     participant: {
-      participantId: 'CF-P001',
+      registrationId: 'CF-P001',
       group: 'B',
     },
     currentScreen: 'q4',
@@ -35,7 +36,7 @@ test('older progress is discarded so the assigned participant ID must be verifie
   };
 
   const migrated = loadStudyProgress();
-  assert.equal(migrated.version, 4);
+  assert.equal(migrated.version, 6);
   assert.equal(migrated.currentScreen, 's1');
   assert.equal(migrated.furthestIndex, 0);
   assert.deepEqual(migrated.completedSurveys, []);
