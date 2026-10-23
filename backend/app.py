@@ -24,6 +24,7 @@ from database import (
     register_participant_record,
     save_participant_progress,
     save_participant_workspace,
+    study_usage_summary,
     update_participant_name,
     update_submission_record,
 )
@@ -246,6 +247,20 @@ def get_participant_usage(registration_id: str):
     except Exception:
         app.logger.exception("Usage lookup failed (request %s)", g.request_id)
         return public_error("AI usage could not be loaded", 500)
+
+
+@app.route("/api/participants/<registration_id>/study-usage", methods=["GET"])
+def get_study_usage(registration_id: str):
+    """Return aggregate usage only to a participant with a valid account."""
+    try:
+        if registered_participant_id(registration_id) is None:
+            return public_error("Participant account was not found", 404)
+        return jsonify(study_usage_summary())
+    except DatabaseNotConfigured:
+        return public_error("Study database is unavailable", 503)
+    except Exception:
+        app.logger.exception("Study usage lookup failed (request %s)", g.request_id)
+        return public_error("Study usage could not be loaded", 500)
 
 
 @app.route("/api/participants/<registration_id>/state", methods=["GET"])

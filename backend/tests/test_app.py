@@ -349,6 +349,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), summary)
 
+    def test_study_usage_returns_only_aggregate_totals(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        summary = {
+            "modelCalls": 12,
+            "inputTokens": 1000,
+            "cachedInputTokens": 100,
+            "cacheWriteTokens": 0,
+            "outputTokens": 500,
+            "totalTokens": 1500,
+            "estimatedCostUsd": 0.007,
+        }
+        with (
+            patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
+            patch.object(backend_app, "study_usage_summary", return_value=summary),
+        ):
+            response = self.client.get(f"/api/participants/{registration_id}/study-usage")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), summary)
+
     def test_participant_progress_is_validated_and_saved(self):
         registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
         with (

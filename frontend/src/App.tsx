@@ -6,7 +6,7 @@ import { registerParticipant, updateParticipantName } from './lib/participants';
 import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen, type SurveyId } from './lib/studyStorage';
 import { configureCloudWorkspaceSync, loadCloudStudyState, saveCloudProgress, StudyAccountNotFoundError } from './lib/studyState';
 import { replaceWorkspaceCache } from './lib/workspaceCache';
-import { loadParticipantUsage, type ParticipantUsageSummary } from './lib/participantUsage';
+import { loadParticipantUsage, loadStudyUsage, type ParticipantUsageSummary, type StudyUsageSummary } from './lib/participantUsage';
 
 function UsageLimitDialog({ onClose }: { onClose: () => void }) {
   return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4">
@@ -55,6 +55,43 @@ function UsageBar({ usage }: { usage?: ParticipantUsageSummary }) {
       </div>
     </div>
     {showInfo && <UsageInfoDialog onClose={() => setShowInfo(false)} />}
+  </>;
+}
+
+function StudyUsageButton({ registrationId }: { registrationId: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [summary, setSummary] = useState<StudyUsageSummary>();
+  const [error, setError] = useState<string>();
+  const [isLoading, setIsLoading] = useState(false);
+  const open = async () => {
+    setIsOpen(true);
+    setIsLoading(true);
+    setError(undefined);
+    try {
+      setSummary(await loadStudyUsage(registrationId));
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : 'Study usage could not be loaded.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  return <>
+    <button type="button" onClick={() => void open()} aria-label="View total study AI usage" title="Total study AI usage" className="fixed bottom-5 left-5 z-[90] flex h-11 w-11 items-center justify-center rounded-full border border-blue-200 bg-white text-xl text-blue-700 shadow-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">◔</button>
+    {isOpen && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setIsOpen(false)}>
+      <div role="dialog" aria-modal="true" aria-labelledby="study-usage-title" className="w-full max-w-md rounded-2xl bg-white p-7 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Across all participants</p><h2 id="study-usage-title" className="mt-1 text-2xl font-bold text-gray-900">Study AI usage</h2></div>
+          <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-xl text-gray-500 hover:bg-gray-100">×</button>
+        </div>
+        {isLoading && <div className="py-10 text-center text-sm text-gray-500">Loading usage…</div>}
+        {error && <div role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+        {!isLoading && !error && summary && <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-blue-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total tokens</p><p className="mt-1 text-2xl font-bold text-gray-900">{summary.totalTokens.toLocaleString()}</p></div>
+          <div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated cost</p><p className="mt-1 text-2xl font-bold text-gray-900">${summary.estimatedCostUsd.toFixed(3)}</p></div>
+        </div>}
+        <p className="mt-5 text-xs leading-5 text-gray-500">This shows combined usage for the entire study and does not reveal information about individual participants.</p>
+      </div>
+    </div>}
   </>;
 }
 
@@ -384,7 +421,7 @@ export default function App() {
     setProfileNotice(undefined);
     setShowProfile(false);
   };
-  return <>{content}{showUsageLimit && <UsageLimitDialog onClose={() => setShowUsageLimit(false)} />}{showProfile && (progress.participant
+  return <>{content}{progress.participant && <StudyUsageButton registrationId={progress.participant.registrationId} />}{showUsageLimit && <UsageLimitDialog onClose={() => setShowUsageLimit(false)} />}{showProfile && (progress.participant
     ? <NameDialog participant={progress.participant} onClose={() => { setProfileNotice(undefined); setShowProfile(false); }} onSave={saveParticipant} />
     : <ProfileDialog notice={profileNotice} onSave={saveParticipant} />)}</>;
 }

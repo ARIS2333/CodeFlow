@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { loadParticipantUsage } from '../src/lib/participantUsage.ts';
+import { loadParticipantUsage, loadStudyUsage } from '../src/lib/participantUsage.ts';
 
 test('participant usage loads the authoritative server total', async () => {
   const originalFetch = globalThis.fetch;
@@ -36,6 +36,27 @@ test('participant usage surfaces a server refusal', async () => {
       () => loadParticipantUsage('registration-1'),
       /AI usage could not be loaded/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('study usage loads aggregate totals without participant records', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    modelCalls: 12,
+    inputTokens: 1000,
+    cachedInputTokens: 100,
+    cacheWriteTokens: 0,
+    outputTokens: 500,
+    totalTokens: 1500,
+    estimatedCostUsd: 0.007,
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+  try {
+    const usage = await loadStudyUsage('registration-1');
+    assert.equal(usage.totalTokens, 1500);
+    assert.equal(usage.estimatedCostUsd, 0.007);
+    assert.equal('studentName' in usage, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

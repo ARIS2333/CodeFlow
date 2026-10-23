@@ -185,6 +185,35 @@ def participant_usage_summary(registration_id: UUID) -> dict[str, Any]:
     }
 
 
+def study_usage_summary() -> dict[str, Any]:
+    """Return privacy-preserving aggregate model usage for the whole study."""
+    initialize_database()
+    with connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*),
+                       COALESCE(SUM(input_tokens), 0),
+                       COALESCE(SUM(cached_input_tokens), 0),
+                       COALESCE(SUM(cache_write_tokens), 0),
+                       COALESCE(SUM(output_tokens), 0),
+                       COALESCE(SUM(total_tokens), 0),
+                       COALESCE(SUM(estimated_cost_usd), 0)
+                FROM llm_usage_events
+                """
+            )
+            row = cursor.fetchone()
+    return {
+        "modelCalls": int(row[0]),
+        "inputTokens": int(row[1]),
+        "cachedInputTokens": int(row[2]),
+        "cacheWriteTokens": int(row[3]),
+        "outputTokens": int(row[4]),
+        "totalTokens": int(row[5]),
+        "estimatedCostUsd": float(Decimal(row[6] or 0)),
+    }
+
+
 def initialize_database() -> None:
     """Create the study schema once per worker, safely across workers.
 
