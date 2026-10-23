@@ -32,6 +32,8 @@ interface LayoutProps {
   studyHeader: ReactNode;
   participant: ParticipantProfile;
   onRequireParticipant: () => void;
+  onCheckUsage: () => Promise<boolean>;
+  onUsageRefresh: () => void;
 }
 
 /*
@@ -49,6 +51,8 @@ export const Layout = ({
   studyHeader,
   participant,
   onRequireParticipant,
+  onCheckUsage,
+  onUsageRefresh,
 }: LayoutProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
   // State to manage the width of the right panel, initialized with default width from config
@@ -86,6 +90,7 @@ export const Layout = ({
   const [activeSubmission, setActiveSubmission] = useState(restoredSubmission);
   const submissionUpdateChain = useRef<Promise<void>>(Promise.resolve());
   const [submissionSyncError, setSubmissionSyncError] = useState<string | null>(null);
+  const previousPaidStatuses = useRef<string[]>([]);
 
   // The opaque registration token authorizes the server-owned study model; no
   // shared credential is exposed in the browser.
@@ -206,15 +211,32 @@ export const Layout = ({
     updateWorkspaceCache({ flowchartState, traceState, textualFeedbackState }, workspaceId);
   }, [flowchartState, traceState, textualFeedbackState, workspaceId]);
 
+  useEffect(() => {
+    const current = [
+      evaluationState.status,
+      flowchartState.status,
+      traceState.status,
+      textualFeedbackState.status,
+    ];
+    const completed = current.some((status, index) => (
+      previousPaidStatuses.current[index] === 'loading' && status !== 'loading'
+    ));
+    previousPaidStatuses.current = current;
+    if (completed) onUsageRefresh();
+  }, [evaluationState.status, flowchartState.status, onUsageRefresh, textualFeedbackState.status, traceState.status]);
+
   const startRetrace = useCallback((request: TraceRequest) => {
     cancelRetrace();
     const controller = new AbortController();
     retraceAbort.current = controller;
-    void runTrace(request, setTraceState, toModelConfig(settings), controller.signal)
+    void runTrace(request, setTraceState, {
+      ...toModelConfig(settings),
+      usageContext: { questionId: task.id, feedbackFormat: feedbackMode },
+    }, controller.signal)
       .finally(() => {
         if (retraceAbort.current === controller) retraceAbort.current = null;
       });
-  }, [cancelRetrace, settings]);
+  }, [cancelRetrace, feedbackMode, settings, task.id]);
 
   /**
    * Handler function to update the panel width
@@ -258,6 +280,7 @@ export const Layout = ({
           settings={settings}
           canRunStudy={hasCompleteParticipantProfile(participant)}
           onRequireParticipant={onRequireParticipant}
+          onCheckUsage={onCheckUsage}
           onCreateSubmission={handleCreateSubmission}
           onRequireSettings={() => {}}
           flowchartState={flowchartState}

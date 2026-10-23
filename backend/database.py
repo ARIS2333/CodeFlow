@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 from threading import Lock
 from typing import Any
 from uuid import UUID
@@ -58,6 +59,26 @@ CREATE TABLE IF NOT EXISTS participant_workspaces (
     PRIMARY KEY (registration_id, workspace_id)
 );
 
+CREATE TABLE IF NOT EXISTS llm_usage_events (
+    usage_id BIGSERIAL PRIMARY KEY,
+    registration_id UUID NOT NULL
+        REFERENCES study_participants(registration_id) ON DELETE CASCADE,
+    request_id TEXT,
+    question_id TEXT CHECK (question_id IN ('q1', 'q2', 'q3', 'q4')),
+    feedback_format TEXT CHECK (feedback_format IN ('codeflow', 'textual')),
+    operation TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
+    cache_write_tokens INTEGER NOT NULL CHECK (cache_write_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0),
+    latency_seconds DOUBLE PRECISION,
+    estimated_cost_usd NUMERIC(14, 8),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS registration_id UUID;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS student_name TEXT;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS participant_id TEXT;
@@ -95,6 +116,12 @@ CREATE INDEX IF NOT EXISTS submissions_registration_index
 CREATE INDEX IF NOT EXISTS submissions_question_index
     ON submissions (question_id);
 
+CREATE INDEX IF NOT EXISTS llm_usage_registration_index
+    ON llm_usage_events (registration_id, created_at);
+
+CREATE INDEX IF NOT EXISTS llm_usage_question_index
+    ON llm_usage_events (question_id);
+
 DROP INDEX IF EXISTS study_participants_unique_password_index;
 
 CREATE UNIQUE INDEX IF NOT EXISTS study_participants_unique_name_index
@@ -116,6 +143,7 @@ class DuplicateStudentName(ValueError):
 
 _schema_lock = Lock()
 _schema_initialized = False
+PARTICIPANT_USAGE_LIMIT_USD = Decimal("1.00")
 
 
 def database_url() -> str:
@@ -132,6 +160,29 @@ def connect():
 def normalize_student_name(value: str) -> str:
     """Collapse incidental whitespace without changing a student's spelling."""
     return " ".join(value.split())
+
+
+def participant_usage_summary(registration_id: UUID) -> dict[str, Any]:
+    """Return the recorded server-funded model spend for one participant."""
+    initialize_database()
+    with connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(estimated_cost_usd), 0)
+                FROM llm_usage_events
+                WHERE registration_id = %s
+                """,
+                (registration_id,),
+            )
+            spent = Decimal(cursor.fetchone()[0] or 0)
+    remaining = max(PARTICIPANT_USAGE_LIMIT_USD - spent, Decimal("0"))
+    return {
+        "spentUsd": float(spent),
+        "limitUsd": float(PARTICIPANT_USAGE_LIMIT_USD),
+        "remainingUsd": float(remaining),
+        "exhausted": spent >= PARTICIPANT_USAGE_LIMIT_USD,
+    }
 
 
 def initialize_database() -> None:
@@ -338,6 +389,69 @@ def update_participant_name(
         "studentName": normalized_name,
         "group": row[0],
     }
+
+
+OPENAI_TOKEN_RATES_PER_MILLION = {
+    "gpt-6.1-sol": {
+        "input": Decimal("2.00"),
+        "cached": Decimal("0.10"),
+        "cache_write": Decimal("2.50"),
+        "output": Decimal("10.00"),
+    },
+}
+
+
+def record_llm_usage(
+    *,
+    registration_id: UUID,
+    request_id: str | None,
+    question_id: str | None,
+    feedback_format: str | None,
+    operation: str,
+    provider: str,
+    model: str,
+    usage: dict[str, Any],
+) -> None:
+    """Persist one completed provider call, including format-retry calls."""
+    initialize_database()
+    input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
+    output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+    cached_tokens = int(usage.get("cache_input_tokens", 0) or 0)
+    cache_write_tokens = int(usage.get("cache_creation_input_tokens", 0) or 0)
+    total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or 0)
+    latency = usage.get("time")
+
+    estimated_cost = None
+    rates = OPENAI_TOKEN_RATES_PER_MILLION.get(model) if provider == "openai" else None
+    if rates:
+        uncached_tokens = max(input_tokens - cached_tokens - cache_write_tokens, 0)
+        estimated_cost = (
+            Decimal(uncached_tokens) * rates["input"]
+            + Decimal(cached_tokens) * rates["cached"]
+            + Decimal(cache_write_tokens) * rates["cache_write"]
+            + Decimal(output_tokens) * rates["output"]
+        ) / Decimal(1_000_000)
+
+    with connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO llm_usage_events (
+                    registration_id, request_id, question_id, feedback_format,
+                    operation, provider, model, input_tokens, cached_input_tokens,
+                    cache_write_tokens, output_tokens, total_tokens,
+                    latency_seconds, estimated_cost_usd
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    registration_id, request_id, question_id, feedback_format,
+                    operation, provider, model, input_tokens, cached_tokens,
+                    cache_write_tokens, output_tokens, total_tokens,
+                    float(latency) if latency is not None else None, estimated_cost,
+                ),
+            )
 
 
 def participant_study_state(registration_id: UUID) -> dict[str, Any]:

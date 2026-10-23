@@ -105,7 +105,28 @@ python init_db.py
 `setup_local_db.sh` starts PostgreSQL and creates `codeflow_study` if it does
 not already exist. `init_db.py` idempotently creates or migrates participant
 accounts, immutable submissions, study progress, per-question workspaces, and
-their indexes.
+one row of token usage for every completed model call, along with their indexes.
+
+These rows also enforce a $1.00 AI-feedback allowance per participant. The
+backend checks recorded spend before each paid model call, while the study UI
+shows the current amount and blocks new Run Code actions once it is exhausted.
+
+Participant token totals can be inspected with:
+
+```sql
+SELECT p.student_name,
+       SUM(u.input_tokens) AS input_tokens,
+       SUM(u.output_tokens) AS output_tokens,
+       SUM(u.total_tokens) AS total_tokens,
+       SUM(u.estimated_cost_usd) AS estimated_usd
+FROM llm_usage_events u
+JOIN study_participants p USING (registration_id)
+GROUP BY p.registration_id, p.student_name
+ORDER BY p.student_name;
+```
+
+Cost is an estimate for the configured `gpt-6.1-sol` rates; the raw provider
+token counts are retained even when no pricing entry is available.
 
 The development server also supports these optional environment variables:
 

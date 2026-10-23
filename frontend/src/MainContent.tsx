@@ -86,6 +86,8 @@ interface MainContentProps {
   /** Participant information must be complete before any run-side effects occur. */
   canRunStudy: boolean;
   onRequireParticipant: () => void;
+  /** Authoritative server check immediately before a paid study run. */
+  onCheckUsage: () => Promise<boolean>;
   /** Creates the durable attempt before any compiler or model work starts. */
   onCreateSubmission: (
     sourceCode: string,
@@ -213,6 +215,7 @@ export const MainContent = ({
   onRequireSettings,
   canRunStudy,
   onRequireParticipant,
+  onCheckUsage,
   onCreateSubmission,
 }: MainContentProps) => {
   const cachedWorkspace = useRef(loadWorkspaceCache(workspaceId)).current;
@@ -237,6 +240,13 @@ export const MainContent = ({
   // the handler through a ref rather than closing over a stale render's copy.
   const runShortcut = useRef<() => void>(() => {});
   const isCodeEvaluating = evaluationState.status === 'loading';
+  const modelConfigForUsage = (modelSettings: ModelSettings) => ({
+    ...toModelConfig(modelSettings),
+    usageContext: {
+      questionId: task.id,
+      feedbackFormat: feedbackMode,
+    },
+  });
   const isRunning = isSubmissionSaving || isCodeEvaluating || flowchartState.status === 'loading' || isFlowchartRegenerating;
   const codeEvaluation = evaluationState.status === 'success' ? evaluationState.data : null;
   const codeEvaluationError = evaluationState.status === 'error' ? evaluationState.error : null;
@@ -503,7 +513,7 @@ export const MainContent = ({
     void (async () => {
       try {
         const graphs = await requestReliableFlowchart(context.request, {
-          modelConfig: toModelConfig(settings),
+          modelConfig: modelConfigForUsage(settings),
           codeAnalysis,
           signal: controller.signal,
           onGenerationReady: (nextGeneration) => {
@@ -541,7 +551,7 @@ export const MainContent = ({
           await runTrace(
             { ...context.request, graphs, testCase },
             onTraceStateChange,
-            toModelConfig(settings),
+            modelConfigForUsage(settings),
             controller.signal,
           );
         } else if (evaluationState.status === 'success') {
@@ -592,7 +602,7 @@ export const MainContent = ({
     void requestTextualFeedback(
       problemDetails,
       code,
-      toModelConfig(settings),
+      modelConfigForUsage(settings),
       (markdown) => {
         streamedMarkdown = markdown;
         if (!controller.signal.aborted) {
@@ -654,7 +664,8 @@ export const MainContent = ({
       onRequireSettings('Choose a model before running your code.');
       return;
     }
-    const modelConfig = toModelConfig(settings);
+    if (!await onCheckUsage()) return;
+    const modelConfig = modelConfigForUsage(settings);
 
     activeRun.current?.cancel();
     setIsFlowchartRegenerating(false);
@@ -1045,7 +1056,7 @@ export const MainContent = ({
             onClearProblem={handleClearProblem}
             hasProblem={problem !== null}
             onApiProcessingChange={setIsApiProcessing}
-            modelConfig={toModelConfig(settings)}
+            modelConfig={modelConfigForUsage(settings)}
           />
         )}
 

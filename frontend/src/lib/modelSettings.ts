@@ -34,10 +34,16 @@ export type ModelSettings =
   | { mode: 'byok'; provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
 
 /** The wire shape the backend expects under `modelConfig`. */
-export type ModelConfigPayload =
+export type ModelConfigPayload = (
   | { password: string }
   | { registrationId: string }
-  | { provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
+  | { provider: ProviderId; model: string; apiKey: string; baseUrl?: string }
+) & {
+  usageContext?: {
+    questionId: 'q1' | 'q2' | 'q3' | 'q4';
+    feedbackFormat: 'codeflow' | 'textual';
+  };
+};
 
 export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
   settings.mode === 'research'

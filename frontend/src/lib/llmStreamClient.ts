@@ -90,6 +90,7 @@ export const requestJsonStream = async <T>({
             system_message: systemPrompt,
             message: attempt === 1 ? message : `${message}\n\nThe previous output was rejected:\n${problems.join('\n')}\nReturn a complete corrected JSON object, with each top-level field exactly once.`,
             modelConfig,
+            usageOperation: label,
           }),
           signal: controller.signal,
         });

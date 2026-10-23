@@ -5,16 +5,18 @@ import json
 import time
 from dataclasses import asdict
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, g, jsonify, request
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from agentscope.message import SystemMsg, UserMsg
 
 from model_config import (
     AuthenticationError,
     ModelConfigError,
+    ParticipantUsageLimitReached,
     build_model,
     resolve_model_spec,
 )
+from usage_tracking import usage_recorder
 
 
 def frame(event):
@@ -27,7 +29,14 @@ def text_content(response):
                    if getattr(block, "type", None) == "text")
 
 
-def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180):
+def stream_model_response(
+    model_factory,
+    messages,
+    *,
+    heartbeat=10,
+    timeout=180,
+    on_usage=None,
+):
     """Own the event loop, model client, and upstream iterator for this request.
 
     AgentScope 2 emits deltas followed by is_last=True containing the full text.
@@ -100,10 +109,13 @@ def stream_model_response(model_factory, messages, *, heartbeat=10, timeout=180)
 
                 if len(text) > len(accumulated):
                     yield frame({"type": "delta", "text": text[len(accumulated):]})
+                usage = asdict(chunk.usage) if chunk.usage else {}
+                if on_usage is not None:
+                    on_usage(model.model, usage)
                 yield frame({
                     "type": "done",
                     "model": model.model,
-                    "usage": asdict(chunk.usage) if chunk.usage else {},
+                    "usage": usage,
                 })
                 break
             if text:
@@ -175,16 +187,25 @@ def create_stream_blueprint(model_factory=None):
                 spec = resolve_model_spec(body.get("modelConfig"))
             except AuthenticationError as error:
                 return jsonify({"error": str(error)}), 401
+            except ParticipantUsageLimitReached as error:
+                return jsonify({"error": str(error)}), 429
             except ModelConfigError as error:
                 return jsonify({"error": str(error)}), 400
             # Built inside the generator's own event loop, not here.
             request_factory = lambda: build_model(spec, stream=True)
+            recorder = usage_recorder(
+                body,
+                provider=spec.provider,
+                operation=str(body.get("usageOperation", "model stream")),
+                request_id=getattr(g, "request_id", None),
+            )
         else:
             request_factory = model_factory
+            recorder = None
 
         messages = [SystemMsg(name="system", content=system), UserMsg(name="user", content=body["message"])]
         return Response(
-            stream_model_response(request_factory, messages),
+            stream_model_response(request_factory, messages, on_usage=recorder),
             content_type="application/x-ndjson; charset=utf-8",
             headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
         )

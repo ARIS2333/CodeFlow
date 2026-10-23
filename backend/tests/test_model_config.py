@@ -32,6 +32,8 @@ class ResearchModeTests(unittest.TestCase):
         registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
         with patch.dict(os.environ, RESEARCH_ENV, clear=False), patch.object(
             model_config, "participant_registration", return_value={"studentName": "Ada", "group": "A"}
+        ), patch.object(
+            model_config, "participant_usage_summary", return_value={"exhausted": False}
         ):
             spec = model_config.resolve_model_spec({"registrationId": registration_id})
 
@@ -43,6 +45,15 @@ class ResearchModeTests(unittest.TestCase):
             model_config, "participant_registration", return_value=None
         ):
             with self.assertRaises(model_config.AuthenticationError):
+                model_config.resolve_model_spec({"registrationId": "85d87357-c214-42e7-a4ed-741e374063a6"})
+
+    def test_an_exhausted_participant_cannot_start_another_model_call(self):
+        with patch.object(
+            model_config, "participant_registration", return_value={"studentName": "Ada", "group": "A"}
+        ), patch.object(
+            model_config, "participant_usage_summary", return_value={"exhausted": True}
+        ):
+            with self.assertRaises(model_config.ParticipantUsageLimitReached):
                 model_config.resolve_model_spec({"registrationId": "85d87357-c214-42e7-a4ed-741e374063a6"})
 
     def test_research_mode_supports_any_configured_provider(self):

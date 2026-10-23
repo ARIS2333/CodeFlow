@@ -6,7 +6,8 @@ CodeFlow stays as two small services:
 - `codeflow-backend`: the Flask application served by Gunicorn.
 - `codeflow-study-db`: the PostgreSQL database containing participant accounts,
   immutable Run Code submissions, and each participant's latest recoverable
-  study workspace.
+  study workspace, plus per-model-call token usage and the $1.00 participant
+  AI-feedback allowance.
 
 The repository-root `render.yaml` creates both services from the `UF_1_toolEval`
 branch. Flask's development server and Vite's development/preview server are
@@ -22,7 +23,8 @@ not exposed publicly.
    backend as `DATABASE_URL`. Keep that database and environment variable; a
    second database is not needed. Before every Gunicorn start, the backend runs
    the idempotent `init_db.py` initializer. It creates or migrates the
-   participant-account, submission, progress, and per-question workspace tables
+   participant-account, submission, progress, per-question workspace, and LLM
+   usage tables
    without clearing existing study data. The persistence layer also performs a
    concurrency-safe initialization on first use, so an existing Render service
    with an older Start Command can recover after the updated backend is

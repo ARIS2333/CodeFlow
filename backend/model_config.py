@@ -34,7 +34,7 @@ from uuid import UUID
 from agentscope.credential import CredentialFactory
 from agentscope.model import ChatModelBase, DashScopeChatModel
 from openai_responses import CodeFlowResponseModel
-from database import participant_registration
+from database import participant_registration, participant_usage_summary
 
 # Providers offered to students. Every one of these credentials takes the same
 # `api_key` + optional `base_url` pair, which is what keeps `build_model`
@@ -73,6 +73,10 @@ class ModelConfigError(Exception):
 
 class AuthenticationError(Exception):
     """No usable credential: wrong password, or nothing supplied (HTTP 401)."""
+
+
+class ParticipantUsageLimitReached(Exception):
+    """The study-funded allowance for this participant is exhausted (HTTP 429)."""
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,10 @@ def resolve_model_spec(config) -> ModelSpec:
             raise AuthenticationError("Invalid study registration.") from None
         if participant_registration(registration_uuid) is None:
             raise AuthenticationError("Invalid study registration.")
+        if participant_usage_summary(registration_uuid)["exhausted"]:
+            raise ParticipantUsageLimitReached(
+                "This participant has reached the study's AI feedback limit."
+            )
         return _research_spec()
 
     # Research mode takes precedence: if a password was sent, it must be right.

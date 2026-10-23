@@ -8,12 +8,12 @@ services:
     buildCommand: pip install -r requirements.txt
     # Run the idempotent schema initializer before every web-server start. It
     # creates or migrates participant accounts, immutable submissions, study
-    # progress, and per-question workspace recovery in the linked database.
+    # progress, per-question workspace recovery, and model token usage.
     startCommand: python init_db.py && gunicorn -c gunicorn.conf.py app:app
     healthCheckPath: /health
     envVars:
       # One existing Render Postgres database stores accounts, submissions,
-      # navigation progress, source drafts, and generated feedback. No second
+      # navigation progress, source drafts, generated feedback, and token usage. No second
       # database or additional persistence environment variable is required.
       - key: DATABASE_URL
         fromDatabase:

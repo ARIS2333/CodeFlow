@@ -247,6 +247,7 @@ export const requestStructured = async <T>({
             message: userMessage,
             system_message: systemPrompt,
             modelConfig,
+            usageOperation: label,
           }),
         },
       });

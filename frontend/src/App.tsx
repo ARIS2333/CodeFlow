@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Layout } from './Layout';
 import { Header } from './Header';
 import { STUDY_TASKS, STUDY_TASK_SET_VERSION, SURVEY_URLS, feedbackModeFor } from './config/studyConfig';
@@ -6,6 +6,57 @@ import { registerParticipant, updateParticipantName } from './lib/participants';
 import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen, type SurveyId } from './lib/studyStorage';
 import { configureCloudWorkspaceSync, loadCloudStudyState, saveCloudProgress, StudyAccountNotFoundError } from './lib/studyState';
 import { replaceWorkspaceCache } from './lib/workspaceCache';
+import { loadParticipantUsage, type ParticipantUsageSummary } from './lib/participantUsage';
+
+function UsageLimitDialog({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="usage-limit-title" className="w-full max-w-lg rounded-2xl bg-white p-7 text-center shadow-2xl sm:p-8">
+      <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-xl">💛</div>
+      <h2 id="usage-limit-title" className="mt-4 text-2xl font-bold text-gray-900">AI feedback limit reached</h2>
+      <div className="mt-4 space-y-3 text-left text-sm leading-6 text-gray-600 sm:text-base">
+        <p>Because our research funding is limited, your account has reached its $1.00 AI feedback allowance. Please continue with the remaining surveys.</p>
+        <p>You will still receive the study reward even if you were unable to complete every programming question.</p>
+        <p className="font-medium text-gray-700">Thank you for your enthusiasm and for contributing so much to our research.</p>
+      </div>
+      <button type="button" onClick={onClose} className="mt-7 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">Close and continue</button>
+    </div>
+  </div>;
+}
+
+function UsageInfoDialog({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}>
+    <div role="dialog" aria-modal="true" aria-labelledby="usage-info-title" className="w-full max-w-md rounded-2xl bg-white p-7 text-center shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+      <div aria-hidden="true" className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-xl text-blue-700">ⓘ</div>
+      <h2 id="usage-info-title" className="mt-4 text-xl font-bold text-gray-900">About your AI usage</h2>
+      <div className="mt-4 space-y-3 text-left text-sm leading-6 text-gray-600">
+        <p>Because our research budget is limited, we can provide each participant with up to $1.00 of GPT-6.1-Sol token usage.</p>
+        <p>If you reach the limit before completing every programming question, you will still receive the study reward.</p>
+        <p className="font-medium text-gray-700">Thank you for your enthusiasm and support for our research.</p>
+      </div>
+      <button type="button" onClick={onClose} className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white hover:bg-blue-700">Got it</button>
+    </div>
+  </div>;
+}
+
+function UsageBar({ usage }: { usage?: ParticipantUsageSummary }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const percent = usage ? Math.min(100, Math.max(0, usage.spentUsd / usage.limitUsd * 100)) : 0;
+  const color = usage?.exhausted ? 'bg-red-500' : percent >= 80 ? 'bg-amber-500' : 'bg-blue-600';
+  return <>
+    <div className="flex min-w-44 items-center gap-2 rounded-xl border border-gray-200 bg-white px-2.5 py-2 shadow-sm" aria-label="AI usage allowance">
+      <button type="button" onClick={() => setShowInfo(true)} aria-label="Learn about the AI usage allowance" title="About AI usage" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base font-bold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">ⓘ</button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3 text-xs font-semibold text-gray-600">
+          <span>AI usage</span><span>{usage ? `$${usage.spentUsd.toFixed(3)} / $${usage.limitUsd.toFixed(2)}` : 'Loading…'}</span>
+        </div>
+        <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} className="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-100">
+          <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${percent}%` }} />
+        </div>
+      </div>
+    </div>
+    {showInfo && <UsageInfoDialog onClose={() => setShowInfo(false)} />}
+  </>;
+}
 
 function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: ParticipantProfile; notice?: string; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
   const [studentName, setStudentName] = useState(initial?.studentName ?? '');
@@ -149,7 +200,35 @@ export default function App() {
   const [cloudHydrated, setCloudHydrated] = useState(!initial.participant);
   const [cloudSyncReady, setCloudSyncReady] = useState(false);
   const [cloudSyncError, setCloudSyncError] = useState<string>();
+  const [usage, setUsage] = useState<ParticipantUsageSummary>();
+  const [showUsageLimit, setShowUsageLimit] = useState(false);
   const activeParticipant = progress.participant;
+
+  const refreshUsage = useCallback(async () => {
+    if (!activeParticipant) return undefined;
+    const latest = await loadParticipantUsage(activeParticipant.registrationId);
+    setUsage(latest);
+    return latest;
+  }, [activeParticipant]);
+
+  useEffect(() => {
+    if (!activeParticipant) { setUsage(undefined); return; }
+    void refreshUsage().catch(() => undefined);
+  }, [activeParticipant, refreshUsage]);
+
+  const checkUsageBeforeRun = useCallback(async () => {
+    try {
+      const latest = await refreshUsage();
+      if (latest?.exhausted) {
+        setShowUsageLimit(true);
+        return false;
+      }
+      return Boolean(latest);
+    } catch {
+      setCloudSyncError('AI usage could not be checked. Please try again.');
+      return false;
+    }
+  }, [refreshUsage]);
 
   useEffect(() => {
     const participant = activeParticipant;
@@ -240,6 +319,7 @@ export default function App() {
   const studyHeader = progress.participant ? (
     <div className="mt-3 flex w-full flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
       <div className="flex flex-wrap justify-start gap-1.5" aria-label="Study navigation">
+        <UsageBar usage={usage} />
         <button
           type="button"
           onClick={() => setShowProfile(true)}
@@ -293,7 +373,7 @@ export default function App() {
   else if (!cloudHydrated) content = <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><section className="rounded-2xl bg-white px-10 py-8 text-center shadow-lg"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" /><p className="mt-4 font-medium text-gray-700">Restoring your study progress…</p></section></main>;
   else if (task && feedbackMode) {
     const workspaceId = `${task.id}.v${STUDY_TASK_SET_VERSION}`;
-    content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} onRequireParticipant={() => { setProfileNotice('Enter your name before running code.'); setShowProfile(true); }} />;
+    content = <Layout key={workspaceId} showRightPanel={showRightPanel} onTogglePanel={() => setShowRightPanel((value) => !value)} workspaceId={workspaceId} task={task} feedbackMode={feedbackMode} studyHeader={studyHeader} participant={progress.participant} onCheckUsage={checkUsageBeforeRun} onUsageRefresh={() => void refreshUsage().catch(() => undefined)} onRequireParticipant={() => { setProfileNotice('Enter your name before running code.'); setShowProfile(true); }} />;
   }
   else if (progress.currentScreen === 's1' || progress.currentScreen === 's2' || progress.currentScreen === 's3' || progress.currentScreen === 's4') content = <SurveyPage screen={progress.currentScreen} navigation={studyHeader} onComplete={() => { setProgress((current) => ({ ...current, completedSurveys: [...new Set([...current.completedSurveys, current.currentScreen])] })); continueStudy(); }} />;
   else content = <div className="min-h-screen bg-slate-50"><Header onTogglePanel={() => {}} onOpenSettings={() => {}} modelLabel="" isConfigured={false} showModelSettings={false} studyHeader={studyHeader} /><main className="flex items-center justify-center p-6 sm:p-16"><section className="w-full max-w-2xl rounded-2xl bg-white p-8 text-center shadow-lg sm:p-10"><div aria-hidden="true" className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">✓</div><p className="mt-5 text-sm font-semibold uppercase tracking-wider text-emerald-600">Study complete</p><h1 className="mt-2 text-3xl font-bold text-gray-900">Thank you for participating!</h1><div className="mx-auto mt-5 max-w-xl space-y-3 leading-7 text-gray-600"><p>You have completed the full study. Your extra-credit reward will be issued after participation records are reviewed.</p><p>If you chose to participate in a Zoom interview, we will contact you with the next steps.</p><p className="font-medium text-gray-700">You may now close this page.</p></div></section></main></div>;
@@ -304,7 +384,7 @@ export default function App() {
     setProfileNotice(undefined);
     setShowProfile(false);
   };
-  return <>{content}{showProfile && (progress.participant
+  return <>{content}{showUsageLimit && <UsageLimitDialog onClose={() => setShowUsageLimit(false)} />}{showProfile && (progress.participant
     ? <NameDialog participant={progress.participant} onClose={() => { setProfileNotice(undefined); setShowProfile(false); }} onSave={saveParticipant} />
     : <ProfileDialog notice={profileNotice} onSave={saveParticipant} />)}</>;
 }

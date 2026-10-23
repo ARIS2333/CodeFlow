@@ -19,6 +19,7 @@ from database import (
     InvalidStudentLogin,
     create_submission_record,
     participant_registration,
+    participant_usage_summary,
     participant_study_state,
     register_participant_record,
     save_participant_progress,
@@ -29,6 +30,7 @@ from database import (
 from model_config import (
     AuthenticationError,
     ModelConfigError,
+    ParticipantUsageLimitReached,
     ModelSpec,
     build_model,
     public_providers,
@@ -36,6 +38,7 @@ from model_config import (
 )
 from model_stream import create_stream_blueprint, stream_model_response
 from textual_feedback import render_textual_feedback_prompt
+from usage_tracking import usage_recorder
 
 load_dotenv()
 
@@ -228,6 +231,21 @@ def registered_participant_id(registration_id: str) -> UUID | None:
     except ValueError:
         return None
     return parsed if participant_registration(parsed) else None
+
+
+@app.route("/api/participants/<registration_id>/usage", methods=["GET"])
+def get_participant_usage(registration_id: str):
+    """Return the participant's recorded AI spend and study allowance."""
+    try:
+        parsed = registered_participant_id(registration_id)
+        if parsed is None:
+            return public_error("Participant account was not found", 404)
+        return jsonify(participant_usage_summary(parsed))
+    except DatabaseNotConfigured:
+        return public_error("Study database is unavailable", 503)
+    except Exception:
+        app.logger.exception("Usage lookup failed (request %s)", g.request_id)
+        return public_error("AI usage could not be loaded", 500)
 
 
 @app.route("/api/participants/<registration_id>/state", methods=["GET"])
@@ -463,6 +481,8 @@ def verify_config():
         spec = resolve_model_spec(body.get("modelConfig"))
     except AuthenticationError as error:
         return public_error(str(error), 401)
+    except ParticipantUsageLimitReached as error:
+        return public_error(str(error), 429)
     except ModelConfigError as error:
         return public_error(str(error), 400)
     except (BadRequest, json.JSONDecodeError):
@@ -504,6 +524,8 @@ def resource():
             spec = resolve_model_spec(body.get("modelConfig"))
         except AuthenticationError as error:
             return envelope_error(str(error), 401)
+        except ParticipantUsageLimitReached as error:
+            return envelope_error(str(error), 429)
         except ModelConfigError as error:
             return envelope_error(str(error), 400)
 
@@ -516,6 +538,15 @@ def resource():
             return model_failure(error)
 
         response_content = extract_response_text(response.content)
+        usage = asdict(response.usage) if response.usage else {}
+        recorder = usage_recorder(
+            body,
+            provider=spec.provider,
+            operation=str(body.get("usageOperation", "model request")),
+            request_id=g.request_id,
+        )
+        if recorder is not None:
+            recorder(model_name, usage)
 
         return jsonify({
             "statusCode": 200,
@@ -526,7 +557,7 @@ def resource():
             "body": json.dumps({
                 "response": response_content,
                 "model": model_name,
-                "usage": asdict(response.usage) if response.usage else {},
+                "usage": usage,
             }, ensure_ascii=False),
         })
 
@@ -575,6 +606,8 @@ def textual_feedback_stream_resource():
             spec = resolve_model_spec(body.get("modelConfig"))
         except AuthenticationError as error:
             return public_error(str(error), 401)
+        except ParticipantUsageLimitReached as error:
+            return public_error(str(error), 429)
         except ModelConfigError as error:
             return public_error(str(error), 400)
 
@@ -586,8 +619,14 @@ def textual_feedback_stream_resource():
         )
         messages = [UserMsg(name="user", content=prompt)]
         request_factory = lambda: build_model(spec, stream=True)
+        recorder = usage_recorder(
+            body,
+            provider=spec.provider,
+            operation="textual retrace" if previous_logic else "textual feedback",
+            request_id=g.request_id,
+        )
         return Response(
-            stream_model_response(request_factory, messages),
+            stream_model_response(request_factory, messages, on_usage=recorder),
             content_type="application/x-ndjson; charset=utf-8",
             headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
         )

@@ -332,6 +332,23 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), saved)
 
+    def test_participant_usage_returns_recorded_spend_and_limit(self):
+        registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
+        summary = {
+            "spentUsd": 0.375,
+            "limitUsd": 1.0,
+            "remainingUsd": 0.625,
+            "exhausted": False,
+        }
+        with (
+            patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
+            patch.object(backend_app, "participant_usage_summary", return_value=summary),
+        ):
+            response = self.client.get(f"/api/participants/{registration_id}/usage")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), summary)
+
     def test_participant_progress_is_validated_and_saved(self):
         registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
         with (
@@ -406,7 +423,7 @@ class AppTests(unittest.TestCase):
     def test_textual_feedback_stream_uses_server_owned_prompt(self):
         captured = {}
 
-        def fake_stream(factory, messages):
+        def fake_stream(factory, messages, **kwargs):
             captured["messages"] = messages
             yield '{"type":"start"}\n'
             yield '{"type":"delta","text":"## Input used"}\n'
