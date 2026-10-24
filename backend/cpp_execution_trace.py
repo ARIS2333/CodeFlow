@@ -26,8 +26,14 @@ from code_analysis import _language, analyze_code
 MAX_TRACE_STEPS = 120
 TRACE_PREFIX = "__CFTRACE__"
 RESULT_PREFIX = "__CFRESULT__"
-COMPILE_TIMEOUT_SECONDS = 8
-RUN_TIMEOUT_SECONDS = 2
+# Render's smallest instances can spend several seconds starting g++ and
+# parsing the injected support templates. Keep this separate from the much
+# shorter syntax-check timeout used by code_analysis.py: a trace compilation
+# builds a complete executable for both visible sides.
+COMPILE_TIMEOUT_SECONDS = float(
+    os.getenv("CPP_TRACE_COMPILE_TIMEOUT_SECONDS", "30")
+)
+RUN_TIMEOUT_SECONDS = float(os.getenv("CPP_TRACE_RUN_TIMEOUT_SECONDS", "3"))
 
 
 class CppTraceError(RuntimeError):

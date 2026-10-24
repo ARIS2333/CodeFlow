@@ -39,6 +39,12 @@ services:
         value: "5"
       - key: CPP_COMPILE_QUEUE_SECONDS
         value: "10"
+      # Instrumented trace builds are larger than syntax-only compiler checks.
+      # Two programs are compiled sequentially within the frontend's 90s wait.
+      - key: CPP_TRACE_COMPILE_TIMEOUT_SECONDS
+        value: "30"
+      - key: CPP_TRACE_RUN_TIMEOUT_SECONDS
+        value: "3"
 
   - type: web
     name: codeflow-frontend
