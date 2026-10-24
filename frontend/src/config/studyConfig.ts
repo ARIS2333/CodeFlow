@@ -14,9 +14,9 @@ export interface StudyTask {
 
 /** Bump only when the actual study questions change, so stale drafts are not
  * restored into a different task while drafts for this task set remain cached. */
-export const STUDY_TASK_SET_VERSION = 3;
+export const STUDY_TASK_SET_VERSION = 4;
 
-export const STUDY_TASKS: StudyTask[] = [
+export const STUDY_TASKS: StudyTask[] = ([
   {
     id: 'q1',
     number: 1,
@@ -38,8 +38,8 @@ export const STUDY_TASKS: StudyTask[] = [
     starterCode: `bool isNumUnique(int n) {\n    // Write your solution here.\n\n}`,
   },
   {
-    id: 'q2',
-    number: 2,
+    id: 'q3',
+    number: 3,
     kind: 'write',
     problem: {
       title: 'N-Sum: Two Sum',
@@ -58,8 +58,8 @@ export const STUDY_TASKS: StudyTask[] = [
     starterCode: `#include <vector>\n#include <unordered_map>\n#include <utility>\nusing namespace std;\n\npair<int, int> two_sum(vector<int>& arr, int target) {\n    // Write your solution here.\n\n}`,
   },
   {
-    id: 'q3',
-    number: 3,
+    id: 'q4',
+    number: 4,
     kind: 'write',
     problem: {
       title: 'Find Digits',
@@ -78,8 +78,8 @@ export const STUDY_TASKS: StudyTask[] = [
     starterCode: `#include <string>\n#include <map>\n\nstd::string findTheDigits(std::string x, std::string y) {\n    // Write your solution here.\n\n}`,
   },
   {
-    id: 'q4',
-    number: 4,
+    id: 'q2',
+    number: 2,
     kind: 'write',
     problem: {
       title: 'Hashing Mode',
@@ -97,7 +97,7 @@ export const STUDY_TASKS: StudyTask[] = [
     },
     starterCode: `#include <iostream>\n#include <vector>\n#include <unordered_map>\n#include <climits>\n\nusing namespace std;\n\nint findMode(vector<int>& nums) {\n    // Write your solution here.\n\n}`,
   },
-];
+] satisfies StudyTask[]).sort((left, right) => left.number - right.number);
 
 export const feedbackModeFor = (group: StudyGroup, taskId: StudyTaskId): FeedbackMode => {
   const firstStage = taskId === 'q1' || taskId === 'q2';

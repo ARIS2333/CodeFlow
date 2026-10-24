@@ -1,4 +1,6 @@
 import { systemPrompt_TraceExecution } from '../config/systemPrompt_TraceExecution.ts';
+import { CPP_TRACE_URL } from '../config/apiConfig.ts';
+import { makeApiRequestWithRetry } from './llmClient.ts';
 import { requestJsonStream } from './llmStreamClient.ts';
 import type { ModelConfigPayload } from './modelSettings.ts';
 import {
@@ -59,7 +61,51 @@ export const requestExecutionTrace = async (
   let progress: TraceProgress = { attempt: 1 };
   const validate = createTraceValidator(request.graphs);
 
-  return requestJsonStream({
+  // The fixed C++ study tasks can be executed with deterministic source
+  // instrumentation. Keep the model path below as a bounded fallback for a
+  // source construct the first tracer version does not support.
+  if (request.language === 'cpp' && request.graphs.recommendedCode?.trim()) {
+    try {
+      const response = await makeApiRequestWithRetry({
+        url: CPP_TRACE_URL,
+        options: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentCode: request.code,
+            recommendedCode: request.graphs.recommendedCode,
+            input: request.testCase.input,
+            ...('registrationId' in options.modelConfig
+              ? { registrationId: options.modelConfig.registrationId }
+              : {}),
+          }),
+          signal: options.signal,
+        },
+      }, 0, 0, 15_000);
+      const payload = await response.json() as unknown;
+      const result = validate(payload);
+      if (result.ok) {
+        const realTrace: ExecutionTrace = {
+          ...result.value,
+          source: 'instrumented-cpp',
+        };
+        options.onProgress?.({
+          attempt: 1,
+          student: realTrace.student,
+          llm: realTrace.llm,
+        });
+        return realTrace;
+      }
+    } catch (error: unknown) {
+      options.signal?.throwIfAborted();
+      // Unsupported instrumentation and transient execution failures fall
+      // through to the existing trace generator. The UI remains available,
+      // while successful real traces consume no model tokens.
+      console.info('Real C++ trace unavailable; using model fallback.', error);
+    }
+  }
+
+  const simulated = await requestJsonStream({
     modelConfig: options.modelConfig,
     systemPrompt: systemPrompt_TraceExecution,
     message: JSON.stringify({
@@ -105,4 +151,5 @@ export const requestExecutionTrace = async (
     label: 'execution trace',
     maxAttempts: 2,
   });
+  return { ...simulated, source: 'model-simulated' };
 };

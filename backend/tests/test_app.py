@@ -130,6 +130,32 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private parser detail", response.get_data(as_text=True))
 
+    def test_native_cpp_trace_is_disabled_by_default(self):
+        with patch.dict("os.environ", {}, clear=True):
+            response = self.client.post("/api/trace-cpp", json={})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("not enabled", response.get_json()["error"])
+
+    def test_native_cpp_trace_requires_a_registered_student_in_study_mode(self):
+        with (
+            patch.dict("os.environ", {
+                "ENABLE_NATIVE_CPP_TRACE": "true",
+                "DATABASE_URL": "postgresql://study",
+            }),
+            patch.object(backend_app, "participant_registration", return_value=None),
+            patch.object(backend_app, "trace_pair") as trace_pair,
+        ):
+            response = self.client.post("/api/trace-cpp", json={
+                "registrationId": "85d87357-c214-42e7-a4ed-741e374063a6",
+                "studentCode": "int f() { return 1; }",
+                "recommendedCode": "int f() { return 1; }",
+                "input": "f()",
+            })
+
+        self.assertEqual(response.status_code, 401)
+        trace_pair.assert_not_called()
+
     def test_submission_is_created_with_registered_student(self):
         created = {
             "submissionId": "85d87357-c214-42e7-a4ed-741e374063a6",

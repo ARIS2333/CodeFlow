@@ -13,6 +13,7 @@ from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 from agentscope.message import SystemMsg, UserMsg
 
 from code_analysis import CodeAnalysisError, analyze_code
+from cpp_execution_trace import CppTraceError, trace_pair
 from database import (
     DatabaseNotConfigured,
     DuplicateStudentName,
@@ -465,6 +466,47 @@ def analyze_code_resource():
     except Exception:
         app.logger.exception("Code analysis failed (request %s)", g.request_id)
         return public_error("Code analysis failed", 500)
+
+
+@app.route("/api/trace-cpp", methods=["POST"])
+def trace_cpp_resource():
+    """Return a real, instrumented execution trace for the fixed C++ tasks."""
+    try:
+        if os.getenv("ENABLE_NATIVE_CPP_TRACE", "").strip().lower() not in {
+            "1", "true", "yes",
+        }:
+            return public_error("Native C++ tracing is not enabled", 503)
+        body = request.get_json(force=True, silent=False)
+        if not isinstance(body, dict):
+            return public_error("Request body must be a JSON object", 400)
+        # Native execution is more sensitive than parsing. Study deployments
+        # must bind it to a registered participant rather than expose a public
+        # compile-and-run endpoint.
+        if os.getenv("DATABASE_URL", "").strip():
+            if resolve_registration(body.get("registrationId")) is None:
+                return public_error("Invalid study registration", 401)
+        student_code = body.get("studentCode")
+        recommended_code = body.get("recommendedCode")
+        trace_input = body.get("input")
+        if not all(isinstance(value, str) and value.strip() for value in (
+            student_code, recommended_code, trace_input,
+        )):
+            return public_error(
+                "studentCode, recommendedCode, and input are required", 400
+            )
+        return jsonify(trace_pair(student_code, recommended_code, trace_input))
+    except CppTraceError as error:
+        # A 422 tells the frontend that deterministic tracing was attempted but
+        # this source shape is outside the bounded tracer. It may use the legacy
+        # model trace without pretending the instrumented run succeeded.
+        return public_error(str(error), 422)
+    except (BadRequest, json.JSONDecodeError):
+        return public_error("Invalid JSON in request body", 400)
+    except RequestEntityTooLarge:
+        return public_error("Request is too large", 413)
+    except Exception:
+        app.logger.exception("C++ execution trace failed (request %s)", g.request_id)
+        return public_error("C++ execution trace failed", 500)
 
 
 @app.route("/api/providers", methods=["GET"])

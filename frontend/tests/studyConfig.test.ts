@@ -8,9 +8,9 @@ test('both groups see the same four C++ tasks in the same order', () => {
   assert.deepEqual(STUDY_TASKS.map((task) => task.kind), ['write', 'write', 'write', 'write']);
   assert.deepEqual(
     STUDY_TASKS.map((task) => task.problem.title),
-    ['Unique Number', 'N-Sum: Two Sum', 'Find Digits', 'Hashing Mode'],
+    ['Unique Number', 'Hashing Mode', 'N-Sum: Two Sum', 'Find Digits'],
   );
-  assert.equal(STUDY_TASK_SET_VERSION, 3);
+  assert.equal(STUDY_TASK_SET_VERSION, 4);
   STUDY_TASKS.forEach((task) => {
     assert.match(task.starterCode, /Write your solution here\./);
   });

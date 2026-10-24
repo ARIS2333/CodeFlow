@@ -214,7 +214,11 @@ export const requestReliableFlowchart = async (
       previousAttemptDiagnostics = recommendedResult.errors;
       continue;
     }
-    const flowchart: FlowchartData = { student, llm: recommendedResult.value };
+    const flowchart: FlowchartData = {
+      student,
+      llm: recommendedResult.value,
+      recommendedCode: recommendation.recommendedCode,
+    };
     options.onProgress?.({ ...progress, llm: recommendedResult.value });
     return flowchart;
   }
