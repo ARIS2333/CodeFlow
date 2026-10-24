@@ -44,6 +44,7 @@ import {
 import {
   requestCodeAnalysis,
   compileDiagnosticFor,
+  multipleFunctionDefinitionMessage,
   syntaxDiagnosticFor,
   type CodeAnalysis,
   type SupportedLanguage,
@@ -515,9 +516,12 @@ export const MainContent = ({
 
     void (async () => {
       try {
+        const analyzed = await codeAnalysis;
+        const functionDefinitionError = multipleFunctionDefinitionMessage(analyzed);
+        if (functionDefinitionError) throw new Error(functionDefinitionError);
         const graphs = await requestReliableFlowchart(context.request, {
           modelConfig: modelConfigForUsage(settings),
-          codeAnalysis,
+          codeAnalysis: Promise.resolve(analyzed),
           signal: controller.signal,
           onGenerationReady: (nextGeneration) => {
             if (controller.signal.aborted) return;
@@ -602,30 +606,35 @@ export const MainContent = ({
     };
     activeRun.current = textualRun;
     onTextualFeedbackStateChange({ status: 'loading', markdown: '', requestedInput: input });
-    void requestTextualFeedback(
-      problemDetails,
-      code,
-      modelConfigForUsage(settings),
-      (markdown) => {
-        streamedMarkdown = markdown;
+    void (async () => {
+      const analysis = await requestCodeAnalysis(language, code, controller.signal);
+      const functionDefinitionError = multipleFunctionDefinitionMessage(analysis);
+      if (functionDefinitionError) throw new Error(functionDefinitionError);
+      return requestTextualFeedback(
+        problemDetails,
+        code,
+        modelConfigForUsage(settings),
+        (markdown) => {
+          streamedMarkdown = markdown;
+          if (!controller.signal.aborted) {
+            onTextualFeedbackStateChange({ status: 'loading', markdown, requestedInput: input });
+          }
+        },
+        input,
+        textualFeedbackState.status === 'idle' ? undefined : textualFeedbackState.markdown,
+        controller.signal,
+      );
+    })().then((markdown) => {
         if (!controller.signal.aborted) {
-          onTextualFeedbackStateChange({ status: 'loading', markdown, requestedInput: input });
+          onTextualFeedbackStateChange({ status: 'success', markdown, requestedInput: input });
         }
-      },
-      input,
-      textualFeedbackState.status === 'idle' ? undefined : textualFeedbackState.markdown,
-      controller.signal,
-    ).then((markdown) => {
-      if (!controller.signal.aborted) {
-        onTextualFeedbackStateChange({ status: 'success', markdown, requestedInput: input });
-      }
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) onTextualFeedbackStateChange({
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Textual feedback failed',
-        requestedInput: input,
-        ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
-      });
+        if (!controller.signal.aborted) onTextualFeedbackStateChange({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Textual feedback failed',
+          requestedInput: input,
+          ...(streamedMarkdown ? { markdown: streamedMarkdown } : {}),
+        });
     }).finally(() => {
       running = false;
       if (activeRun.current === textualRun) activeRun.current = null;
@@ -690,8 +699,10 @@ export const MainContent = ({
       setIsSubmissionSaving(false);
     }
 
-    // Evaluation remains independent. Flowcharts use parser grounding for clean
-    // source, or source-only inference when parsing reports syntax recovery.
+    // Analyze before either feedback condition starts. The study deliberately
+    // accepts one function per task; rejecting helpers here prevents the CFG
+    // from silently choosing one function and prevents both feedback conditions
+    // from spending tokens on an invalid submission shape.
     const requestPayload = {
       practice: {
         title: problemDetails.title,
@@ -707,7 +718,50 @@ export const MainContent = ({
       codeAnalysis?: CodeAnalysis;
     } = { request: requestPayload };
     flowchartRetryContext.current = retryContext;
-    let codeAnalysisPromise: Promise<CodeAnalysis> | null = null;
+    const preflightController = new AbortController();
+    let preflightActive = true;
+    const preflightRun: AnalysisRun = {
+      isRunning: () => preflightActive && !preflightController.signal.aborted,
+      cancel: () => {
+        preflightActive = false;
+        preflightController.abort();
+      },
+    };
+    activeRun.current = preflightRun;
+    setEvaluationState({ status: 'loading' });
+    let initialCodeAnalysis: CodeAnalysis;
+    try {
+      initialCodeAnalysis = await requestCodeAnalysis(
+        language,
+        code,
+        preflightController.signal,
+      );
+      retryContext.codeAnalysis = initialCodeAnalysis;
+    } catch (error: unknown) {
+      if (!preflightController.signal.aborted) {
+        setEvaluationState({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Code analysis failed.',
+        });
+      }
+      return;
+    } finally {
+      preflightActive = false;
+      if (activeRun.current === preflightRun) activeRun.current = null;
+    }
+    if (preflightController.signal.aborted) return;
+    const functionDefinitionError = multipleFunctionDefinitionMessage(initialCodeAnalysis);
+    if (functionDefinitionError) {
+      setEvaluationState({ status: 'error', error: functionDefinitionError });
+      if (feedbackMode === 'textual') {
+        onTextualFeedbackStateChange({ status: 'error', error: functionDefinitionError });
+      }
+      return;
+    }
+
+    // Evaluation remains independent. Flowcharts use parser grounding for clean
+    // source, or source-only inference when parsing reports syntax recovery.
+    let codeAnalysisPromise: Promise<CodeAnalysis> | null = Promise.resolve(initialCodeAnalysis);
     const getCodeAnalysis = (signal: AbortSignal) => {
       codeAnalysisPromise ??= requestCodeAnalysis(language, code, signal).then((analysis) => {
         retryContext.codeAnalysis = analysis;

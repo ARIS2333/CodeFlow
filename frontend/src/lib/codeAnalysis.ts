@@ -82,6 +82,29 @@ export interface SyntaxDiagnostic {
 
 export type CompileDiagnostic = SyntaxDiagnostic;
 
+/**
+ * Study tasks accept one submitted function only. Tree-sitter reports actual
+ * definitions (not calls or prototypes), so this gate is deterministic and
+ * does not ask the model to interpret whether a helper exists.
+ */
+export const multipleFunctionDefinitionMessage = (
+  analysis: CodeAnalysis,
+): string | undefined => {
+  if (analysis.functions.length <= 1) return undefined;
+  const names = analysis.functions
+    .map(({ name }) => name.trim())
+    .filter(Boolean);
+  const uniqueNames = [...new Set(names)];
+  const detail = uniqueNames.length
+    ? ` Found ${analysis.functions.length}: ${uniqueNames.join(', ')}.`
+    : ` Found ${analysis.functions.length} function definitions.`;
+  return (
+    'Only one function definition is allowed for this exercise.'
+    + detail
+    + ' Remove helper functions and keep only the function required by the problem.'
+  );
+};
+
 /** Pick the first source-backed compiler diagnostic for the student UI. */
 export const compileDiagnosticFor = (
   analysis?: CodeAnalysis,
