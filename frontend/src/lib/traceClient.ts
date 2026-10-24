@@ -39,6 +39,8 @@ export interface TraceProgress {
   llm?: TraceSide;
 }
 
+const CPP_TRACE_TIMEOUT_MS = 90_000;
+
 /** Send the drawn graph only: anchors and syntax marks are not part of a run. */
 const compactSide = (side: FlowchartSide) => ({
   nodes: side.nodes.map((node) => ({ id: node.id, kind: node.kind, label: node.data.label })),
@@ -61,10 +63,16 @@ export const requestExecutionTrace = async (
   let progress: TraceProgress = { attempt: 1 };
   const validate = createTraceValidator(request.graphs);
 
-  // The fixed C++ study tasks can be executed with deterministic source
-  // instrumentation. Keep the model path below as a bounded fallback for a
-  // source construct the first tracer version does not support.
-  if (request.language === 'cpp' && request.graphs.recommendedCode?.trim()) {
+  // C++ traces shown in the study must come from deterministic source
+  // instrumentation. Never silently replace a failed real run with a model
+  // simulation: doing so would mix two different trace modalities and spend
+  // model quota under the same UI label.
+  if (request.language === 'cpp') {
+    if (!request.graphs.recommendedCode?.trim()) {
+      throw new Error(
+        'Real C++ execution trace is unavailable because the recommended code is missing.'
+      );
+    }
     try {
       const response = await makeApiRequestWithRetry({
         url: CPP_TRACE_URL,
@@ -81,7 +89,7 @@ export const requestExecutionTrace = async (
           }),
           signal: options.signal,
         },
-      }, 0, 0, 15_000);
+      }, 0, 0, CPP_TRACE_TIMEOUT_MS);
       const payload = await response.json() as unknown;
       const result = validate(payload);
       if (result.ok) {
@@ -96,12 +104,11 @@ export const requestExecutionTrace = async (
         });
         return realTrace;
       }
+      throw new Error(result.errors.join(' '));
     } catch (error: unknown) {
       options.signal?.throwIfAborted();
-      // Unsupported instrumentation and transient execution failures fall
-      // through to the existing trace generator. The UI remains available,
-      // while successful real traces consume no model tokens.
-      console.info('Real C++ trace unavailable; using model fallback.', error);
+      const detail = error instanceof Error ? error.message : 'The request failed.';
+      throw new Error(`Real C++ execution trace is unavailable: ${detail}`);
     }
   }
 
