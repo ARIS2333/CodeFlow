@@ -49,6 +49,8 @@ export interface TraceSide {
 export interface ExecutionTrace {
   student: TraceSide;
   llm: TraceSide;
+  /** Stored with the workspace so researchers can audit how the trace arose. */
+  source?: 'instrumented-cpp' | 'model-simulated';
 }
 
 export type TraceSideKey = keyof ExecutionTrace;

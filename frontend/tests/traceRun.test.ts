@@ -10,6 +10,7 @@ import type { TestResult } from '../src/lib/llmSchemas.ts';
 import { traceGraphs, traceReply } from './traceFixtures.ts';
 import { controlledStream, streamResponse } from './streamFixtures.ts';
 import { analysisStub } from './flowchartFixtures.ts';
+import { CPP_TRACE_URL } from '../src/config/apiConfig.ts';
 
 /** These tests never reach a provider; the backend contract just requires a
  * model to be named on every LLM request. */
@@ -132,6 +133,38 @@ test('a normally completed case is traced when another case raises', () => {
 test('an all-passing run still gets a trace, as a confirmation of the path taken', () => {
   const chosen = selectTraceCase([result('f(1, 2)', '✅ 3'), result('f(4, 5)', '✅ 9')]);
   assert.equal(chosen?.input, 'f(1, 2)');
+});
+
+test('C++ uses a real instrumented trace before considering the model fallback', async (t) => {
+  const graphs = traceGraphs();
+  graphs.recommendedCode = 'int f(int a, int b) { return a >= b ? a : b; }';
+  const realTrace = traceReply();
+  const urls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL, init?: RequestInit) => {
+    urls.push(String(input));
+    assert.equal(String(input), CPP_TRACE_URL);
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.registrationId, 'participant-1');
+    assert.equal(body.recommendedCode, graphs.recommendedCode);
+    return Response.json({ ...realTrace, source: 'instrumented-cpp' });
+  });
+
+  const states: TraceState[] = [];
+  await runTrace({
+    practice: { title: 'Sum', description: '', examples: [], constraints: [] },
+    language: 'cpp',
+    code: 'int f(int a, int b) { return a > b ? a : b; }',
+    graphs,
+    testCase: { input: 'f(3, 3)', expected: '3', observedOutput: '❌ 3' },
+  }, (state) => states.push(state), {
+    registrationId: 'participant-1',
+  });
+
+  assert.deepEqual(urls, [CPP_TRACE_URL]);
+  const final = states.at(-1);
+  assert.equal(final?.status, 'success');
+  assert.equal(final?.status === 'success' && final.data.student.finalOutput, '3');
+  assert.equal(final?.status === 'success' && final.data.source, 'instrumented-cpp');
 });
 
 test('each side is published as soon as it arrives, without waiting for the other', async (t) => {

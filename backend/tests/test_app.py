@@ -128,6 +128,12 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertNotIn("private parser detail", response.get_data(as_text=True))
 
+    def test_native_cpp_trace_is_disabled_by_default(self):
+        with patch.dict("os.environ", {}, clear=True):
+            response = self.client.post("/api/trace-cpp", json={})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("not enabled", response.get_json()["error"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,6 +52,7 @@ test('student flow is deterministic and displayed before the recommendation fini
   });
   assert.deepEqual(result.student, sampleGraph(true).student);
   assert.deepEqual(result.llm, sampleGraph().llm);
+  assert.equal(result.recommendedCode, request.code);
   assert.ok(progress[0].student);
   assert.equal(progress[0].llm, undefined);
   assert.ok(progress.at(-1)?.llm);

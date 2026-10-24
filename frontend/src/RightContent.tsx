@@ -9,7 +9,7 @@ import type { TraceHighlight } from './lib/traceHighlight';
 import type { TraceRequest, TraceState } from './lib/traceRun';
 import type { FlowchartNode, FlowchartEdge, FlowchartSide } from './lib/llmSchemas';
 import type { DiagramNode, DiagramEdge } from './lib/flowchartLayout';
-import { traceVariableChanges } from './lib/tracePresentation';
+import { orderedTraceVariables, traceVariableChanges } from './lib/tracePresentation';
 
 interface RightContentProps {
   flowchartState: FlowchartState;
@@ -151,6 +151,7 @@ function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: numbe
   const reached = trace?.steps.length ? Math.min(step, trace.steps.length - 1) : -1;
   const current = reached >= 0 ? trace!.steps[reached] : undefined;
   const changes = trace && reached >= 0 ? traceVariableChanges(trace, reached) : [];
+  const variables = trace && reached >= 0 ? orderedTraceVariables(trace, reached) : [];
 
   return (
     <section className="min-w-0 flex-1">
@@ -163,12 +164,15 @@ function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: numbe
             {changes.length > 0 ? (
               <dl className="mt-1 flex flex-wrap gap-2 font-mono text-xs">
                 {changes.map((change) => (
-                  <div key={change.name} className="flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-emerald-900">
+                  <div key={change.name} className="flex min-w-0 items-center gap-1.5 rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-emerald-950">
+                    <span className="rounded bg-white/80 px-1 py-0.5 font-sans text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                      {change.kind === 'new' ? 'New' : 'Changed'}
+                    </span>
                     <dt className="font-semibold">{change.name}</dt>
-                    <dd>
+                    <dd className="min-w-0 break-all">
                       {change.previous !== undefined
                         ? `${change.previous} → ${change.value}`
-                        : `= ${change.value}`}
+                        : `— → ${change.value}`}
                     </dd>
                   </div>
                 ))}
@@ -179,16 +183,19 @@ function TraceStepDetails({ trace, step = 0 }: { trace?: TraceSide; step?: numbe
               </p>
             )}
 
-            {current.variables.length > 0 && (
+            {variables.length > 0 && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-gray-700">
                 <p className="font-semibold text-gray-700">All variables</p>
                 <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2 font-mono">
-                  {current.variables.map((variable) => (
+                  {variables.map((variable) => (
                     <div key={variable.name} className="min-w-0 rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm">
                       <dt className="truncate text-[10px] font-semibold tracking-wide text-slate-500">
                         {variable.name}
                       </dt>
-                      <dd className="mt-0.5 break-words text-sm font-semibold text-slate-900">
+                      <dd
+                        className="mt-0.5 max-h-20 overflow-auto whitespace-pre-wrap break-words text-sm font-semibold text-slate-900"
+                        title={variable.value}
+                      >
                         {variable.value}
                       </dd>
                     </div>

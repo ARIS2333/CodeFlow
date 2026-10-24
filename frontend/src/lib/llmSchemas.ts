@@ -51,6 +51,8 @@ export interface FlowchartSide {
 export interface FlowchartData {
   student: FlowchartSide;
   llm: FlowchartSide;
+  /** Corrected source retained only so both visible traces can be truly run. */
+  recommendedCode?: string;
 }
 
 export interface Example {
