@@ -228,6 +228,20 @@ int sumPositive(const std::vector<int>& values) {
         self.assertEqual(result["compileIssues"], [])
         self.assertEqual(result["compilerStatus"], "passed")
 
+    def test_cpp_reports_multiple_definitions_but_not_a_prototype(self):
+        result = analyze_code(
+            "cpp",
+            """int helper(int n);
+int helper(int n) { return n + 1; }
+int required(int n) { return helper(n); }
+""",
+        )
+
+        self.assertEqual(
+            [function["name"] for function in result["functions"]],
+            ["helper", "required"],
+        )
+
     def test_cpp_recovers_a_missing_parenthesis(self):
         result = analyze_code(
             "cpp",
