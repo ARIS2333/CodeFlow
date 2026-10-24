@@ -135,7 +135,7 @@ test('an all-passing run still gets a trace, as a confirmation of the path taken
   assert.equal(chosen?.input, 'f(1, 2)');
 });
 
-test('C++ uses a real instrumented trace before considering the model fallback', async (t) => {
+test('C++ uses a real instrumented trace without calling the model', async (t) => {
   const graphs = traceGraphs();
   graphs.recommendedCode = 'int f(int a, int b) { return a >= b ? a : b; }';
   const realTrace = traceReply();
@@ -165,6 +165,38 @@ test('C++ uses a real instrumented trace before considering the model fallback',
   assert.equal(final?.status, 'success');
   assert.equal(final?.status === 'success' && final.data.student.finalOutput, '3');
   assert.equal(final?.status === 'success' && final.data.source, 'instrumented-cpp');
+});
+
+test('a failed real C++ trace is reported without falling back to the model', async (t) => {
+  const graphs = traceGraphs();
+  graphs.recommendedCode = 'int f(int a, int b) { return a >= b ? a : b; }';
+  const urls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL) => {
+    urls.push(String(input));
+    return Response.json(
+      { error: 'Instrumentation could not compile this submission.' },
+      { status: 422 },
+    );
+  });
+
+  const states: TraceState[] = [];
+  await runTrace({
+    practice: { title: 'Sum', description: '', examples: [], constraints: [] },
+    language: 'cpp',
+    code: 'int f(int a, int b) { return a > b ? a : b; }',
+    graphs,
+    testCase: { input: 'f(3, 3)', expected: '3', observedOutput: '❌ 3' },
+  }, (state) => states.push(state), {
+    registrationId: 'participant-1',
+  });
+
+  assert.deepEqual(urls, [CPP_TRACE_URL]);
+  const final = states.at(-1);
+  assert.equal(final?.status, 'error');
+  assert.match(
+    final?.status === 'error' ? final.error : '',
+    /Real C\+\+ execution trace is unavailable: Instrumentation could not compile/,
+  );
 });
 
 test('each side is published as soon as it arrives, without waiting for the other', async (t) => {
