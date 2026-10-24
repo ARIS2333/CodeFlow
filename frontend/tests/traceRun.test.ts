@@ -167,16 +167,22 @@ test('C++ uses a real instrumented trace without calling the model', async (t) =
   assert.equal(final?.status === 'success' && final.data.source, 'instrumented-cpp');
 });
 
-test('a failed real C++ trace is reported without falling back to the model', async (t) => {
+test('a failed real C++ trace falls back to the model', async (t) => {
   const graphs = traceGraphs();
   graphs.recommendedCode = 'int f(int a, int b) { return a >= b ? a : b; }';
   const urls: string[] = [];
   t.mock.method(globalThis, 'fetch', async (input: string | URL) => {
     urls.push(String(input));
-    return Response.json(
-      { error: 'Instrumentation could not compile this submission.' },
-      { status: 422 },
-    );
+    if (String(input) === CPP_TRACE_URL) {
+      return Response.json(
+        { error: 'Instrumentation could not compile this submission.' },
+        { status: 422 },
+      );
+    }
+    return streamResponse([
+      { type: 'delta', text: JSON.stringify(traceReply()) },
+      { type: 'done' },
+    ]);
   });
 
   const states: TraceState[] = [];
@@ -190,13 +196,11 @@ test('a failed real C++ trace is reported without falling back to the model', as
     registrationId: 'participant-1',
   });
 
-  assert.deepEqual(urls, [CPP_TRACE_URL]);
+  assert.equal(urls[0], CPP_TRACE_URL);
+  assert.equal(urls.length, 2);
   const final = states.at(-1);
-  assert.equal(final?.status, 'error');
-  assert.match(
-    final?.status === 'error' ? final.error : '',
-    /Real C\+\+ execution trace is unavailable: Instrumentation could not compile/,
-  );
+  assert.equal(final?.status, 'success');
+  assert.equal(final?.status === 'success' && final.data.source, 'model-simulated');
 });
 
 test('each side is published as soon as it arrives, without waiting for the other', async (t) => {

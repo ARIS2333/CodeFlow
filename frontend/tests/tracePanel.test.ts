@@ -124,7 +124,9 @@ test('an untraceable run explains itself in its own area, without redrawing the 
 
 test('a trace still being generated says so, rather than showing a silent empty area', () => {
   const { below } = split(render({ status: 'loading', request: traceRequest }));
-  assert.match(below, /The AI is working through this input step by step/);
+  assert.match(below, /Still generating the execution trace/);
+  assert.match(below, /review the available steps while it finishes/);
+  assert.match(below, /TraceFlow is working through this input step by step/);
   assert.doesNotMatch(below, /Student&#x27;s Run/, 'no player until there are steps to play');
 });
 
