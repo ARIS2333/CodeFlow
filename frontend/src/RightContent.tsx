@@ -265,7 +265,11 @@ function RightContent({
           <p className="mt-1">The previous flowcharts and trace are still available.</p>
         </div>
       )}
-      <FlowchartDiagnostics generation={generation} evaluationState={evaluationState} />
+      <FlowchartDiagnostics
+        generation={generation}
+        evaluationState={evaluationState}
+        analysis={flowchartState.status !== 'idle' ? flowchartState.codeAnalysis : undefined}
+      />
 
       {flowchartState.status === 'error' && (
         <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">

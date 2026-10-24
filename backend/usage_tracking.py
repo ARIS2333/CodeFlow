@@ -15,6 +15,7 @@ ALLOWED_OPERATIONS = {
     "feedback",
     "grounded flowchart",
     "model-inferred flowchart",
+    "recommended code",
     "execution trace",
     "textual feedback",
     "textual retrace",

@@ -40,8 +40,18 @@ export interface CompileIssue extends SourcePosition {
   expected?: string;
 }
 
+export interface AnalyzedFlowchartSide {
+  nodes: Array<{
+    id: string;
+    kind: 'start' | 'condition' | 'process' | 'terminal' | 'end';
+    sourceAnchors?: string[];
+    data: { label: string };
+  }>;
+  edges: Array<{ id: string; source: string; target: string; label?: string }>;
+}
+
 export interface CodeAnalysis {
-  analysisVersion: 1;
+  analysisVersion: 2;
   language: SupportedLanguage;
   parser: 'tree-sitter';
   parseStatus: 'clean' | 'recovered';
@@ -59,11 +69,15 @@ export interface CodeAnalysis {
   /** Result of the real C++ compiler gate; other languages use `not-run`. */
   compilerStatus?: 'not-run' | 'passed' | 'failed' | 'unavailable';
   factsTruncated: boolean;
+  /** Deterministic CFG produced from the same Tree-sitter facts. */
+  studentFlowchart: AnalyzedFlowchartSide;
 }
 
 export interface SyntaxDiagnostic {
   line: number;
+  column: number;
   message: string;
+  additionalCount: number;
 }
 
 export type CompileDiagnostic = SyntaxDiagnostic;
@@ -76,7 +90,9 @@ export const compileDiagnosticFor = (
   if (!issue) return undefined;
   return {
     line: issue.startLine,
+    column: issue.startColumn,
     message: issue.text.trim() || 'The code did not compile.',
+    additionalCount: Math.max(0, (analysis?.compileIssues.length ?? 0) - 1),
   };
 };
 
@@ -90,12 +106,27 @@ export const syntaxDiagnosticFor = (
   ) ?? analysis.syntaxIssues[0];
 
   if (issue.kind === 'python-syntax-error' && issue.text.trim()) {
-    return { line: issue.startLine, message: issue.text.trim() };
+    return {
+      line: issue.startLine,
+      column: issue.startColumn,
+      message: issue.text.trim(),
+      additionalCount: Math.max(0, analysis.syntaxIssues.length - 1),
+    };
   }
   if (issue.kind === 'missing-token' && issue.expected) {
-    return { line: issue.startLine, message: `Expected ${issue.expected}.` };
+    return {
+      line: issue.startLine,
+      column: issue.startColumn,
+      message: `Expected ${issue.expected}.`,
+      additionalCount: Math.max(0, analysis.syntaxIssues.length - 1),
+    };
   }
-  return { line: issue.startLine, message: 'Invalid or incomplete syntax.' };
+  return {
+    line: issue.startLine,
+    column: issue.startColumn,
+    message: 'Invalid or incomplete syntax.',
+    additionalCount: Math.max(0, analysis.syntaxIssues.length - 1),
+  };
 };
 
 const asFiniteNumber = (value: unknown): number | undefined =>
@@ -135,7 +166,7 @@ const validateAnalysis = (
     throw new Error(`code analysis: ${input.error}${details}`);
   }
   if (
-    input.analysisVersion !== 1 ||
+    input.analysisVersion !== 2 ||
     input.language !== expectedLanguage ||
     input.parser !== 'tree-sitter' ||
     (input.parseStatus !== 'clean' && input.parseStatus !== 'recovered') ||
@@ -144,6 +175,9 @@ const validateAnalysis = (
     !Array.isArray(input.facts) ||
     !Array.isArray(input.syntaxIssues) ||
     !Array.isArray(input.compileIssues) ||
+    !isObject(input.studentFlowchart) ||
+    !Array.isArray(input.studentFlowchart.nodes) ||
+    !Array.isArray(input.studentFlowchart.edges) ||
     typeof input.factsTruncated !== 'boolean'
   ) {
     throw new Error('code analysis: the backend response has an invalid contract');
@@ -262,7 +296,7 @@ const validateAnalysis = (
   }
 
   return {
-    analysisVersion: 1,
+    analysisVersion: 2,
     language: expectedLanguage,
     parser: 'tree-sitter',
     parseStatus: input.parseStatus,
@@ -275,6 +309,7 @@ const validateAnalysis = (
       ? { compilerStatus: compilerStatus as CodeAnalysis['compilerStatus'] }
       : {}),
     factsTruncated: input.factsTruncated,
+    studentFlowchart: input.studentFlowchart as unknown as AnalyzedFlowchartSide,
   };
 };
 

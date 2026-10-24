@@ -48,8 +48,10 @@ export const missingTokenIssue: SyntaxIssue = {
 export const analysisStub = (
   language: SupportedLanguage = 'java',
   recovered = false,
-): CodeAnalysis => ({
-  analysisVersion: 1,
+): CodeAnalysis => {
+  const studentFlowchart = sampleGraph(true).student;
+  return ({
+  analysisVersion: 2,
   language,
   parser: 'tree-sitter',
   parseStatus: recovered ? 'recovered' : 'clean',
@@ -63,7 +65,9 @@ export const analysisStub = (
   syntaxIssues: recovered ? [{ ...missingTokenIssue }] : [],
   compileIssues: [],
   factsTruncated: false,
-});
+  studentFlowchart,
+  });
+};
 
 export const sampleGraph = (anchored = false): FlowchartData => {
   const graph: FlowchartData = {

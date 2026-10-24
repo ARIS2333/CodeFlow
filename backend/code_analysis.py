@@ -1,10 +1,9 @@
-"""Error-tolerant source analysis used to ground LLM flowchart generation.
+"""Error-tolerant source analysis and deterministic control-flow generation.
 
 Tree-sitter deliberately returns a useful concrete syntax tree even when the
 student's code is incomplete.  We turn the parts it can identify with
-confidence into a small, language-neutral list of facts.  The LLM still makes
-the pedagogical flowchart, but it must account for these source-backed anchors
-instead of reconstructing the student's control flow from memory alone.
+confidence into language-neutral facts and an explicit pedagogical flowchart,
+without asking a language model to reconstruct the student's control flow.
 """
 
 from __future__ import annotations
@@ -118,6 +117,138 @@ SEQUENCE_CONTAINERS = {
     "switch_block_statement_group",
     "compound_statement",
 }
+
+LOOP_CONSTRUCTS = {"while", "for", "for-each", "range-for", "do-while"}
+
+
+def _flowchart_from_facts(facts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Convert ordered parser facts into an explicit control-flow graph."""
+    usable = [fact for fact in facts if fact["flowchartRequired"]]
+    if usable:
+        first_function = next(
+            (fact["function"] for fact in usable if fact["function"] is not None),
+            None,
+        )
+        usable = [fact for fact in usable if fact["function"] == first_function]
+
+    nodes: list[dict[str, Any]] = [
+        {"id": "1", "kind": "start", "data": {"label": "START"}}
+    ]
+    node_ids: dict[str, str] = {}
+    for index, fact in enumerate(usable, start=2):
+        node_id = str(index)
+        node_ids[fact["anchor"]] = node_id
+        nodes.append({
+            "id": node_id,
+            "kind": fact["kind"],
+            "sourceAnchors": [fact["anchor"]],
+            "data": {"label": fact["text"]},
+        })
+
+    end_id = str(len(nodes) + 1)
+    nodes.append({"id": end_id, "kind": "end", "data": {"label": "END"}})
+    edges: list[dict[str, Any]] = []
+    edge_keys: set[tuple[str, str, str]] = set()
+
+    def connect(source_id: str, target_id: str, label: str = "") -> None:
+        key = (source_id, target_id, label)
+        if key in edge_keys:
+            return
+        edge_keys.add(key)
+        edge: dict[str, str] = {
+            "id": f"e{len(edges) + 1}", "source": source_id, "target": target_id,
+        }
+        if label:
+            edge["label"] = label
+        edges.append(edge)
+
+    children: dict[str | None, dict[str, list[dict[str, Any]]]] = {}
+    for fact in usable:
+        children.setdefault(fact["parentAnchor"], {}).setdefault(
+            fact["branch"], []
+        ).append(fact)
+
+    def branch_facts(anchor: str, names: tuple[str, ...]) -> list[dict[str, Any]]:
+        grouped = children.get(anchor, {})
+        result: list[dict[str, Any]] = []
+        for name in names:
+            result.extend(grouped.get(name, []))
+        return sorted(result, key=lambda item: item["startByte"])
+
+    def build_sequence(
+        sequence: list[dict[str, Any]],
+        continuation: str,
+        *,
+        break_target: str | None = None,
+        continue_target: str | None = None,
+    ) -> str:
+        entry = continuation
+        for fact in reversed(sequence):
+            node_id = node_ids[fact["anchor"]]
+            if fact["kind"] == "terminal":
+                entry = node_id
+                continue
+            if fact["construct"] == "break" and break_target is not None:
+                connect(node_id, break_target)
+                entry = node_id
+                continue
+            if fact["construct"] == "continue" and continue_target is not None:
+                connect(node_id, continue_target)
+                entry = node_id
+                continue
+            if fact["kind"] != "condition":
+                connect(node_id, entry)
+                entry = node_id
+                continue
+
+            if fact["construct"] in LOOP_CONSTRUCTS:
+                body_entry = build_sequence(
+                    branch_facts(fact["anchor"], ("body", "true")),
+                    node_id,
+                    break_target=entry,
+                    continue_target=node_id,
+                )
+                connect(node_id, body_entry, "true")
+                connect(node_id, entry, "false")
+                if fact["construct"] == "do-while":
+                    entry = body_entry
+                    continue
+            else:
+                true_entry = build_sequence(
+                    branch_facts(fact["anchor"], ("true", "body")),
+                    entry,
+                    break_target=break_target,
+                    continue_target=continue_target,
+                )
+                false_entry = build_sequence(
+                    branch_facts(fact["anchor"], ("false",)),
+                    entry,
+                    break_target=break_target,
+                    continue_target=continue_target,
+                )
+                connect(node_id, true_entry, "true")
+                connect(node_id, false_entry, "false")
+            entry = node_id
+        return entry
+
+    top_level = sorted(
+        [fact for fact in usable if fact["parentAnchor"] is None],
+        key=lambda item: item["startByte"],
+    )
+    connect("1", build_sequence(top_level, end_id))
+
+    reachable = {"1"}
+    changed = True
+    while changed:
+        changed = False
+        for edge in edges:
+            if edge["source"] in reachable and edge["target"] not in reachable:
+                reachable.add(edge["target"])
+                changed = True
+    return {
+        "nodes": [node for node in nodes if node["id"] in reachable],
+        "edges": [edge for edge in edges if edge["source"] in reachable and edge["target"] in reachable],
+    }
 
 
 def _is_directly_unreachable(node: Node, language: str) -> bool:
@@ -744,7 +875,7 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
         compile_issues = []
 
     return {
-        "analysisVersion": 1,
+        "analysisVersion": 2,
         "language": normalized_language,
         "parser": "tree-sitter",
         "parseStatus": "recovered" if syntax_issues else "clean",
@@ -758,4 +889,5 @@ def analyze_code(language: str, code: str) -> dict[str, Any]:
         "compileIssues": compile_issues,
         "compilerStatus": compiler_status,
         "factsTruncated": facts_truncated,
+        "studentFlowchart": _flowchart_from_facts(facts),
     }
