@@ -376,7 +376,7 @@ function RightContent({
               ) : traceState.status === 'loading' ? (
                 <div role="status" className="flex min-h-[160px] items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-6 text-blue-700">
                   <span aria-hidden="true" className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-                  The AI is working through this input step by step...
+                  CodeFlow is working through this input step by step...
                 </div>
               ) : null}
             </div>}

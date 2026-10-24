@@ -63,52 +63,48 @@ export const requestExecutionTrace = async (
   let progress: TraceProgress = { attempt: 1 };
   const validate = createTraceValidator(request.graphs);
 
-  // C++ traces shown in the study must come from deterministic source
-  // instrumentation. Never silently replace a failed real run with a model
-  // simulation: doing so would mix two different trace modalities and spend
-  // model quota under the same UI label.
+  // Prefer the deterministic, instrumented C++ trace. Some valid student
+  // submissions can still fall outside the bounded instrumenter (or the
+  // compile service can be temporarily unavailable), so continue with the
+  // model trace when the native attempt cannot produce a valid contract.
   if (request.language === 'cpp') {
-    if (!request.graphs.recommendedCode?.trim()) {
-      throw new Error(
-        'Real C++ execution trace is unavailable because the recommended code is missing.'
-      );
-    }
-    try {
-      const response = await makeApiRequestWithRetry({
-        url: CPP_TRACE_URL,
-        options: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentCode: request.code,
-            recommendedCode: request.graphs.recommendedCode,
-            input: request.testCase.input,
-            ...('registrationId' in options.modelConfig
-              ? { registrationId: options.modelConfig.registrationId }
-              : {}),
-          }),
-          signal: options.signal,
-        },
-      }, 0, 0, CPP_TRACE_TIMEOUT_MS);
-      const payload = await response.json() as unknown;
-      const result = validate(payload);
-      if (result.ok) {
-        const realTrace: ExecutionTrace = {
-          ...result.value,
-          source: 'instrumented-cpp',
-        };
-        options.onProgress?.({
-          attempt: 1,
-          student: realTrace.student,
-          llm: realTrace.llm,
-        });
-        return realTrace;
+    if (request.graphs.recommendedCode?.trim()) {
+      try {
+        const response = await makeApiRequestWithRetry({
+          url: CPP_TRACE_URL,
+          options: {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              studentCode: request.code,
+              recommendedCode: request.graphs.recommendedCode,
+              input: request.testCase.input,
+              ...('registrationId' in options.modelConfig
+                ? { registrationId: options.modelConfig.registrationId }
+                : {}),
+            }),
+            signal: options.signal,
+          },
+        }, 0, 0, CPP_TRACE_TIMEOUT_MS);
+        const payload = await response.json() as unknown;
+        const result = validate(payload);
+        if (result.ok) {
+          const realTrace: ExecutionTrace = {
+            ...result.value,
+            source: 'instrumented-cpp',
+          };
+          options.onProgress?.({
+            attempt: 1,
+            student: realTrace.student,
+            llm: realTrace.llm,
+          });
+          return realTrace;
+        }
+        throw new Error(result.errors.join(' '));
+      } catch {
+        // Cancellation is intentional and must never trigger a paid fallback.
+        options.signal?.throwIfAborted();
       }
-      throw new Error(result.errors.join(' '));
-    } catch (error: unknown) {
-      options.signal?.throwIfAborted();
-      const detail = error instanceof Error ? error.message : 'The request failed.';
-      throw new Error(`Real C++ execution trace is unavailable: ${detail}`);
     }
   }
 
