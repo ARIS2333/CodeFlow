@@ -216,6 +216,9 @@ export const MainContent = ({
   // A real compiler location is more authoritative than Tree-sitter's
   // recovery point, which can be the end of the file for a missing brace.
   const languageDiagnostic = compileDiagnostic ?? syntaxDiagnostic;
+  const diagnosticSourceLine = languageDiagnostic
+    ? code.split(/\r?\n/)[languageDiagnostic.line - 1]
+    : undefined;
   const cppCompilerUnavailable = flowchartState.status !== 'idle'
     && flowchartState.codeAnalysis?.language === 'cpp'
     && flowchartState.codeAnalysis.compilerStatus === 'unavailable';
@@ -995,9 +998,22 @@ export const MainContent = ({
                 {languageDiagnostic ? (
                   <div role="alert" className="rounded border border-red-900 bg-red-950/40 p-2 text-red-300">
                     <div className="font-bold">
-                      {compileDiagnostic ? 'Compile error' : 'Syntax error'} · Line {languageDiagnostic.line}
+                      {compileDiagnostic ? 'Compile error' : 'Syntax error'} · Line {languageDiagnostic.line}, Column {languageDiagnostic.column}
                     </div>
                     <div>{languageDiagnostic.message}</div>
+                    {diagnosticSourceLine !== undefined && (
+                      <div className="mt-2 overflow-x-auto rounded bg-black/40 px-2 py-1 text-gray-200">
+                        <div className="whitespace-pre">{languageDiagnostic.line} | {diagnosticSourceLine}</div>
+                        <div className="whitespace-pre text-red-300">
+                          {' '.repeat(String(languageDiagnostic.line).length + 3 + Math.max(0, languageDiagnostic.column - 1))}^
+                        </div>
+                      </div>
+                    )}
+                    {languageDiagnostic.additionalCount > 0 && (
+                      <div className="mt-1 text-xs text-red-200">
+                        {languageDiagnostic.additionalCount} additional {languageDiagnostic.additionalCount === 1 ? 'diagnostic' : 'diagnostics'}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div>

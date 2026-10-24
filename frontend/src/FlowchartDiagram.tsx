@@ -21,69 +21,7 @@ import {
   type DiagramEdge,
 } from './lib/flowchartLayout';
 import { TraceHighlightContext, type TraceHighlight } from './lib/traceHighlight';
-import type { SyntaxErrorMark } from './lib/llmSchemas';
 import '@xyflow/react/dist/style.css';
-
-// Define types for our flowchart data
-// A token-level source mistake, located by plain text search inside the label.
-// `occurrence` is 1-based and picks which match to mark when the symbol repeats.
-interface LabelSegment {
-  text: string;
-  marked: boolean;
-  expected?: string;
-}
-
-// Split a label into plain and marked segments. Source errors are shown
-// by colouring the offending symbol in place rather than by adding text, so the
-// node stays compact and the written explanations are reserved for logic errors.
-// A symbol that isn't found in the label is skipped: the rest of the label still
-// renders correctly and the node simply carries no mark.
-const markSyntaxErrors = (
-  label: string,
-  syntaxErrors?: SyntaxErrorMark[]
-): LabelSegment[] => {
-  if (!syntaxErrors?.length) return [{ text: label, marked: false }];
-
-  const ranges: { start: number; end: number; expected?: string }[] = [];
-
-  syntaxErrors.forEach(({ symbol, occurrence = 1, expected }) => {
-    if (!symbol) return;
-
-    // Walk forward to the nth occurrence; give up if the label has fewer.
-    let start = -1;
-    let from = 0;
-    for (let i = 0; i < occurrence; i++) {
-      start = label.indexOf(symbol, from);
-      if (start === -1) return;
-      from = start + symbol.length;
-    }
-
-    const end = start + symbol.length;
-    const overlaps = ranges.some((r) => start < r.end && end > r.start);
-    if (!overlaps) ranges.push({ start, end, expected });
-  });
-
-  if (!ranges.length) return [{ text: label, marked: false }];
-
-  ranges.sort((a, b) => a.start - b.start);
-
-  const segments: LabelSegment[] = [];
-  let cursor = 0;
-
-  ranges.forEach(({ start, end, expected }) => {
-    if (start > cursor) {
-      segments.push({ text: label.slice(cursor, start), marked: false });
-    }
-    segments.push({ text: label.slice(start, end), marked: true, expected });
-    cursor = end;
-  });
-
-  if (cursor < label.length) {
-    segments.push({ text: label.slice(cursor), marked: false });
-  }
-
-  return segments;
-};
 
 const traceNodeClasses = (
   { activeNodeId, visitedNodeIds }: TraceHighlight,
@@ -104,13 +42,15 @@ interface FlowchartDiagramProps {
   heightClassName?: string;
 }
 
-// Custom Node Component following the pattern you provided
-// Every node looks the same. A logic mistake is never marked here: the student
-// finds it by comparing their flow against the recommended one, and marking it
-// would take that discovery away. Only token-level source slips get a mark.
+// A logic mistake is never marked here: the student finds it by comparing their
+// flow against the recommended one. A missing token is also not blamed on a
+// nearby valid token; the badge only says that the parser located a problem near
+// this recovered step.
 const CustomNode = memo(({ id, data }: { id: string; data: FlowchartNodeData }) => {
   const { label, syntaxErrors } = data;
-  const segments = markSyntaxErrors(label, syntaxErrors);
+  const syntaxWarning = syntaxErrors?.length
+    ? syntaxErrors.map(({ expected }) => expected ? `Expected ${expected}` : 'Source error').join('; ')
+    : undefined;
   const highlight = useContext(TraceHighlightContext);
 
   return (
@@ -118,25 +58,17 @@ const CustomNode = memo(({ id, data }: { id: string; data: FlowchartNodeData }) 
       className={`px-4 py-2 shadow-md rounded-md border-2 transition-colors ${traceNodeClasses(highlight, id)}`}
     >
       <div className="flex flex-col">
-        <div className="text-sm font-medium whitespace-pre-wrap text-gray-900">
-          {segments.map((segment, index) =>
-            segment.marked ? (
-              <span
-                key={index}
-                title={
-                  segment.expected
-                    ? `Expected ${segment.expected}`
-                    : 'Source error'
-                }
-                className="rounded-sm bg-amber-100 px-px font-semibold text-amber-900 underline decoration-amber-500 decoration-wavy decoration-2 underline-offset-2"
-              >
-                {segment.text}
-              </span>
-            ) : (
-              <span key={index}>{segment.text}</span>
-            )
-          )}
-        </div>
+        <div className="text-sm font-medium whitespace-pre-wrap text-gray-900">{label}</div>
+        {syntaxWarning && (
+          <div
+            title={syntaxWarning}
+            aria-label={`Syntax issue near this step: ${syntaxWarning}`}
+            className="mt-1 flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900"
+          >
+            <span aria-hidden="true">⚠</span>
+            <span>Syntax issue near this step</span>
+          </div>
+        )}
       </div>
       <Handle
         id="in-top"

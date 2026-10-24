@@ -7,7 +7,7 @@ import ts from 'typescript';
 import type { EvaluationState, FlowchartState } from '../src/lib/analysisRun.ts';
 import type { FlowchartGenerationContext } from '../src/lib/flowchartGeneration.ts';
 import type { TraceState } from '../src/lib/traceRun.ts';
-import { missingTokenIssue, sampleGraph } from './flowchartFixtures.ts';
+import { analysisStub, missingTokenIssue, sampleGraph } from './flowchartFixtures.ts';
 
 // Node's type stripper does not handle TSX. Transpile these small views in
 // memory using our existing TypeScript dependency; do not launch a browser.
@@ -110,6 +110,31 @@ test('ordinary wrong answers do not create a compile warning', () => {
     } },
   );
   assert.doesNotMatch(html, /Flowchart generated from code with an error|simulated run reported/);
+});
+
+test('a real compiler failure warns without waiting for a simulated verdict', () => {
+  const analysis = analysisStub('cpp');
+  analysis.compilerStatus = 'failed';
+  analysis.compileIssues = [{
+    id: 'compile-1',
+    kind: 'cpp-compiler-error',
+    text: "expected '}' at end of input",
+    startLine: 5,
+    startColumn: 1,
+    endLine: 5,
+    endColumn: 1,
+    startByte: 99,
+    endByte: 99,
+  }];
+  const html = render({
+    status: 'success',
+    data: sampleGraph(true),
+    generation: { mode: 'grounded', syntaxIssues: [] },
+    codeAnalysis: analysis,
+  });
+  assert.match(html, /Flowchart generated from code with an error/);
+  assert.match(html, /compiler reported an error/);
+  assert.match(html, /structure recovered from the source/);
 });
 
 test('recovered code without a model suggestion still explains the inferred graph', () => {

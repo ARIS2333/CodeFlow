@@ -118,7 +118,7 @@ def health():
 
 @app.route("/api/analyze-code", methods=["POST"])
 def analyze_code_resource():
-    """Return deterministic, error-tolerant source facts for the flowchart LLM."""
+    """Return source facts and a deterministic, error-tolerant flowchart."""
     try:
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict):

@@ -1,20 +1,17 @@
 import {
-  systemPrompt_GenerateFlowchart,
-  systemPrompt_InferFlowchart,
+  systemPrompt_GenerateRecommendedCode,
 } from '../config/systemPrompt_GenerateFlowchart.ts';
 import { requestCodeAnalysis, type SupportedLanguage } from './codeAnalysis.ts';
 import type { CodeAnalysis } from './codeAnalysis';
-import { requestJsonStream } from './llmStreamClient.ts';
+import { requestStructured } from './llmClient.ts';
 import type { ModelConfigPayload } from './modelSettings.ts';
-import { readMissingSymbolSuggestions } from './missingSymbolSuggestions.ts';
+import { isObject, type ValidationResult } from './llmJson.ts';
 import {
   getFlowchartGenerationContext,
   type FlowchartGenerationContext,
   type FlowchartProgress,
 } from './flowchartGeneration.ts';
 import {
-  createFlowchartValidator,
-  validateFlowchart,
   validateFlowchartSide,
   type FlowchartData,
   type ProblemDetails,
@@ -138,18 +135,10 @@ const applyMissingTokenMarks = (
 };
 
 /**
- * Build a flowchart in three deliberately separate stages:
- *   1. Tree-sitter analyzes the source and reports any syntax recovery.
- *   2. Clean parses ground the model in facts; recovered parses ask the model
- *      to infer structure from raw source without those facts or anchor rules.
- *   3. Local graph validation always runs; anchor-dependent markings run only
- *      in grounded mode. Parser metadata is published before the LLM call;
- *      model missing-symbol suggestions are published from that same reply,
- *      even if its graph fails validation.
- *
- * There is intentionally no second model reviewer: the normal path makes one
- * flowchart LLM request. requestJsonStream only asks again when the first reply
- * is malformed or violates the machine-checkable contract.
+ * Build both visible graphs through one deterministic program-analysis path.
+ * Tree-sitter/CFG creates the student's graph directly. The model only proposes
+ * corrected source code; that code must pass source analysis before the same CFG
+ * builder is allowed to create the recommended graph.
  */
 export const requestReliableFlowchart = async (
   request: FlowchartRequest,
@@ -170,60 +159,92 @@ export const requestReliableFlowchart = async (
   options.signal?.throwIfAborted();
   const context = getFlowchartGenerationContext(codeAnalysis);
   options.onGenerationReady?.(context);
-  const inferred = context.mode === 'inferred';
-  let progress: FlowchartProgress = { attempt: 1 };
-  let suggestionItems: unknown[] = [];
-  let lastReport: string | undefined;
-  const reportSuggestions = (input: unknown) => {
-    if (!inferred) return;
-    const missingSymbols = readMissingSymbolSuggestions(input, request.code);
-    if (missingSymbols !== undefined && JSON.stringify(missingSymbols) !== lastReport) {
-      lastReport = JSON.stringify(missingSymbols);
-      options.onGenerationReady?.({ ...context, missingSymbols });
+  const studentResult = validateFlowchartSide(
+    'student', codeAnalysis.studentFlowchart, codeAnalysis,
+  );
+  if (!studentResult.ok) {
+    throw new Error(`deterministic student flowchart: ${studentResult.errors.join('; ')}`);
+  }
+  const student = applyMissingTokenMarks(
+    { student: studentResult.value, llm: studentResult.value },
+    codeAnalysis,
+    request.code,
+  ).student;
+  let previousAttemptDiagnostics: string[] = [];
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const progress: FlowchartProgress = { attempt, student };
+    options.onProgress?.(progress);
+    const recommendation = await requestStructured({
+      modelConfig: options.modelConfig,
+      systemPrompt: systemPrompt_GenerateRecommendedCode,
+      message: JSON.stringify({
+        practice: request.practice,
+        language: request.language,
+        studentCode: request.code,
+        parserDiagnostics: codeAnalysis.syntaxIssues,
+        compilerDiagnostics: codeAnalysis.compileIssues,
+        ...(previousAttemptDiagnostics.length ? { previousAttemptDiagnostics } : {}),
+      }),
+      validate: validateRecommendedCode,
+      signal: options.signal,
+      label: 'recommended code',
+      maxAttempts: 2,
+    });
+    const recommendedAnalysis = await requestCodeAnalysis(
+      request.language, recommendation.recommendedCode, options.signal,
+    );
+    previousAttemptDiagnostics = [
+      ...recommendedAnalysis.syntaxIssues.map((issue) => issue.text || issue.kind),
+      ...recommendedAnalysis.compileIssues.map((issue) => issue.text || issue.kind),
+    ];
+    const compilationFailed = recommendedAnalysis.compilerStatus === 'failed';
+    if (previousAttemptDiagnostics.length || compilationFailed) continue;
+
+    const recommendedRaw = {
+      nodes: recommendedAnalysis.studentFlowchart.nodes.map((node) => ({
+        id: node.id,
+        kind: node.kind,
+        data: { ...node.data },
+      })),
+      edges: recommendedAnalysis.studentFlowchart.edges,
+    };
+    const recommendedResult = validateFlowchartSide('llm', recommendedRaw);
+    if (!recommendedResult.ok) {
+      previousAttemptDiagnostics = recommendedResult.errors;
+      continue;
     }
+    const flowchart: FlowchartData = { student, llm: recommendedResult.value };
+    options.onProgress?.({ ...progress, llm: recommendedResult.value });
+    return flowchart;
+  }
+
+  throw new Error(
+    `recommended code could not be compiled after two attempts${
+      previousAttemptDiagnostics.length ? `: ${previousAttemptDiagnostics.join('; ')}` : ''
+    }`,
+  );
+};
+
+interface RecommendedCode {
+  approachSummary: string;
+  recommendedCode: string;
+}
+
+const validateRecommendedCode = (input: unknown): ValidationResult<RecommendedCode> => {
+  if (!isObject(input)) return { ok: false, errors: ['the reply is not an object'] };
+  if (typeof input.approachSummary !== 'string' || !input.approachSummary.trim()) {
+    return { ok: false, errors: ['approachSummary must be a nonempty string'] };
+  }
+  if (typeof input.recommendedCode !== 'string' || !input.recommendedCode.trim()) {
+    return { ok: false, errors: ['recommendedCode must be nonempty source code'] };
+  }
+  return {
+    ok: true,
+    value: {
+      approachSummary: input.approachSummary.trim(),
+      recommendedCode: input.recommendedCode,
+    },
+    repairs: [],
   };
-  const validateGraph = inferred ? validateFlowchart : createFlowchartValidator(codeAnalysis);
-
-  const flowchart = await requestJsonStream({
-    modelConfig: options.modelConfig,
-    systemPrompt: inferred ? systemPrompt_InferFlowchart : systemPrompt_GenerateFlowchart,
-    message: JSON.stringify(inferred
-      ? { ...request, parserDiagnostics: context.syntaxIssues }
-      : { ...request, codeAnalysis }),
-    validate: (input) => {
-      reportSuggestions(input);
-      const result = validateGraph(input);
-      if (!result.ok) return result;
-      // Reuse already-rendered side objects so finishing the other side/stream
-      // does not reset the user's manual node positions.
-      return { ...result, value: {
-        student: progress.student ?? result.value.student,
-        llm: progress.llm ?? result.value.llm,
-      } };
-    },
-    onAttempt: (attempt) => {
-      progress = { attempt };
-      suggestionItems = [];
-      options.onProgress?.(progress);
-    },
-    onValue: (event) => {
-      if (event.type === 'item') {
-        suggestionItems.push(event.value);
-        reportSuggestions({ missingSymbols: suggestionItems });
-      } else if (event.key === 'missingSymbols') {
-        reportSuggestions({ missingSymbols: event.value });
-      } else if (event.key === 'student' || event.key === 'llm') {
-        const side = validateFlowchartSide(event.key, event.value, inferred ? undefined : codeAnalysis);
-        if (side.ok) {
-          progress = { ...progress, [event.key]: side.value };
-          options.onProgress?.(progress);
-        }
-      }
-    },
-    signal: options.signal,
-    label: inferred ? 'model-inferred flowchart' : 'grounded flowchart',
-    maxAttempts: 3,
-  });
-
-  return inferred ? flowchart : applyMissingTokenMarks(flowchart, codeAnalysis, request.code);
 };

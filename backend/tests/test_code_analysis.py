@@ -322,6 +322,38 @@ return false;
         self.assertEqual(result["parseStatus"], "recovered")
         self.assertTrue(result["syntaxIssues"])
 
+    def test_deterministic_flowchart_models_early_return_and_fallthrough(self):
+        graph = analyze_code(
+            "cpp", "int f(int n) { if (n > 0) return 1; return 0; }"
+        )["studentFlowchart"]
+        by_label = {node["data"]["label"]: node["id"] for node in graph["nodes"]}
+        outgoing = {(edge["source"], edge.get("label")): edge["target"] for edge in graph["edges"]}
+        condition = by_label["if (n > 0)"]
+        self.assertEqual(outgoing[(condition, "true")], by_label["return 1;"])
+        self.assertEqual(outgoing[(condition, "false")], by_label["return 0;"])
+        self.assertNotIn("END", by_label)
+
+    def test_deterministic_flowchart_merges_if_else_before_return(self):
+        graph = analyze_code(
+            "cpp",
+            "bool f(int n) { if (n > 0) { n++; } else { n--; } return n == 1; }",
+        )["studentFlowchart"]
+        by_label = {node["data"]["label"]: node["id"] for node in graph["nodes"]}
+        targets = {(edge["source"], edge.get("label")): edge["target"] for edge in graph["edges"]}
+        self.assertEqual(targets[(by_label["n++;"], None)], by_label["return n == 1;"])
+        self.assertEqual(targets[(by_label["n--;"], None)], by_label["return n == 1;"])
+
+    def test_deterministic_flowchart_routes_continue_and_break(self):
+        graph = analyze_code(
+            "cpp",
+            "int f(int n) { while (n < 20) { n++; if (n == 3) continue; if (n == 8) break; } return n; }",
+        )["studentFlowchart"]
+        by_label = {node["data"]["label"]: node["id"] for node in graph["nodes"]}
+        edges = {(edge["source"], edge.get("label")): edge["target"] for edge in graph["edges"]}
+        loop = by_label["while (n < 20)"]
+        self.assertEqual(edges[(by_label["continue;"], None)], loop)
+        self.assertEqual(edges[(by_label["break;"], None)], by_label["return n;"])
+
     def test_rejects_unsupported_language(self):
         with self.assertRaises(CodeAnalysisError):
             analyze_code("javascript", "function f() {}")
