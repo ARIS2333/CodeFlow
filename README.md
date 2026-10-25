@@ -18,7 +18,7 @@ Group A receives flowchart feedback for Q1–Q2 and textual feedback for Q3–Q4
 - **Side-by-side flowchart comparison** — displays the student's flowchart beside a correct reference flowchart so their structures and execution paths can be compared directly.
 - **Student-specific reference solution** — presents a correct flow that is suitable for comparison with the student's attempted approach, rather than limiting feedback to a single fixed implementation.
 - **Source issue highlighting** — marks supported syntax-level source issues while leaving students to discover logic differences by comparing the two flows.
-- **Synchronized execution trace** — sends the same input through both flowcharts and advances their executions together, one block at a time.
+- **Synchronized execution trace** — sends the same input through both flowcharts and advances their executions together, one block at a time. For C++, CodeFlow first attempts a bounded, instrumented native run and falls back to a model-generated trace only when native tracing cannot complete.
 - **Runtime state inspection** — shows variable changes and the complete current variable state at each trace step.
 - **Custom trace inputs** — allows students to try another input and explore different branches or edge cases.
 - **Flexible chart viewing** — supports deep zooming, automatic viewport fitting, and full-screen comparison and trace views for large flowcharts or smaller screens.
@@ -90,13 +90,23 @@ Edit `backend/.env`:
 DATABASE_URL=postgresql://localhost/codeflow_study
 API_KEY=
 BASE_URL=https://api.openai.com/v1
-MODEL=gpt-5.6-sol
+MODEL=gpt-6.1-sol
 PROVIDER=openai
+ENABLE_NATIVE_CPP_TRACE=false
+CPP_TRACE_COMPILE_TIMEOUT_SECONDS=30
+CPP_TRACE_RUN_TIMEOUT_SECONDS=3
 ```
 
 - To enable feedback for registered study participants, provide the complete server model configuration.
 - To allow only user-provided API keys outside the study workflow, leave the server credentials empty.
 - `PROVIDER` can be `openai`, `dashscope`, `anthropic`, or `deepseek`.
+- Native C++ tracing requires `g++` and `ENABLE_NATIVE_CPP_TRACE=true`; enable
+  it only in the controlled study deployment. Each
+  trace compiles and executes bounded instrumented versions of the student and
+  recommended implementations. If instrumentation, compilation, execution, or
+  trace validation fails, the frontend automatically requests the existing LLM
+  trace instead. Native results are marked `instrumented-cpp`; fallback results
+  are marked `model-simulated` internally.
 
 On macOS, initialize the local study database once:
 

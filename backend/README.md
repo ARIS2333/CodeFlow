@@ -78,8 +78,11 @@ Edit `.env`:
 DATABASE_URL=postgresql://localhost/codeflow_study
 API_KEY=
 BASE_URL=https://api.openai.com/v1
-MODEL=gpt-5.6-sol
+MODEL=gpt-6.1-sol
 PROVIDER=openai
+ENABLE_NATIVE_CPP_TRACE=false
+CPP_TRACE_COMPILE_TIMEOUT_SECONDS=30
+CPP_TRACE_RUN_TIMEOUT_SECONDS=3
 ```
 
 | Variable | Purpose |
@@ -139,6 +142,14 @@ The development server also supports these optional environment variables:
 | `CPP_COMPILE_CONCURRENCY` | `1` | Maximum simultaneous C++ syntax checks in each backend process |
 | `CPP_COMPILE_TIMEOUT_SECONDS` | `5` | Maximum time allowed for one C++ syntax check |
 | `CPP_COMPILE_QUEUE_SECONDS` | `10` | Maximum time a request waits for an available compiler slot |
+| `ENABLE_NATIVE_CPP_TRACE` | Disabled | Set to `true` to enable bounded C++ instrumentation, compilation, and execution |
+| `CPP_TRACE_COMPILE_TIMEOUT_SECONDS` | `30` | Maximum compilation time for each instrumented trace program |
+| `CPP_TRACE_RUN_TIMEOUT_SECONDS` | `3` | Maximum execution time for each compiled trace program |
+
+The native trace endpoint builds the student and recommended traces separately.
+When it returns an error, times out, or produces a response that does not match
+the displayed graphs, the frontend automatically requests a model-simulated
+trace. Cancelling a trace does not trigger this fallback.
 
 ## Start the development server
 

@@ -34,6 +34,9 @@ not exposed publicly.
    complete API endpoint; the server does not construct it from a workspace ID.
    These server-owned credentials fund feedback generation for registered study
    participants and must be configured only in the Render dashboard.
+   Set `ENABLE_NATIVE_CPP_TRACE=true` when the deployed backend provides `g++`.
+   The Blueprint supplies the native compile and run timeouts. If a native C++
+   trace fails, the frontend automatically falls back to the configured model.
 5. Let Render create the backend and copy its public HTTPS URL.
 6. Set the frontend service's `VITE_API_BASE_URL` to that URL, with no trailing
    slash (for example, `https://codeflow-backend.onrender.com`). Redeploy the
@@ -47,8 +50,9 @@ not exposed publicly.
    Group B through the final survey. The backend health check is available at
    `/health`.
 
-Render supplies HTTPS for both public URLs. The backend intentionally keeps its
-current public CORS behavior until the planned login/BYOK work is requested.
+Render supplies HTTPS for both public URLs. The backend currently allows public
+cross-origin requests, while participant-bound study operations validate the
+opaque registration token issued at sign-in.
 
 ## Updating the existing Render deployment
 
@@ -59,9 +63,8 @@ current public CORS behavior until the planned login/BYOK work is requested.
 3. Redeploy the backend first. Its deploy log should show
    `Study database is ready.` before Gunicorn starts; this confirms that the
    account and recovery tables were initialized.
-4. Redeploy the frontend after the backend is healthy. The new frontend and old
-   participant-ID backend API are not compatible, so both services must use the
-   same revision.
+4. Redeploy the frontend after the backend is healthy so both services use the
+   same API revision.
 5. Complete the private-window recovery check described above before sharing
    the study URL.
 
@@ -84,7 +87,8 @@ or the two Gunicorn settings if requests queue or memory usage becomes high.
 Students enter their name and create a password in **Participant information**.
 PostgreSQL stores the research-demo password in recoverable form and assigns a
 persistent alternating group. Database access must therefore remain restricted
-to the study administrators. Passwords must be unique within this deployment.
+to the study administrators. Student names are unique within this deployment;
+passwords do not need to be unique.
 The browser token preserves the session after a refresh; the name and password
 can restore it from another browser. PostgreSQL also stores the latest study
 navigation and one current workspace for each question, so code drafts,
@@ -98,7 +102,12 @@ group, question, per-question attempt number, source code,
 feedback format, terminal result, and either the flowchart/trace workspace or
 the textual-feedback workspace.
 
-## Future work deliberately not enabled
+## AI usage limits
 
-Per-participant quotas, rate limiting, and a study-wide spending cap remain
-unimplemented.
+Every completed model call is recorded in `llm_usage_events`. The backend uses
+the configured model's token rates to estimate each participant's accumulated
+cost and blocks further paid generation after the participant reaches the
+$1.00 study allowance. Native C++ traces do not consume model tokens; an LLM
+trace fallback does. The participant UI displays the current estimated spend,
+and the administrator usage view aggregates token counts and cost across the
+study.
