@@ -347,7 +347,7 @@ class AppTests(unittest.TestCase):
         registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"
         saved = {
             "progress": {"currentScreen": "q2", "furthestIndex": 2, "completedSurveys": ["s1"]},
-            "workspaces": {"q1.v3": {"version": 2, "code": "return true;"}},
+            "workspaces": {"q1.v4": {"version": 2, "code": "return true;"}},
         }
         with (
             patch.object(backend_app, "participant_registration", return_value={"studentName": "Ada", "group": "A"}),
@@ -422,12 +422,12 @@ class AppTests(unittest.TestCase):
             patch.object(backend_app, "save_participant_workspace") as save_workspace,
         ):
             response = self.client.put(
-                f"/api/participants/{registration_id}/workspaces/q1.v3",
+                f"/api/participants/{registration_id}/workspaces/q1.v4",
                 json=workspace,
             )
 
         self.assertEqual(response.status_code, 200)
-        save_workspace.assert_called_once_with(UUID(registration_id), "q1.v3", workspace)
+        save_workspace.assert_called_once_with(UUID(registration_id), "q1.v4", workspace)
 
     def test_study_state_rejects_an_unknown_registration(self):
         registration_id = "85d87357-c214-42e7-a4ed-741e374063a6"

@@ -322,7 +322,7 @@ def put_participant_workspace(registration_id: str, workspace_id: str):
         parsed = registered_participant_id(registration_id)
         if parsed is None:
             return public_error("Participant account was not found", 404)
-        if workspace_id not in {"q1.v3", "q2.v3", "q3.v3", "q4.v3"}:
+        if workspace_id not in {"q1.v4", "q2.v4", "q3.v4", "q4.v4"}:
             return public_error("Invalid workspace", 400)
         body = request.get_json(force=True, silent=False)
         if not isinstance(body, dict) or body.get("version") != 2:
