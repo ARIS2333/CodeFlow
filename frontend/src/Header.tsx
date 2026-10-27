@@ -45,10 +45,11 @@ interface HeaderProps {
   modelLabel: string;
   /** Dimmed until a model is configured, since nothing can run without one. */
   isConfigured: boolean;
+  showModelSettings?: boolean;
 }
 
 export const Header: FC<HeaderProps> = ({
-  onTogglePanel, onOpenSettings, modelLabel, isConfigured,
+  onTogglePanel, onOpenSettings, modelLabel, isConfigured, showModelSettings = true,
 }) => {
   return (
     <header className="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6">
@@ -67,7 +68,7 @@ export const Header: FC<HeaderProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-3 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2">
-          <button
+          {showModelSettings && <button
             onClick={onOpenSettings}
             title="Model settings"
             className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
@@ -78,7 +79,7 @@ export const Header: FC<HeaderProps> = ({
           >
             <span aria-hidden="true">⚙</span>
             <span>{modelLabel}</span>
-          </button>
+          </button>}
           <button
             onClick={onTogglePanel}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"

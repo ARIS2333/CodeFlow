@@ -63,6 +63,9 @@ export const Layout = ({
    * never is — it is held in this state only until the tab is closed.
    */
   const [settings, setSettings] = useState<ModelSettings | null>(() => {
+    if (import.meta.env.DEV && import.meta.env.VITE_LOCAL_SERVER_MODEL === 'true') {
+      return { mode: 'local' };
+    }
     const remembered = loadRememberedPassword();
     return remembered ? { mode: 'research', password: remembered } : null;
   });
@@ -127,6 +130,7 @@ export const Layout = ({
           onOpenSettings={() => openSettings()}
           modelLabel={describeSettings(settings)}
           isConfigured={settings !== null}
+          showModelSettings={settings?.mode !== 'local'}
         />
         <MainContent 
           settings={settings}
@@ -162,13 +166,13 @@ export const Layout = ({
         flowchartRegenerationState={flowchartRegenerationState}
       />
 
-      <SettingsPanel
+      {settings?.mode !== 'local' && <SettingsPanel
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSave={setSettings}
         notice={settingsNotice}
-      />
+      />}
     </div>
   );
 };

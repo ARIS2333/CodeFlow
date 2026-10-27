@@ -10,7 +10,7 @@ import type { TestResult } from '../src/lib/llmSchemas.ts';
 import { traceGraphs, traceReply } from './traceFixtures.ts';
 import { controlledStream, streamResponse } from './streamFixtures.ts';
 import { analysisStub } from './flowchartFixtures.ts';
-import { CPP_TRACE_URL } from '../src/config/apiConfig.ts';
+import { CPP_TRACE_URL, PYTHON_TRACE_URL } from '../src/config/apiConfig.ts';
 
 /** These tests never reach a provider; the backend contract just requires a
  * model to be named on every LLM request. */
@@ -165,6 +165,40 @@ test('C++ uses a real instrumented trace without calling the model', async (t) =
   assert.equal(final?.status, 'success');
   assert.equal(final?.status === 'success' && final.data.student.finalOutput, '3');
   assert.equal(final?.status === 'success' && final.data.source, 'instrumented-cpp');
+});
+
+test('Python uses AST execution without calling the model', async (t) => {
+  const graphs = traceGraphs();
+  graphs.recommendedCode = 'def f(a, b):\n    return max(a, b)';
+  const urls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL) => {
+    urls.push(String(input));
+    return Response.json(traceReply());
+  });
+  const states: TraceState[] = [];
+  await runTrace({ ...request(), language: 'python', graphs },
+    (state) => states.push(state), TEST_MODEL_CONFIG);
+  assert.deepEqual(urls, [PYTHON_TRACE_URL]);
+  const final = states.at(-1);
+  assert.equal(final?.status === 'success' && final.data.source, 'instrumented-python');
+});
+
+test('a failed Python trace falls back to the model', async (t) => {
+  const graphs = traceGraphs();
+  graphs.recommendedCode = 'def f(a, b):\n    return max(a, b)';
+  const urls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL) => {
+    urls.push(String(input));
+    if (String(input) === PYTHON_TRACE_URL) return Response.json({ error: 'unsupported' }, { status: 422 });
+    return streamResponse([{ type: 'delta', text: JSON.stringify(traceReply()) }, { type: 'done' }]);
+  });
+  const states: TraceState[] = [];
+  await runTrace({ ...request(), language: 'python', graphs },
+    (state) => states.push(state), TEST_MODEL_CONFIG);
+  assert.equal(urls[0], PYTHON_TRACE_URL);
+  assert.equal(urls.length, 2);
+  const final = states.at(-1);
+  assert.equal(final?.status === 'success' && final.data.source, 'model-simulated');
 });
 
 test('a failed real C++ trace falls back to the model', async (t) => {

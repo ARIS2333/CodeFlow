@@ -1,5 +1,5 @@
 import { systemPrompt_TraceExecution } from '../config/systemPrompt_TraceExecution.ts';
-import { CPP_TRACE_URL } from '../config/apiConfig.ts';
+import { CPP_TRACE_URL, PYTHON_TRACE_URL } from '../config/apiConfig.ts';
 import { makeApiRequestWithRetry } from './llmClient.ts';
 import { requestJsonStream } from './llmStreamClient.ts';
 import type { ModelConfigPayload } from './modelSettings.ts';
@@ -40,6 +40,7 @@ export interface TraceProgress {
 }
 
 const CPP_TRACE_TIMEOUT_MS = 90_000;
+const PYTHON_TRACE_TIMEOUT_MS = 15_000;
 
 /** Send the drawn graph only: anchors and syntax marks are not part of a run. */
 const compactSide = (side: FlowchartSide) => ({
@@ -63,15 +64,20 @@ export const requestExecutionTrace = async (
   let progress: TraceProgress = { attempt: 1 };
   const validate = createTraceValidator(request.graphs);
 
-  // Prefer the deterministic, instrumented C++ trace. Some valid student
-  // submissions can still fall outside the bounded instrumenter (or the
-  // compile service can be temporarily unavailable), so continue with the
-  // model trace when the native attempt cannot produce a valid contract.
-  if (request.language === 'cpp') {
+  // Prefer a deterministic, instrumented trace for C++ and Python. Some valid
+  // submissions can still fall outside the bounded instrumenters, so continue
+  // with the model trace when the native attempt cannot produce a valid
+  // contract. Java retains the model trace.
+  const nativeTrace = request.language === 'cpp'
+    ? { url: CPP_TRACE_URL, timeout: CPP_TRACE_TIMEOUT_MS, source: 'instrumented-cpp' as const }
+    : request.language === 'python'
+      ? { url: PYTHON_TRACE_URL, timeout: PYTHON_TRACE_TIMEOUT_MS, source: 'instrumented-python' as const }
+      : null;
+  if (nativeTrace) {
     if (request.graphs.recommendedCode?.trim()) {
       try {
         const response = await makeApiRequestWithRetry({
-          url: CPP_TRACE_URL,
+          url: nativeTrace.url,
           options: {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -85,13 +91,13 @@ export const requestExecutionTrace = async (
             }),
             signal: options.signal,
           },
-        }, 0, 0, CPP_TRACE_TIMEOUT_MS);
+        }, 0, 0, nativeTrace.timeout);
         const payload = await response.json() as unknown;
         const result = validate(payload);
         if (result.ok) {
           const realTrace: ExecutionTrace = {
             ...result.value,
-            source: 'instrumented-cpp',
+            source: nativeTrace.source,
           };
           options.onProgress?.({
             attempt: 1,

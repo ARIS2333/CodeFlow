@@ -13,6 +13,42 @@ This combination provides two complementary views of a mistake:
 
 CodeFlow currently supports Java, Python, and C++.
 
+## How feedback is generated
+
+The student flowchart is built deterministically from Tree-sitter source analysis
+and control-flow relationships. The LLM receives the problem and the student's
+complete source, then proposes a corrected implementation under a minimal-repair
+policy: retain valid control structures, data structures, variable names, and
+implementation choices. The recommended source passes through the same analysis
+pipeline to produce the comparison flowchart. Recommended code is checked for
+syntax/compilation issues; this does not prove logical correctness.
+
+Tree-sitter can recover parts of a submission containing syntax errors, so the
+tool can still display a student flowchart and highlight supported source issues.
+The terminal uses Python syntax checking and real C++ compilation diagnostics.
+A blocking syntax or compilation error prevents execution tracing. Submissions
+containing multiple function definitions are rejected before feedback generation.
+
+| Language | Flowcharts | Execution trace |
+| --- | --- | --- |
+| Python | Deterministic source analysis for both implementations | AST instrumentation and real execution when enabled; LLM fallback |
+| C++ | Deterministic source analysis for both implementations | Source instrumentation, `g++` compilation, and real execution for supported calls when enabled; LLM fallback |
+| Java | Deterministic source analysis for both implementations | LLM simulation |
+
+Native traces capture visited node IDs and bounded variable snapshots from both
+implementations. The frontend validates that steps follow the displayed graph.
+Unsupported instrumentation, execution failures, or unavailable native tracing
+trigger the model-generated trace fallback. Python currently supports a bounded
+subset of single-function programs; async functions, generators, recursion,
+try/with, loop else clauses, break, and continue fall back to the model. Inputs
+must be function calls with literal positional arguments. The C++ native harness
+currently supports `isNumUnique`, `two_sum`, `findTheDigits`, and `findMode`;
+other functions use the model fallback.
+
+The terminal's test cases, expected answers, and student outputs remain
+LLM-generated simulations. Native execution tracing does not turn the terminal
+into a real execution-based grader.
+
 ## Core features
 
 - **Side-by-side flowchart comparison** — displays the student's flowchart beside a correct reference flowchart so their structures and execution paths can be compared directly.
@@ -87,6 +123,23 @@ RESEARCH_PASSWORD=
 - To allow only user-provided API keys, leave the server credentials and `RESEARCH_PASSWORD` empty.
 - `PROVIDER` can be `openai`, `dashscope`, `anthropic`, or `deepseek`.
 
+For local testing with credentials read directly from `backend/.env`, add:
+
+```dotenv
+ALLOW_LOCAL_ENV_MODEL=true
+ENABLE_NATIVE_PYTHON_TRACE=true
+ENABLE_NATIVE_CPP_TRACE=true
+```
+
+`ALLOW_LOCAL_ENV_MODEL` enables the local frontend to request the server's model
+without entering credentials in the settings panel. Keep it disabled on public
+deployments. API keys remain on the backend.
+
+Native execution runs submitted code in child processes with resource limits;
+these limits are not an OS security sandbox. Enable it in a deployment suitable
+for executing submitted programs. See [backend/README.md](backend/README.md) for
+timeouts and supported execution settings.
+
 Start the backend:
 
 ```bash
@@ -120,7 +173,12 @@ For local development, `frontend/.env` will normally contain:
 
 ```dotenv
 VITE_API_BASE_URL=http://127.0.0.1:5001
+VITE_LOCAL_SERVER_MODEL=true
 ```
+
+`VITE_LOCAL_SERVER_MODEL=true` applies only to the Vite development server. It
+uses the backend environment configuration automatically and hides the model
+settings button. Restart the development server after changing environment files.
 
 Open the frontend address shown in the terminal, usually `http://localhost:5173`.
 
@@ -148,3 +206,10 @@ On Windows, use the appropriate virtual environment activation command before ru
 ## 5. Deployment
 
 For production environment variables, frontend and backend configuration, and Render deployment instructions, see [Docs/DEPLOYMENT.md](Docs/DEPLOYMENT.md).
+
+The main-branch Blueprint is [render.yaml](render.yaml). To enable native traces
+on the backend, explicitly set `ENABLE_NATIVE_CPP_TRACE=true` and/or
+`ENABLE_NATIVE_PYTHON_TRACE=true` in Render. Python tracing uses the backend
+interpreter. C++ tracing requires `g++` at runtime. The Blueprint includes
+separate C++ trace compilation/run timeouts and a Python run timeout. Java native
+execution is not implemented. Native trace failures retain the LLM fallback.

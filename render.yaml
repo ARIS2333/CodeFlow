@@ -33,6 +33,15 @@ services:
         value: "5"
       - key: CPP_COMPILE_QUEUE_SECONDS
         value: "10"
+      # Opt in explicitly in the Render dashboard. When disabled or when native
+      # instrumentation cannot handle a source shape, the UI falls back to the
+      # model-generated trace.
+      - key: ENABLE_NATIVE_CPP_TRACE
+        sync: false
+      - key: ENABLE_NATIVE_PYTHON_TRACE
+        sync: false
+      - key: PYTHON_TRACE_RUN_TIMEOUT_SECONDS
+        value: "3"
       # Instrumented trace builds are larger than syntax-only compiler checks.
       # Two programs are compiled sequentially within the frontend's 90s wait.
       - key: CPP_TRACE_COMPILE_TIMEOUT_SECONDS

@@ -28,16 +28,20 @@ export interface ProviderCatalog {
 }
 
 export type ModelSettings =
+  | { mode: 'local' }
   | { mode: 'research'; password: string }
   | { mode: 'byok'; provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
 
 /** The wire shape the backend expects under `modelConfig`. */
 export type ModelConfigPayload =
+  | { localEnv: true }
   | { password: string }
   | { provider: ProviderId; model: string; apiKey: string; baseUrl?: string };
 
 export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
-  settings.mode === 'research'
+  settings.mode === 'local'
+    ? { localEnv: true }
+    : settings.mode === 'research'
     ? { password: settings.password }
     : {
       provider: settings.provider,
@@ -49,6 +53,7 @@ export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
 /** A short label for the header, naming the model without exposing the key. */
 export const describeSettings = (settings: ModelSettings | null): string => {
   if (!settings) return 'Not configured';
+  if (settings.mode === 'local') return 'Local environment';
   if (settings.mode === 'research') return 'Research mode';
   return `${settings.provider} · ${settings.model}`;
 };

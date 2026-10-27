@@ -192,6 +192,11 @@ def resolve_model_spec(config) -> ModelSpec:
     if not isinstance(config, dict):
         raise ModelConfigError('"modelConfig" must be a JSON object.')
 
+    if config.get("localEnv") is True:
+        if os.getenv("ALLOW_LOCAL_ENV_MODEL", "").lower() != "true":
+            raise AuthenticationError("Local environment model access is disabled.")
+        return _research_spec()
+
     # Research mode takes precedence: if a password was sent, it must be right.
     password = config.get("password")
     if password not in (None, ""):

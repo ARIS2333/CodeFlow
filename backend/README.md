@@ -88,6 +88,7 @@ RESEARCH_PASSWORD=
 | `MODEL` | Model used in shared research mode |
 | `PROVIDER` | Model provider: `openai`, `dashscope`, `anthropic`, or `deepseek` |
 | `RESEARCH_PASSWORD` | Password required to use shared research mode; leave empty to disable this mode |
+| `ALLOW_LOCAL_ENV_MODEL` | Set to `true` for local development to allow direct use of server model credentials; leave disabled on public deployments |
 
 To enable shared research mode, correctly configure `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`. If users will provide their own API keys, the shared research credentials can remain empty.
 
@@ -102,6 +103,20 @@ The development server also supports these optional environment variables:
 | `CPP_COMPILE_CONCURRENCY` | `1` | Maximum simultaneous C++ syntax checks in each backend process |
 | `CPP_COMPILE_TIMEOUT_SECONDS` | `5` | Maximum time allowed for one C++ syntax check |
 | `CPP_COMPILE_QUEUE_SECONDS` | `10` | Maximum time a request waits for an available compiler slot |
+| `ENABLE_NATIVE_CPP_TRACE` | `false` | Enable compiling and running instrumented C++ |
+| `CPP_TRACE_COMPILE_TIMEOUT_SECONDS` | `30` | Maximum time to compile one instrumented C++ program |
+| `CPP_TRACE_RUN_TIMEOUT_SECONDS` | `3` | Maximum time to run one instrumented C++ program |
+| `ENABLE_NATIVE_PYTHON_TRACE` | `false` | Enable executing AST-instrumented Python in a child process |
+| `PYTHON_TRACE_RUN_TIMEOUT_SECONDS` | `3` | Maximum time to run one instrumented Python program |
+
+Both native trace endpoints require explicit opt-in. Python tracing uses the
+backend's Python interpreter and supports literal function-call arguments,
+assignments, container mutations, conditions, for/while loops, and early returns.
+Unsupported constructs and execution failures fall back to an LLM trace in the
+frontend. Process limits and isolated interpreter mode are resource controls,
+not an OS security sandbox; run native tracing only in an appropriately isolated
+deployment. Both flowcharts are generated deterministically from source; the LLM
+generates only the recommended implementation using a minimal-repair prompt.
 
 ## Start the development server
 

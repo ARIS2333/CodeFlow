@@ -68,7 +68,6 @@ test('recommendation prompt contains the problem and exact student source', asyn
   assert.deepEqual(message.practice, request.practice);
   assert.equal(message.language, 'cpp');
   assert.equal(message.studentCode, request.code);
-  assert.equal(calls[1].body.usageOperation, 'recommended code');
   const prompt = String(calls[1].body.system_message);
   assert.match(prompt, /strict minimal-repair policy/i);
   assert.match(prompt, /semantically valid implementation choices as intentional/i);

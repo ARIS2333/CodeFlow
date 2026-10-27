@@ -40,6 +40,12 @@ function name and parameter types. Include every import/header needed for the
 file to compile in the requested language. Do not add main, tests, explanatory
 printing, markdown fences, or comments that reveal mistakes.
 
+For Python, return valid executable Python source with the original function
+name and parameter names. Preserve valid indentation structure, for/while loop
+choices, comprehensions, container choices, and initialization expressions.
+Include required imports. Do not add a function invocation or input-reading
+wrapper; the tool calls the function separately with the selected input.
+
 Return exactly one raw JSON object:
 {
   "approachSummary": "One short neutral sentence describing the approach.",

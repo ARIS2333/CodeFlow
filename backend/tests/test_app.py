@@ -135,5 +135,18 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn("not enabled", response.get_json()["error"])
 
+    def test_python_trace_endpoint_executes_and_requires_opt_in(self):
+        with patch.dict("os.environ", {"ENABLE_NATIVE_PYTHON_TRACE": "false"}):
+            self.assertEqual(self.client.post("/api/trace-python", json={}).status_code, 503)
+        with patch.dict("os.environ", {"ENABLE_NATIVE_PYTHON_TRACE": "true"}):
+            response = self.client.post("/api/trace-python", json={
+                "studentCode": "def f(x):\n    return x + 1",
+                "recommendedCode": "def f(x):\n    return x + 2",
+                "input": "f(2)",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["source"], "instrumented-python")
+        self.assertEqual(response.get_json()["student"]["finalOutput"], "3")
+
 if __name__ == "__main__":
     unittest.main()

@@ -51,6 +51,12 @@ npm run dev
 
 The terminal will show the available address, usually `http://localhost:5173`.
 
+To use model credentials from `backend/.env` automatically during development,
+set `VITE_LOCAL_SERVER_MODEL=true` in the frontend environment and
+`ALLOW_LOCAL_ENV_MODEL=true` in the backend environment, then restart both
+services. The local mode hides the model settings button and keeps API keys on
+the backend. This frontend option applies only in development.
+
 ## Test and build
 
 ```bash

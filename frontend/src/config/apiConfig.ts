@@ -8,3 +8,4 @@ export const API_URL = `${API_BASE_URL}/api/resource`;
 export const STREAM_API_URL = `${API_BASE_URL}/api/resource/stream`;
 export const CODE_ANALYSIS_URL = `${API_BASE_URL}/api/analyze-code`;
 export const CPP_TRACE_URL = `${API_BASE_URL}/api/trace-cpp`;
+export const PYTHON_TRACE_URL = `${API_BASE_URL}/api/trace-python`;
