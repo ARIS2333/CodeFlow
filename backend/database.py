@@ -143,7 +143,7 @@ class DuplicateStudentName(ValueError):
 
 _schema_lock = Lock()
 _schema_initialized = False
-PARTICIPANT_USAGE_LIMIT_USD = Decimal("0.80")
+PARTICIPANT_USAGE_LIMIT_USD = Decimal("1.00")
 
 
 def database_url() -> str:

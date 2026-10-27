@@ -110,11 +110,11 @@ not already exist. `init_db.py` idempotently creates or migrates participant
 accounts, immutable submissions, study progress, per-question workspaces, and
 one row of token usage for every completed model call, along with their indexes.
 
-These rows enforce a $0.80 AI-feedback allowance per participant. The backend
+These rows enforce a $1.00 AI-feedback allowance per participant. The backend
 checks recorded spend before each paid model call and the UI blocks new Run Code
 actions once it is exhausted. Already-running calls can finish above the limit.
 Usage remains recorded in the database but no usage meter or aggregate-usage
-button is shown to students. At $0.50, a reminder asks participants to finish the
+button is shown to students. At $0.50, a halfway reminder asks participants to finish the
 study before further exploration; it is remembered per account in that browser.
 Native execution traces use no model tokens; LLM trace fallback still does.
 

@@ -28,7 +28,7 @@ function UsageWarningDialog({ onClose }: { onClose: () => void }) {
     <div role="alertdialog" aria-modal="true" aria-labelledby="usage-warning-title" className="w-full max-w-lg rounded-2xl bg-white p-7 shadow-2xl sm:p-8">
       <h2 id="usage-warning-title" className="text-2xl font-bold text-gray-900">A quick reminder about AI feedback</h2>
       <div className="mt-4 space-y-3 text-sm leading-6 text-gray-600 sm:text-base">
-        <p>Our research funding is limited, and you are approaching your AI feedback allowance. Please finish all four questions and surveys before exploring further.</p>
+        <p>You have used half of your AI token allowance. Because our research funding is limited, please finish all four questions and surveys before exploring further.</p>
         <p>Execution Trace does not use AI tokens, so feel free to try different inputs there.</p>
         <p>Thank you for your enthusiasm and support for our research!</p>
       </div>

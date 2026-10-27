@@ -8,16 +8,16 @@ from usage_tracking import usage_recorder
 
 
 class UsageTrackingTests(unittest.TestCase):
-    def test_allowance_blocks_at_eighty_cents_and_preserves_recorded_spend(self):
+    def test_allowance_blocks_at_one_dollar_and_preserves_recorded_spend(self):
         for spent, exhausted, remaining in [
-            ('0.50', False, 0.30), ('0.79', False, 0.01),
-            ('0.80', True, 0.0), ('0.85', True, 0.0),
+            ('0.50', False, 0.50), ('0.99', False, 0.01),
+            ('1.00', True, 0.0), ('1.05', True, 0.0),
         ]:
             with self.subTest(spent=spent), patch('database.initialize_database'), patch('database.connect') as connect:
                 cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
                 cursor.fetchone.return_value = (Decimal(spent),)
                 summary = participant_usage_summary(UUID('85d87357-c214-42e7-a4ed-741e374063a6'))
-                self.assertEqual(summary['limitUsd'], 0.8)
+                self.assertEqual(summary['limitUsd'], 1.0)
                 self.assertEqual(summary['spentUsd'], float(spent))
                 self.assertEqual(summary['exhausted'], exhausted)
                 self.assertEqual(summary['remainingUsd'], remaining)
