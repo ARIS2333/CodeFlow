@@ -6,7 +6,7 @@ import { registerParticipant, updateParticipantName } from './lib/participants';
 import { STUDY_SEQUENCE, hasCompleteParticipantProfile, loadStudyProgress, saveStudyProgress, type ParticipantProfile, type StudyProgress, type StudyScreen, type SurveyId } from './lib/studyStorage';
 import { configureCloudWorkspaceSync, loadCloudStudyState, saveCloudProgress, StudyAccountNotFoundError } from './lib/studyState';
 import { replaceWorkspaceCache } from './lib/workspaceCache';
-import { loadParticipantUsage, loadStudyUsage, type ParticipantUsageSummary, type StudyUsageSummary } from './lib/participantUsage';
+import { loadParticipantUsage } from './lib/participantUsage';
 
 function UsageLimitDialog({ onClose }: { onClose: () => void }) {
   return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4">
@@ -14,7 +14,7 @@ function UsageLimitDialog({ onClose }: { onClose: () => void }) {
       <div aria-hidden="true" className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-xl">💛</div>
       <h2 id="usage-limit-title" className="mt-4 text-2xl font-bold text-gray-900">AI feedback limit reached</h2>
       <div className="mt-4 space-y-3 text-left text-sm leading-6 text-gray-600 sm:text-base">
-        <p>Because our research funding is limited, your account has reached its $1.00 AI feedback allowance. Please continue with the remaining surveys.</p>
+        <p>Because our research funding is limited, your account has reached its AI feedback allowance. Please continue with the remaining surveys.</p>
         <p>You will still receive the study reward even if you were unable to complete every programming question.</p>
         <p className="font-medium text-gray-700">Thank you for your enthusiasm and for contributing so much to our research.</p>
       </div>
@@ -23,78 +23,19 @@ function UsageLimitDialog({ onClose }: { onClose: () => void }) {
   </div>;
 }
 
-function UsageInfoDialog({ onClose }: { onClose: () => void }) {
-  return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}>
-    <div role="dialog" aria-modal="true" aria-labelledby="usage-info-title" className="w-full max-w-md rounded-2xl bg-white p-7 text-center shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-      <div aria-hidden="true" className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-xl text-blue-700">ⓘ</div>
-      <h2 id="usage-info-title" className="mt-4 text-xl font-bold text-gray-900">About your AI usage</h2>
-      <div className="mt-4 space-y-3 text-left text-sm leading-6 text-gray-600">
-        <p>Because our research budget is limited, we can provide each participant with up to $1.00 of GPT-6.1-Sol token usage.</p>
-        <p>If you reach the limit before completing every programming question, you will still receive the study reward.</p>
-        <p className="font-medium text-gray-700">Thank you for your enthusiasm and support for our research.</p>
+function UsageWarningDialog({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4">
+    <div role="alertdialog" aria-modal="true" aria-labelledby="usage-warning-title" className="w-full max-w-lg rounded-2xl bg-white p-7 shadow-2xl sm:p-8">
+      <h2 id="usage-warning-title" className="text-2xl font-bold text-gray-900">A quick reminder about AI feedback</h2>
+      <div className="mt-4 space-y-3 text-sm leading-6 text-gray-600 sm:text-base">
+        <p>Our research funding is limited, and you are approaching your AI feedback allowance. Please finish all four questions and surveys before exploring further.</p>
+        <p>Execution Trace does not use AI tokens, so feel free to try different inputs there.</p>
+        <p>Thank you for your enthusiasm and support for our research!</p>
       </div>
       <button type="button" onClick={onClose} className="mt-6 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white hover:bg-blue-700">Got it</button>
     </div>
   </div>;
 }
-
-function UsageBar({ usage }: { usage?: ParticipantUsageSummary }) {
-  const [showInfo, setShowInfo] = useState(false);
-  const percent = usage ? Math.min(100, Math.max(0, usage.spentUsd / usage.limitUsd * 100)) : 0;
-  const color = usage?.exhausted ? 'bg-red-500' : percent >= 80 ? 'bg-amber-500' : 'bg-blue-600';
-  return <>
-    <div className="flex min-w-44 items-center gap-2 rounded-xl border border-gray-200 bg-white px-2.5 py-2 shadow-sm" aria-label="AI usage allowance">
-      <button type="button" onClick={() => setShowInfo(true)} aria-label="Learn about the AI usage allowance" title="About AI usage" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base font-bold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">ⓘ</button>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-3 text-xs font-semibold text-gray-600">
-          <span>AI usage</span><span>{usage ? `$${usage.spentUsd.toFixed(3)} / $${usage.limitUsd.toFixed(2)}` : 'Loading…'}</span>
-        </div>
-        <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} className="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-100">
-          <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${percent}%` }} />
-        </div>
-      </div>
-    </div>
-    {showInfo && <UsageInfoDialog onClose={() => setShowInfo(false)} />}
-  </>;
-}
-
-function StudyUsageButton({ registrationId }: { registrationId: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [summary, setSummary] = useState<StudyUsageSummary>();
-  const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(false);
-  const open = async () => {
-    setIsOpen(true);
-    setIsLoading(true);
-    setError(undefined);
-    try {
-      setSummary(await loadStudyUsage(registrationId));
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : 'Study usage could not be loaded.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  return <>
-    <button type="button" onClick={() => void open()} aria-label="View total study AI usage" title="Total study AI usage" className="fixed bottom-5 left-5 z-[90] flex h-11 w-11 items-center justify-center rounded-full border border-blue-200 bg-white text-xl text-blue-700 shadow-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">◔</button>
-    {isOpen && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setIsOpen(false)}>
-      <div role="dialog" aria-modal="true" aria-labelledby="study-usage-title" className="w-full max-w-md rounded-2xl bg-white p-7 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Across all participants</p><h2 id="study-usage-title" className="mt-1 text-2xl font-bold text-gray-900">Study AI usage</h2></div>
-          <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" className="rounded-lg px-2 py-1 text-xl text-gray-500 hover:bg-gray-100">×</button>
-        </div>
-        {isLoading && <div className="py-10 text-center text-sm text-gray-500">Loading usage…</div>}
-        {error && <div role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-        {!isLoading && !error && summary && <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-blue-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Total tokens</p><p className="mt-1 text-2xl font-bold text-gray-900">{summary.totalTokens.toLocaleString()}</p></div>
-          <div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated cost</p><p className="mt-1 text-2xl font-bold text-gray-900">${summary.estimatedCostUsd.toFixed(3)}</p></div>
-        </div>}
-        <p className="mt-5 text-xs leading-5 text-gray-500">This shows combined usage for the entire study and does not reveal information about individual participants.</p>
-      </div>
-    </div>}
-  </>;
-}
-
 function ProfileDialog({ initial, notice, onSave, onClose }: { initial?: ParticipantProfile; notice?: string; onSave: (profile: ParticipantProfile) => void; onClose?: () => void }) {
   const [studentName, setStudentName] = useState(initial?.studentName ?? '');
   const [password, setPassword] = useState('');
@@ -237,19 +178,29 @@ export default function App() {
   const [cloudHydrated, setCloudHydrated] = useState(!initial.participant);
   const [cloudSyncReady, setCloudSyncReady] = useState(false);
   const [cloudSyncError, setCloudSyncError] = useState<string>();
-  const [usage, setUsage] = useState<ParticipantUsageSummary>();
+  const [showUsageWarning, setShowUsageWarning] = useState(false);
+  const warnedParticipants = useRef(new Set<string>());
   const [showUsageLimit, setShowUsageLimit] = useState(false);
   const activeParticipant = progress.participant;
 
   const refreshUsage = useCallback(async () => {
     if (!activeParticipant) return undefined;
     const latest = await loadParticipantUsage(activeParticipant.registrationId);
-    setUsage(latest);
+    const id = activeParticipant.registrationId;
+    if (latest.spentUsd >= 0.5 && !latest.exhausted && !warnedParticipants.current.has(id)) {
+      let alreadyShown = false;
+      try { alreadyShown = localStorage.getItem(`codeflow.budgetWarning.${id}`) === 'shown'; } catch { /* Storage may be unavailable. */ }
+      warnedParticipants.current.add(id);
+      if (!alreadyShown) {
+        setShowUsageWarning(true);
+        try { localStorage.setItem(`codeflow.budgetWarning.${id}`, 'shown'); } catch { /* Keep the in-memory marker. */ }
+      }
+    }
     return latest;
   }, [activeParticipant]);
 
   useEffect(() => {
-    if (!activeParticipant) { setUsage(undefined); return; }
+    if (!activeParticipant) return;
     void refreshUsage().catch(() => undefined);
   }, [activeParticipant, refreshUsage]);
 
@@ -356,7 +307,6 @@ export default function App() {
   const studyHeader = progress.participant ? (
     <div className="mt-3 flex w-full flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
       <div className="flex flex-wrap justify-start gap-1.5" aria-label="Study navigation">
-        <UsageBar usage={usage} />
         <button
           type="button"
           onClick={() => setShowProfile(true)}
@@ -421,7 +371,7 @@ export default function App() {
     setProfileNotice(undefined);
     setShowProfile(false);
   };
-  return <>{content}{progress.participant && <StudyUsageButton registrationId={progress.participant.registrationId} />}{showUsageLimit && <UsageLimitDialog onClose={() => setShowUsageLimit(false)} />}{showProfile && (progress.participant
+  return <>{content}{showUsageWarning && !showUsageLimit && <UsageWarningDialog onClose={() => setShowUsageWarning(false)} />}{showUsageLimit && <UsageLimitDialog onClose={() => { setShowUsageLimit(false); setShowUsageWarning(false); }} />}{showProfile && (progress.participant
     ? <NameDialog participant={progress.participant} onClose={() => { setProfileNotice(undefined); setShowProfile(false); }} onSave={saveParticipant} />
     : <ProfileDialog notice={profileNotice} onSave={saveParticipant} />)}</>;
 }
