@@ -12,6 +12,8 @@ services:
     startCommand: python init_db.py && gunicorn -c gunicorn.conf.py app:app
     healthCheckPath: /health
     envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
       # One existing Render Postgres database stores accounts, submissions,
       # navigation progress, source drafts, generated feedback, and token usage. No second
       # database or additional persistence environment variable is required.

@@ -169,6 +169,20 @@ The default service address is `http://127.0.0.1:5001`. Check its health with:
 curl http://127.0.0.1:5001/health
 ```
 
+## Study administration
+
+Set `ADMIN_PASSWORD` in the backend environment (including the Render dashboard),
+then open `/admin` on the frontend. The page lists every registered student's
+name, group, recorded tokens, estimated cost, and saved Run Code counts for each
+question. Summary cards show registered students and total study usage. Use
+Refresh to load new records; the page does not poll. No schema changes are needed.
+
+The backend validates the password and issues a signed token valid for four
+hours. Every statistics request requires that token. It stays in browser memory
+and is cleared on reload or sign-out. Admin responses are not cached, and account
+passwords are never included in statistics. Keep the real admin password in the
+environment, not in committed source.
+
 ## Run tests
 
 ```bash

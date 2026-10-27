@@ -185,6 +185,41 @@ def participant_usage_summary(registration_id: UUID) -> dict[str, Any]:
     }
 
 
+def admin_study_summary() -> dict[str, Any]:
+    """Aggregate separately before joining so submissions never multiply usage."""
+    initialize_database()
+    with connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT p.registration_id, p.student_name, p.study_group,
+                       COALESCE(u.tokens, 0), COALESCE(u.cost, 0),
+                       COALESCE(s.q1, 0), COALESCE(s.q2, 0),
+                       COALESCE(s.q3, 0), COALESCE(s.q4, 0)
+                FROM study_participants p
+                LEFT JOIN (
+                    SELECT registration_id, SUM(total_tokens) AS tokens,
+                           SUM(estimated_cost_usd) AS cost
+                    FROM llm_usage_events GROUP BY registration_id
+                ) u ON u.registration_id = p.registration_id
+                LEFT JOIN (
+                    SELECT registration_id,
+                           COUNT(*) FILTER (WHERE question_id = 'q1') AS q1,
+                           COUNT(*) FILTER (WHERE question_id = 'q2') AS q2,
+                           COUNT(*) FILTER (WHERE question_id = 'q3') AS q3,
+                           COUNT(*) FILTER (WHERE question_id = 'q4') AS q4
+                    FROM submissions GROUP BY registration_id
+                ) s ON s.registration_id = p.registration_id
+                ORDER BY p.assignment_number
+            """)
+            participants = [{
+                "registrationId": str(row[0]), "studentName": row[1],
+                "group": row[2], "totalTokens": int(row[3]),
+                "estimatedCostUsd": float(row[4]),
+                "runs": {f"q{i}": int(row[i + 4]) for i in range(1, 5)},
+            } for row in cursor.fetchall()]
+    return {"participants": participants, "totals": study_usage_summary()}
+
+
 def study_usage_summary() -> dict[str, Any]:
     """Return privacy-preserving aggregate model usage for the whole study."""
     initialize_database()

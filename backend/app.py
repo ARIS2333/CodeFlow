@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import json
 import os
 from dataclasses import asdict
@@ -7,6 +8,7 @@ from uuid import UUID, uuid4
 from dotenv import load_dotenv
 from flask import Flask, Response, g, jsonify, request
 from flask_cors import CORS
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import SecretStr
 from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
@@ -15,6 +17,7 @@ from agentscope.message import SystemMsg, UserMsg
 from code_analysis import CodeAnalysisError, analyze_code
 from cpp_execution_trace import CppTraceError, trace_pair
 from database import (
+    admin_study_summary,
     DatabaseNotConfigured,
     DuplicateStudentName,
     InvalidStudentLogin,
@@ -133,6 +136,52 @@ async def call_model(spec: ModelSpec, system_message: str, user_message: str):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+def admin_signer():
+    secret = os.getenv("ADMIN_PASSWORD", "")
+    return URLSafeTimedSerializer(secret, salt="codeflow-admin-v1") if secret else None
+
+
+@app.route("/api/admin/login", methods=["POST"])
+def admin_login():
+    signer = admin_signer()
+    if signer is None:
+        return public_error("Admin access is not configured", 503)
+    body = request.get_json(silent=True)
+    password = body.get("password") if isinstance(body, dict) else None
+    if not isinstance(password, str) or not hmac.compare_digest(
+        password.encode(), os.getenv("ADMIN_PASSWORD", "").encode()
+    ):
+        return public_error("Incorrect admin password", 401)
+    response = jsonify({"token": signer.dumps({"role": "admin"})})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/api/admin/summary", methods=["GET"])
+def admin_summary():
+    signer = admin_signer()
+    if signer is None:
+        return public_error("Admin access is not configured", 503)
+    authorization = request.headers.get("Authorization", "")
+    try:
+        if not authorization.startswith("Bearer "):
+            return public_error("Admin login required", 401)
+        identity = signer.loads(authorization[7:], max_age=4 * 60 * 60)
+        if identity != {"role": "admin"}:
+            return public_error("Admin login required", 401)
+    except (BadSignature, SignatureExpired):
+        return public_error("Admin session expired. Please sign in again.", 401)
+    try:
+        response = jsonify(admin_study_summary())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except DatabaseNotConfigured:
+        return public_error("Study database is not configured", 503)
+    except Exception:
+        app.logger.exception("Admin summary failed (request %s)", g.request_id)
+        return public_error("Study statistics could not be loaded", 500)
 
 
 def resolve_registration(value: object) -> tuple[UUID, dict[str, str]] | None:
