@@ -107,7 +107,7 @@ export default function AdminPanel({ onClose }: { onClose?: () => void }) {
 export function AdminEntry() {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" onClick={() => setOpen(true)} aria-label="Open administrator panel" className="fixed bottom-4 left-4 z-[90] rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm hover:bg-gray-100">⚙ Admin</button>
+    <button type="button" onClick={() => setOpen(true)} aria-label="Open administrator panel" className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-sm hover:bg-gray-100">⚙ Admin</button>
     {open && <div className="fixed inset-0 z-[150] overflow-auto bg-slate-950/50"><AdminPanel onClose={() => setOpen(false)} /></div>}
   </>;
 }
