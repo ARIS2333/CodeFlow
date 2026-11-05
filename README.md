@@ -13,6 +13,35 @@ This combination provides two complementary views of a mistake:
 
 CodeFlow currently supports Java, Python, and C++.
 
+## SQL education workspace
+
+Open **SQL workspace** in the header, or visit `/sql`. This separate mode uses
+DuckDB SQL for teaching relational logic. Enter an exercise, supply small teaching
+tables (schema and rows as JSON), and write a SELECT query. A sample exercise and
+dataset are included. It uses the same model settings as the programming mode.
+
+Run SQL executes the student query, then asks the LLM for a minimally repaired
+recommended query and executes it against the same data in a separate in-memory
+database. The two logical flows are built from SQLGlot parsing rather than model
+generated nodes. Start/Prev/Next/End replay the intermediate result tables. A
+full-screen view supports side-by-side comparison. After editing table data,
+**Re-run with current tables** executes the existing query pair without an AI call.
+
+The first version supports one SELECT with FROM, ordinary JOIN ON, WHERE,
+GROUP BY, HAVING, DISTINCT, ORDER BY, and literal LIMIT. Basic aggregate and scalar
+functions are allowlisted. CTEs, subqueries, window functions, writes, external
+files, and external database access are excluded. Each request creates a fresh
+DuckDB database in a child process, with a 12-second deadline and a 128 MB engine
+memory limit. Tables are limited to six, with up to 20 columns and 200 rows each;
+result previews are capped at 200 rows.
+
+Stages express logical data transformations, not the engine's physical execution
+plan. Grouping, aggregation, HAVING, and projection share a stage to preserve
+valid grouped SQL and alias semantics. The original SQL is executed for the final
+result. Result comparison preserves duplicate rows and ignores row order unless
+the recommendation specifies ORDER BY; it does not establish equivalence on
+unseen datasets or independently prove the AI recommendation correct.
+
 ## How feedback is generated
 
 The student flowchart is built deterministically from Tree-sitter source analysis

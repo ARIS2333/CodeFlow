@@ -41,6 +41,14 @@ class FakeModel:
 
 
 class AppTests(unittest.TestCase):
+    def test_sql_endpoint_returns_real_results_and_rejects_writes(self):
+        tables = [{'name': 'items', 'columns': [{'name': 'n', 'type': 'INTEGER'}], 'rows': [[1], [2]]}]
+        response = self.client.post('/api/sql/run', json={'sql': 'SELECT n FROM items WHERE n > 1', 'tables': tables})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['finalResult']['rows'], [[2]])
+        response = self.client.post('/api/sql/run', json={'sql': 'DELETE FROM items', 'tables': tables})
+        self.assertEqual(response.status_code, 422)
+
     def setUp(self):
         self.client = backend_app.app.test_client()
 

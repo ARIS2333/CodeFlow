@@ -15,6 +15,7 @@ from agentscope.message import SystemMsg, UserMsg
 from code_analysis import CodeAnalysisError, analyze_code
 from cpp_execution_trace import CppTraceError, trace_pair
 from python_execution_trace import PythonTraceError, trace_pair as trace_python_pair
+from sql_education import SqlEducationError, run_query
 from model_config import (
     AuthenticationError,
     ModelConfigError,
@@ -116,6 +117,20 @@ async def call_model(spec: ModelSpec, system_message: str, user_message: str):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route('/api/sql/run', methods=['POST'])
+def sql_run():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return public_error('A query and teaching tables are required.', 400)
+    try:
+        return jsonify(run_query(body.get('sql'), body.get('tables')))
+    except SqlEducationError as error:
+        return public_error(str(error), 422)
+    except Exception:
+        app.logger.exception('SQL execution failed')
+        return public_error('SQL execution failed.', 500)
 
 
 @app.route("/api/analyze-code", methods=["POST"])

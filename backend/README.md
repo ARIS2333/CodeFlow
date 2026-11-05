@@ -134,6 +134,12 @@ curl http://127.0.0.1:5001/health
 
 ## Run tests
 
+SQL support adds `POST /api/sql/run` with `sql` and `tables` JSON fields. It parses
+a bounded single-SELECT subset with SQLGlot and executes teaching-table stages
+in an isolated in-memory DuckDB connection in a time-limited child process.
+Neither a persistent SQL teaching database nor new environment variables are
+required. Install the updated requirements before starting the backend.
+
 ```bash
 python -m unittest discover -s tests
 ```

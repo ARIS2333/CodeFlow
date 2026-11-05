@@ -54,6 +54,7 @@ export const Header: FC<HeaderProps> = ({
   return (
     <header className="border-b border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-6">
       <div className="relative flex flex-col items-center gap-3 lg:min-h-14 lg:justify-center">
+        <a href="/sql" className="absolute left-0 top-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">SQL workspace</a>
         <div className="flex flex-col items-center text-center">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-md shadow-blue-200">
