@@ -7,7 +7,7 @@ import model_config
 
 
 RESEARCH_ENV = {
-    "RESEARCH_PASSWORD": "test-research-password",
+    "ADMIN_PASSWORD": "test-research-password",
     "API_KEY": "sk-server-side",
     "BASE_URL": "https://workspace-1.example.com/v1",
     "MODEL": "qwen3.7-max",
@@ -79,7 +79,7 @@ class ResearchModeTests(unittest.TestCase):
 
     def test_an_unset_password_disables_research_mode_instead_of_opening_it(self):
         """A missing env var must not mean 'everyone gets the server's key'."""
-        with patch.dict(os.environ, {"RESEARCH_PASSWORD": ""}, clear=False):
+        with patch.dict(os.environ, {"ADMIN_PASSWORD": ""}, clear=False):
             self.assertFalse(model_config.password_matches(""))
             self.assertFalse(model_config.password_matches("anything"))
 
@@ -206,7 +206,7 @@ class EndpointTests(unittest.TestCase):
         self.assertNotIn("sk-server-side", response.get_data(as_text=True))
 
     def test_the_catalogue_reports_research_mode_off_when_unconfigured(self):
-        with patch.dict(os.environ, {"RESEARCH_PASSWORD": ""}, clear=False):
+        with patch.dict(os.environ, {"ADMIN_PASSWORD": ""}, clear=False):
             payload = self.client.get("/api/providers").get_json()
 
         self.assertFalse(payload["researchModeAvailable"])

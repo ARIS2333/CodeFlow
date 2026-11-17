@@ -85,9 +85,6 @@ export const requestExecutionTrace = async (
               studentCode: request.code,
               recommendedCode: request.graphs.recommendedCode,
               input: request.testCase.input,
-              ...('registrationId' in options.modelConfig
-                ? { registrationId: options.modelConfig.registrationId }
-                : {}),
             }),
             signal: options.signal,
           },

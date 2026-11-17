@@ -287,7 +287,6 @@ export default function SqlWorkspace() {
   const extensions = useMemo(() => [sqlLanguage()], []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<ModelSettings | null>(() => {
-    if (import.meta.env.DEV && import.meta.env.VITE_LOCAL_SERVER_MODEL === 'true') return { mode: 'local' };
     const password = loadRememberedPassword();
     return password ? { mode: 'research', password } : null;
   });

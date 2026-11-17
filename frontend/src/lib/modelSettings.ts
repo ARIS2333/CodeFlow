@@ -54,11 +54,11 @@ export const toModelConfig = (settings: ModelSettings): ModelConfigPayload =>
 export const describeSettings = (settings: ModelSettings | null): string => {
   if (!settings) return 'Not configured';
   if (settings.mode === 'local') return 'Local environment';
-  if (settings.mode === 'research') return 'Research mode';
+  if (settings.mode === 'research') return 'Password access';
   return `${settings.provider} · ${settings.model}`;
 };
 
-const RESEARCH_PASSWORD_KEY = 'codeflow.researchPassword';
+const API_ACCESS_PASSWORD_KEY = 'codeflow.apiAccessPassword';
 
 /**
  * Only the research password is remembered, and only because re-entering it on
@@ -67,7 +67,7 @@ const RESEARCH_PASSWORD_KEY = 'codeflow.researchPassword';
  */
 export const loadRememberedPassword = (): string | null => {
   try {
-    return window.localStorage.getItem(RESEARCH_PASSWORD_KEY);
+    return window.localStorage.getItem(API_ACCESS_PASSWORD_KEY);
   } catch {
     return null;
   }
@@ -75,7 +75,7 @@ export const loadRememberedPassword = (): string | null => {
 
 export const rememberPassword = (password: string): void => {
   try {
-    window.localStorage.setItem(RESEARCH_PASSWORD_KEY, password);
+    window.localStorage.setItem(API_ACCESS_PASSWORD_KEY, password);
   } catch {
     // A remembered password is a convenience, never a requirement.
   }
@@ -83,7 +83,7 @@ export const rememberPassword = (password: string): void => {
 
 export const forgetPassword = (): void => {
   try {
-    window.localStorage.removeItem(RESEARCH_PASSWORD_KEY);
+    window.localStorage.removeItem(API_ACCESS_PASSWORD_KEY);
   } catch {
     // Nothing to do: the value was already unreachable.
   }

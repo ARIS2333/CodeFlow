@@ -162,11 +162,11 @@ API_KEY=
 BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.6-sol
 PROVIDER=openai
-RESEARCH_PASSWORD=
+ADMIN_PASSWORD=
 ```
 
-- To enable the shared research model, provide the complete model configuration and set `RESEARCH_PASSWORD`.
-- To allow only user-provided API keys, leave the server credentials and `RESEARCH_PASSWORD` empty.
+- To enable the shared research model, provide the complete model configuration and set `ADMIN_PASSWORD`.
+- Users enter the API access password in the frontend. The backend validates `ADMIN_PASSWORD` before using the model credentials.
 - `PROVIDER` can be `openai`, `dashscope`, `anthropic`, or `deepseek`.
 
 For local testing with credentials read directly from `backend/.env`, add:

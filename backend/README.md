@@ -78,7 +78,7 @@ API_KEY=
 BASE_URL=https://api.openai.com/v1
 MODEL=gpt-5.6-sol
 PROVIDER=openai
-RESEARCH_PASSWORD=
+ADMIN_PASSWORD=
 ```
 
 | Variable | Purpose |
@@ -87,10 +87,10 @@ RESEARCH_PASSWORD=
 | `BASE_URL` | Base API URL for the model provider |
 | `MODEL` | Model used in shared research mode |
 | `PROVIDER` | Model provider: `openai`, `dashscope`, `anthropic`, or `deepseek` |
-| `RESEARCH_PASSWORD` | Password required to use shared research mode; leave empty to disable this mode |
+| `ADMIN_PASSWORD` | Password required to use shared research mode; leave empty to disable this mode |
 | `ALLOW_LOCAL_ENV_MODEL` | Set to `true` for local development to allow direct use of server model credentials; leave disabled on public deployments |
 
-To enable shared research mode, correctly configure `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`. If users will provide their own API keys, the shared research credentials can remain empty.
+To enable shared research mode, correctly configure `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `ADMIN_PASSWORD`. If users will provide their own API keys, the shared research credentials can remain empty.
 
 The development server also supports these optional environment variables:
 

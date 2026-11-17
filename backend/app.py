@@ -237,7 +237,7 @@ def providers():
     """
     return jsonify({
         "providers": public_providers(),
-        "researchModeAvailable": bool(os.getenv("RESEARCH_PASSWORD", "").strip()),
+        "researchModeAvailable": bool(os.getenv("ADMIN_PASSWORD", "").strip()),
     })
 
 

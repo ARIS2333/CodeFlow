@@ -3,7 +3,7 @@
 A request arrives in one of two modes:
 
 *Research mode* — the request carries the study password.  It is checked here,
-server-side, against ``RESEARCH_PASSWORD``, and only then are the server's own
+server-side, against ``ADMIN_PASSWORD``, and only then are the server's own
 provider credentials used.  Checking the password in the browser would not be a
 control at all: the API is public, so anyone could call it directly and spend
 the study's quota.
@@ -171,13 +171,13 @@ def _research_spec() -> ModelSpec:
 
 
 def password_matches(candidate) -> bool:
-    """Compare against RESEARCH_PASSWORD in constant time.
+    """Compare against ADMIN_PASSWORD in constant time.
 
-    An unset RESEARCH_PASSWORD disables research mode rather than accepting
+    An unset ADMIN_PASSWORD disables research mode rather than accepting
     every request, so a missing environment variable cannot silently open the
     server's credentials to the public.
     """
-    expected = os.getenv("RESEARCH_PASSWORD", "")
+    expected = os.getenv("ADMIN_PASSWORD", "")
     if not expected or not isinstance(candidate, str) or not candidate:
         return False
     return hmac.compare_digest(candidate, expected)
@@ -201,7 +201,7 @@ def resolve_model_spec(config) -> ModelSpec:
     password = config.get("password")
     if password not in (None, ""):
         if not password_matches(password):
-            raise AuthenticationError("Incorrect research password.")
+            raise AuthenticationError("Incorrect API access password.")
         return _research_spec()
 
     provider = _clean(config.get("provider"), "provider")

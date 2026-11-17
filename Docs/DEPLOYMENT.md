@@ -14,7 +14,7 @@ not exposed publicly.
 1. Push the `main` branch to the Git provider connected to Render.
 2. In Render, choose **New > Blueprint**, select this repository, and use the
    root-level `render.yaml`.
-3. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `RESEARCH_PASSWORD`
+3. Enter `API_KEY`, `BASE_URL`, `MODEL`, `PROVIDER`, and `ADMIN_PASSWORD`
    when Render asks for the backend configuration. `BASE_URL` is the provider's
    complete API endpoint; the server does not construct it from a workspace ID.
    Set the password in the dashboard
@@ -58,7 +58,7 @@ The password is a shared secret. Once handed to a cohort it can be forwarded,
 and nothing here prevents that — no rate limiting or per-participant quota was
 requested, so a study-wide spending cap still has to be set at the provider,
 not in this application. Rotating the password means changing
-`RESEARCH_PASSWORD` in the Render dashboard; students then re-enter it once.
+`ADMIN_PASSWORD` in the Render dashboard; students then re-enter it once.
 
 A student's own API key passes through the backend to their provider. It is
 never logged or stored server-side, and the browser holds it only in memory

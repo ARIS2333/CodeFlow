@@ -63,9 +63,6 @@ export const Layout = ({
    * never is — it is held in this state only until the tab is closed.
    */
   const [settings, setSettings] = useState<ModelSettings | null>(() => {
-    if (import.meta.env.DEV && import.meta.env.VITE_LOCAL_SERVER_MODEL === 'true') {
-      return { mode: 'local' };
-    }
     const remembered = loadRememberedPassword();
     return remembered ? { mode: 'research', password: remembered } : null;
   });
