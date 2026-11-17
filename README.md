@@ -17,28 +17,45 @@ CodeFlow currently supports Java, Python, and C++.
 
 Open **SQL workspace** in the header, or visit `/sql`. This separate mode uses
 DuckDB SQL for teaching relational logic. Enter an exercise, supply small teaching
-tables (schema and rows as JSON), and write a SELECT query. A sample exercise and
-dataset are included. It uses the same model settings as the programming mode.
+tables (schema and rows as JSON), and write a SELECT query. The Load Example menu includes JOIN/grouping, CASE, correlated EXISTS, CTE,
+set-difference and window-ranking exercises with deliberately flawed queries. It uses the same model settings as the programming mode.
 
-Run SQL executes the student query, then asks the LLM for a minimally repaired
+Run Code executes the student query, then asks the LLM for a minimally repaired
 recommended query and executes it against the same data in a separate in-memory
 database. The two logical flows are built from SQLGlot parsing rather than model
-generated nodes. Start/Prev/Next/End replay the intermediate result tables. A
-full-screen view supports side-by-side comparison. After editing table data,
-**Re-run with current tables** executes the existing query pair without an AI call.
+generated nodes. SQL uses the existing CodeFlow layout: the problem, teaching
+tables, CodeMirror editor, and Output are on the left; the resizable Code Analysis
+sidebar contains both flowcharts and the execution trace. Existing zoom,
+full-screen views, and Start/Prev/Next/End/Reset controls are reused. Intermediate
+result tables replace variable cards. After editing table data,
+**Re-trace with current tables** executes the existing query pair without an AI call.
 
-The first version supports one SELECT with FROM, ordinary JOIN ON, WHERE,
-GROUP BY, HAVING, DISTINCT, ORDER BY, and literal LIMIT. Basic aggregate and scalar
-functions are allowlisted. CTEs, subqueries, window functions, writes, external
-files, and external database access are excluded. Each request creates a fresh
+The workspace supports read-only DuckDB queries with INNER/LEFT/RIGHT/FULL/CROSS
+JOIN (ON or USING), WHERE (including IN, EXISTS, LIKE, BETWEEN and NULL predicates),
+GROUP BY, HAVING, DISTINCT, ORDER BY, LIMIT/OFFSET, CASE, nonrecursive CTEs, derived
+tables, scalar/correlated subqueries, UNION/INTERSECT/EXCEPT (including ALL), and
+common window functions (ranking, LAG/LEAD, and aggregate windows). Common numeric,
+string, casting and date functions are allowlisted. Teaching column types are
+INTEGER, DOUBLE, VARCHAR, BOOLEAN, DATE and TIMESTAMP. Writes, recursive CTEs,
+extensions, external files and external database access are excluded. Each request creates a fresh
 DuckDB database in a child process, with a 12-second deadline and a 128 MB engine
 memory limit. Tables are limited to six, with up to 20 columns and 200 rows each;
 result previews are capped at 200 rows.
 
 Stages express logical data transformations, not the engine's physical execution
-plan. Grouping, aggregation, HAVING, and projection share a stage to preserve
-valid grouped SQL and alias semantics. The original SQL is executed for the final
-result. Result comparison preserves duplicate rows and ignores row order unless
+plan. Two traces align by semantic phase instead of numeric step: a missing WHERE,
+for example, is left unpaired. Filters show kept and excluded rows (FALSE and NULL);
+CASE shows first-matching branches; set queries have two incoming query paths.
+For JOIN ON and ordinary grouping, select a result row to highlight matching input
+values or contributing rows. Identical displayed tuples are highlighted together;
+this is value correspondence, not unique physical row provenance. USING joins show
+input/output tables without row links. Grouping and projection share a stage,
+with HAVING separately showing excluded groups. CTEs and derived tables have nested
+stages; correlated predicates execute in context rather than inventing standalone
+subquery runs. Some alias-dependent expressions cannot be independently staged;
+those queries show real complete results with an explicit explanation of the trace
+boundary. Result previews and row highlights are limited to visible rows.
+The original SQL is executed for the final result. Result comparison preserves duplicate rows and ignores row order unless
 the recommendation specifies ORDER BY; it does not establish equivalence on
 unseen datasets or independently prove the AI recommendation correct.
 

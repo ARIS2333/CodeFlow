@@ -155,3 +155,10 @@ gunicorn app:app
 The Gunicorn configuration reads the platform-provided `PORT` and supports `WEB_CONCURRENCY` and `GUNICORN_THREADS`. Its request timeout is configured in `gunicorn.conf.py`.
 
 For Render deployment and complete frontend and backend production configuration, see [../Docs/DEPLOYMENT.md](../Docs/DEPLOYMENT.md).
+
+SQL query coverage includes CASE, nonrecursive CTEs, derived/scalar/correlated
+subqueries, set operations and common windows, in addition to joins, filters and
+aggregates. The worker returns semantic phase IDs and graph dependencies,
+filter/CASE partitions, and value-based JOIN/group row links. Dependent queries
+that cannot be staged independently return the real final result and an explicit
+trace notice. DDL/DML, external sources and recursive CTEs remain excluded.

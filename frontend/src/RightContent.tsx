@@ -21,7 +21,7 @@ interface RightContentProps {
   flowchartRegenerationState?: FlowchartRegenerationState;
 }
 
-function FullscreenFrame({ label, children }: {
+export function FullscreenFrame({ label, children }: {
   label: string;
   children: ReactNode | ((expanded: boolean) => ReactNode);
 }) {

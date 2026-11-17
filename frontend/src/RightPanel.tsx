@@ -19,17 +19,22 @@ interface RightPanelProps {
 }
 
 export const RightPanel = ({
+  isVisible, onClose, onWidthChange, ...content
+}: RightPanelProps) => <AnalysisPanel isVisible={isVisible} onClose={onClose} onWidthChange={onWidthChange}>
+  <RightContent {...content} />
+</AnalysisPanel>;
+
+export const AnalysisPanel = ({
   isVisible,
   onClose,
   onWidthChange,
-  flowchartState,
-  evaluationState,
-  traceState,
-  onRetrace,
-  onRegenerateFlowchart,
-  canRegenerateFlowchart,
-  flowchartRegenerationState,
-}: RightPanelProps) => {
+  children,
+}: {
+  isVisible: boolean;
+  onClose: () => void;
+  onWidthChange?: (width: number) => void;
+  children: React.ReactNode;
+}) => {
   // Function to get the default width of the panel from config
   const getDefaultWidth = () => panelConfig.defaultWidth();
   
@@ -136,7 +141,7 @@ export const RightPanel = ({
       </div>
 
       {/* Panel Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="min-w-0 min-h-0 flex-1 flex flex-col">
         {/* Right Panel Header with close button */}
         <div className="flex items-center justify-end p-4 border-b bg-gray-50">
           <button
@@ -150,15 +155,7 @@ export const RightPanel = ({
         {/* Panel Content Area */}
         <div className="p-4 h-full overflow-auto">
           {/* Render the RightContent component inside the panel */}
-          <RightContent
-            flowchartState={flowchartState}
-            evaluationState={evaluationState}
-            traceState={traceState}
-            onRetrace={onRetrace}
-            onRegenerateFlowchart={onRegenerateFlowchart}
-            canRegenerateFlowchart={canRegenerateFlowchart}
-            flowchartRegenerationState={flowchartRegenerationState}
-          />
+          {children}
         </div>
       </div>
     </div>
